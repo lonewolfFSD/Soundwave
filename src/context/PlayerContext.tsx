@@ -1,18 +1,11 @@
 import React, { createContext, useContext, useState, useRef, useEffect } from 'react'
 import { MediaSession } from '@capgo/capacitor-media-session';
-import { resolveFullLengthSong, isYoutubeVideoId } from '../utils/ytMusic';
+import { resolveFullLengthSong } from '../utils/ytMusic';
 import { fetchLyrics } from '../utils/lyrics';
 import { getMoodCoherentQueue, getSongRadioQueue } from '../utils/aiRecommender';
 import { getLocalLikedSongs, saveLocalLikedSongs, fetchRemoteLikedSongs } from '../utils/likedSongs';
 import { getLocalListenHistory, recordSongPlay } from '../utils/listenHistory';
 import { auth } from '../utils/firebase';
-
-declare global {
-  interface Window {
-    YT: any
-    onYouTubeIframeAPIReady: () => void
-  }
-}
 
 export interface Song {
   id: string
@@ -74,8 +67,6 @@ const PlayerContext = createContext<PlayerContextType | null>(null)
 
 export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const audioRef = useRef<HTMLAudioElement>(null)
-  const ytPlayerRef = useRef<any>(null)
-  const activeEngineRef = useRef<'html5' | 'youtube'>('html5')
 
   const [currentSong, setCurrentSong] = useState<Song | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -104,96 +95,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   })
 
   const [isDragging, setIsDragging] = useState(false)
-
-  // ── YOUTUBE GLOBAL PLAYER INITIALIZATION (Official Google Stream API) ──
-  useEffect(() => {
-    const initYt = () => {
-      if (!window.YT || !window.YT.Player || ytPlayerRef.current) return
-      try {
-        const mountEl = document.getElementById('soundwave-global-yt-player')
-        if (!mountEl) return
-        ytPlayerRef.current = new window.YT.Player('soundwave-global-yt-player', {
-          height: '1',
-          width: '1',
-          playerVars: {
-            playsinline: 1,
-            controls: 0,
-            disablekb: 1,
-            fs: 0,
-            rel: 0
-          },
-          events: {
-            onStateChange: (event: any) => {
-              if (event.data === 0) {
-                // Track Ended
-                nextSong()
-              } else if (event.data === 1) {
-                setIsPlaying(true)
-              } else if (event.data === 2) {
-                setIsPlaying(false)
-              }
-            },
-            onError: (err: any) => {
-              console.warn('YouTube Player API message:', err)
-            }
-          }
-        })
-      } catch (e) {
-        console.warn('Error initializing YouTube Player:', e)
-      }
-    }
-
-    if (window.YT && window.YT.Player) {
-      initYt()
-    } else {
-      const existing = document.getElementById('soundwave-youtube-iframe-api')
-      if (!existing) {
-        const tag = document.createElement('script')
-        tag.id = 'soundwave-youtube-iframe-api'
-        tag.src = 'https://www.youtube.com/iframe_api'
-        const first = document.getElementsByTagName('script')[0]
-        first?.parentNode?.insertBefore(tag, first)
-      }
-
-      const prev = window.onYouTubeIframeAPIReady
-      window.onYouTubeIframeAPIReady = () => {
-        if (prev) prev()
-        initYt()
-      }
-
-      const interval = setInterval(() => {
-        if (window.YT && window.YT.Player) {
-          initYt()
-          clearInterval(interval)
-        }
-      }, 300)
-      return () => clearInterval(interval)
-    }
-  }, [])
-
-  // Sync time ticker when playing via YouTube
-  useEffect(() => {
-    let timer: any = null
-    if (isPlaying) {
-      timer = setInterval(() => {
-        if (activeEngineRef.current === 'youtube' && ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function') {
-          try {
-            const cur = ytPlayerRef.current.getCurrentTime()
-            const dur = ytPlayerRef.current.getDuration()
-            if (typeof cur === 'number' && !isNaN(cur)) {
-              setCurrentTime(cur)
-            }
-            if (typeof dur === 'number' && !isNaN(dur) && dur > 0) {
-              setDuration(dur)
-            }
-          } catch {}
-        }
-      }, 250)
-    }
-    return () => {
-      if (timer) clearInterval(timer)
-    }
-  }, [isPlaying])
 
   const setAudioQuality = (quality: 'best' | 'standard') => {
     setAudioQualityState(quality)
@@ -498,75 +399,20 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       } catch {}
     }
 
-    const isLocalHost = typeof window !== 'undefined' && (
-      window.location.hostname === 'localhost' ||
-      window.location.hostname === '127.0.0.1' ||
-      window.location.hostname.includes('192.168.')
-    )
+    // Resolve full-length direct audio stream (Localhost dev server yt-dlp / Audius full track / Apple CDN)
+    const activeSong = await resolveFullLengthSong(song, audioQuality)
+    setCurrentSong(activeSong)
+    if (activeSong.duration && activeSong.duration > 0) {
+      setDuration(activeSong.duration)
+    }
 
-    const isUploadedSong = song.url?.startsWith('blob:') ||
-      song.url?.startsWith('data:') ||
-      song.playlistId === 'global' ||
-      song.url?.includes('cloudinary') ||
-      song.url?.includes('firebasestorage')
-
-    if (isUploadedSong) {
-      // Direct file playback via HTML5 Audio
-      activeEngineRef.current = 'html5'
-      try { ytPlayerRef.current?.pauseVideo() } catch {}
-
-      if (audioRef.current && song.url) {
-        audioRef.current.src = song.url
-        audioRef.current.currentTime = 0
-        audioRef.current.volume = volume
-        audioRef.current.play()
-          .then(() => setIsPlaying(true))
-          .catch(e => console.error("Audio playback error:", e))
-      }
-    } else if (isLocalHost) {
-      // Local dev server yt-dlp backend
-      const activeSong = await resolveFullLengthSong(song, audioQuality)
-      setCurrentSong(activeSong)
-      activeEngineRef.current = 'html5'
-      try { ytPlayerRef.current?.pauseVideo() } catch {}
-
-      if (audioRef.current && activeSong.url) {
-        audioRef.current.src = activeSong.url
-        audioRef.current.currentTime = 0
-        audioRef.current.volume = volume
-        audioRef.current.play()
-          .then(() => setIsPlaying(true))
-          .catch(e => console.error("Audio playback error:", e))
-      }
-    } else {
-      // 🌟 Production Environment: 100% Full-Length Official Google YouTube Stream
-      activeEngineRef.current = 'youtube'
-      try { audioRef.current?.pause() } catch {}
-
-      const rawId = (song.id || '').replace('yt_', '').trim()
-      if (isYoutubeVideoId(rawId)) {
-        try {
-          ytPlayerRef.current?.loadVideoById({ videoId: rawId, startSeconds: 0 })
-        } catch {
-          ytPlayerRef.current?.cueVideoById({ videoId: rawId, startSeconds: 0 })
-        }
-      } else {
-        const cleanQuery = `${song.title} ${song.artist}`.trim()
-        try {
-          ytPlayerRef.current?.loadPlaylist({
-            listType: 'search',
-            list: cleanQuery,
-            index: 0,
-            startSeconds: 0
-          })
-        } catch {}
-      }
-
-      try {
-        ytPlayerRef.current?.setVolume(volume * 100)
-        ytPlayerRef.current?.playVideo()
-      } catch {}
-      setIsPlaying(true)
+    if (audioRef.current && activeSong.url) {
+      audioRef.current.src = activeSong.url
+      audioRef.current.currentTime = 0
+      audioRef.current.volume = volume
+      audioRef.current.play()
+        .then(() => setIsPlaying(true))
+        .catch(e => console.error("Audio playback error:", e))
     }
 
     fetchLyrics(song.title, song.artist, song.duration).then((lyrics) => {
@@ -577,11 +423,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }
 
   const pauseSong = () => {
-    if (activeEngineRef.current === 'youtube') {
-      try { ytPlayerRef.current?.pauseVideo() } catch {}
-    } else {
-      audioRef.current?.pause()
-    }
+    audioRef.current?.pause()
     setIsPlaying(false)
     if (wakeLockRef.current) {
       wakeLockRef.current.release().catch(() => {})
@@ -589,29 +431,16 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }
 
-  const resumeSong = async () => {
+  const resumeSong = () => {
     initAudioGraph()
     if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
       audioCtxRef.current.resume().catch(() => {})
     }
 
-    if (activeEngineRef.current === 'youtube') {
-      try {
-        ytPlayerRef.current?.playVideo()
-      } catch {}
-      setIsPlaying(true)
-    } else {
-      if (audioRef.current) {
-        if ((!audioRef.current.src || audioRef.current.src === window.location.href) && currentSong) {
-          const resolved = await resolveFullLengthSong(currentSong, audioQuality)
-          if (resolved.url) {
-            audioRef.current.src = resolved.url
-          }
-        }
-        audioRef.current.play()
-          .then(() => setIsPlaying(true))
-          .catch(e => console.error("Resume failed:", e))
-      }
+    if (audioRef.current) {
+      audioRef.current.play()
+        .then(() => setIsPlaying(true))
+        .catch(e => console.error("Resume failed:", e))
     }
   }
 
@@ -700,14 +529,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const setCurrentTimeHandler = (time: number) => {
     setCurrentTime(time)
-    if (activeEngineRef.current === 'youtube') {
-      try {
-        ytPlayerRef.current?.seekTo(time, true)
-      } catch {}
-    } else {
-      if (audioRef.current) {
-        audioRef.current.currentTime = time
-      }
+    if (audioRef.current) {
+      audioRef.current.currentTime = time
     }
   }
 
@@ -717,9 +540,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (audioRef.current) {
       audioRef.current.volume = newVol
     }
-    try {
-      ytPlayerRef.current?.setVolume(newVol * 100)
-    } catch {}
   }
 
   const addToQueue = (song: Song) => {
@@ -737,7 +557,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     let lastTimeUpdate = 0
     const handleTimeUpdate = () => {
-      if (activeEngineRef.current !== 'html5') return
       const now = performance.now()
       if (now - lastTimeUpdate < 220) return
       lastTimeUpdate = now
@@ -755,13 +574,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     const handleLoadedMetadata = () => {
-      if (activeEngineRef.current === 'html5' && audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
+      if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
         setDuration(audio.duration)
       }
     }
 
     const handleError = () => {
-      if (activeEngineRef.current === 'html5' && currentSong?.previewUrl && audio.src !== currentSong.previewUrl) {
+      if (currentSong?.previewUrl && audio.src !== currentSong.previewUrl) {
         console.warn('Audio stream failed, switching to backup stream fallback...')
         audio.src = currentSong.previewUrl
         audio.play().then(() => setIsPlaying(true)).catch(() => {})
@@ -769,7 +588,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     const handleEnded = () => {
-      if (activeEngineRef.current !== 'html5') return
       if (repeatMode === 'one') {
         audio.currentTime = 0
         audio.play().catch(() => {})
@@ -858,22 +676,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     >
       {children}
       <audio ref={audioRef} />
-      {/* 🌟 Global Official YouTube Stream Bridge for Full-Length Playback in Production */}
-      <div
-        id="soundwave-global-yt-player-container"
-        style={{
-          position: 'fixed',
-          top: -9999,
-          left: -9999,
-          width: 1,
-          height: 1,
-          opacity: 0,
-          pointerEvents: 'none',
-          zIndex: -1
-        }}
-      >
-        <div id="soundwave-global-yt-player" />
-      </div>
     </PlayerContext.Provider>
   )
 }
