@@ -54,6 +54,7 @@ import { usePlayer, Song } from '../context/PlayerContext'
 import { searchYouTubeMusic, resolveFullLengthSong } from '../utils/ytMusic'
 import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { Capacitor } from '@capacitor/core'
+import { auth } from '../utils/firebase'
 
 interface ListenTogetherViewProps {
   onBack: () => void
@@ -65,6 +66,10 @@ const REACTION_EMOJIS = ['🔥', '❤️', '🚀', '🎧', '💃', '⚡', '🤯'
 export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, user }) => {
   const { currentSong, isPlaying, playSong, pauseSong, resumeSong, audioRef, volume, setVolume } = usePlayer()
 
+  const currentUserUid = user?.uid || user?.id || auth.currentUser?.uid || ''
+  const currentUserName = user?.displayName || auth.currentUser?.displayName || (user?.email ? user.email.split('@')[0] : 'Soundwave Listener')
+  const currentUserPhoto = user?.photoURL || auth.currentUser?.photoURL || ''
+
   // Lobby States
   const [activeRoom, setActiveRoom] = useState<JamRoom | null>(null)
   const [publicRooms, setPublicRooms] = useState<JamRoom[]>([])
@@ -74,7 +79,7 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
   const [joinError, setJoinError] = useState('')
 
   // Create Room Modal / Form States
-  const [newRoomName, setNewRoomName] = useState(`${user?.displayName || 'Soundwave'}'s Jam`)
+  const [newRoomName, setNewRoomName] = useState(`${currentUserName}'s Jam`)
   const [newRoomCode, setNewRoomCode] = useState(generateRoomCode())
   const [isPublicRoom, setIsPublicRoom] = useState(true)
   const [isOpenDjMode, setIsOpenDjMode] = useState(true)
@@ -94,7 +99,7 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
   const isSyncingPlaybackRef = useRef(false)
   const lastProcessedReactionRef = useRef<string>('')
 
-  const isHost = activeRoom ? activeRoom.hostUid === user?.uid : false
+  const isHost = activeRoom ? activeRoom.hostUid === currentUserUid : false
   const canControlPlayback = activeRoom ? (activeRoom.openDjMode || isHost) : true
 
   const triggerHaptic = async (style = ImpactStyle.Light) => {
@@ -193,7 +198,7 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
 
   // Handle Create Room
   const handleCreateRoom = async () => {
-    if (!user?.uid) {
+    if (!currentUserUid) {
       alert('Please log in to create a Jam Room.')
       return
     }
@@ -202,7 +207,7 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
       const room = await createJamRoom(
         newRoomName,
         newRoomCode,
-        { uid: user.uid, displayName: user.displayName, photoURL: user.photoURL },
+        { uid: currentUserUid, displayName: currentUserName, photoURL: currentUserPhoto },
         currentSong,
         isPublicRoom,
         isOpenDjMode
@@ -220,7 +225,7 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
   const handleJoinRoom = async (codeToJoin?: string) => {
     const code = (codeToJoin || joinCodeInput).trim()
     if (!code) return
-    if (!user?.uid) {
+    if (!currentUserUid) {
       alert('Please log in to join a Jam Room.')
       return
     }
@@ -228,9 +233,9 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
     setJoinError('')
     try {
       const room = await joinJamRoom(code, {
-        uid: user.uid,
-        displayName: user.displayName,
-        photoURL: user.photoURL
+        uid: currentUserUid,
+        displayName: currentUserName,
+        photoURL: currentUserPhoto
       })
       setActiveRoom(room)
       triggerHaptic(ImpactStyle.Medium)
@@ -243,10 +248,10 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
 
   // Handle Leave Room
   const handleLeaveRoom = async () => {
-    if (!activeRoom || !user?.uid) return
+    if (!activeRoom || !currentUserUid) return
     const roomId = activeRoom.id
     setActiveRoom(null)
-    await leaveJamRoom(roomId, user.uid, user.displayName)
+    await leaveJamRoom(roomId, currentUserUid, currentUserName)
     triggerHaptic()
   }
 
@@ -306,7 +311,7 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
     if (!activeRoom) return
     triggerFloatingReaction(emoji)
     triggerHaptic(ImpactStyle.Light)
-    await sendJamReaction(activeRoom.id, emoji, user?.displayName || 'Listener')
+    await sendJamReaction(activeRoom.id, emoji, currentUserName)
   }
 
   // Send Chat Message
@@ -316,8 +321,8 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
     const msg = chatInput.trim()
     setChatInput('')
     await sendJamChatMessage(activeRoom.id, msg, {
-      displayName: user?.displayName,
-      photoURL: user?.photoURL
+      displayName: currentUserName,
+      photoURL: currentUserPhoto
     })
   }
 
@@ -338,7 +343,7 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
   // Add song to shared Jam queue
   const handleAddSongToJam = async (song: Song) => {
     if (!activeRoom) return
-    await addSongToJamQueue(activeRoom.id, song, user?.displayName || 'Listener')
+    await addSongToJamQueue(activeRoom.id, song, currentUserName)
     triggerHaptic()
     setShowAddSongDrawer(false)
     setSongSearchQuery('')

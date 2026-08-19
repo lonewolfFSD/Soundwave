@@ -2,10 +2,12 @@ import React, { createContext, useContext, useEffect, useState } from 'react'
 import { User as FirebaseUser, onAuthStateChanged, signOut } from 'firebase/auth'
 import { auth } from '../utils/firebase'
 
-interface User {
+export interface User {
   id: string
+  uid: string
   email: string
   displayName?: string
+  photoURL?: string
 }
 
 interface AuthContextType {
@@ -25,8 +27,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (firebaseUser) {
         setUser({
           id: firebaseUser.uid,
+          uid: firebaseUser.uid,
           email: firebaseUser.email || '',
           displayName: firebaseUser.displayName || undefined,
+          photoURL: firebaseUser.photoURL || undefined,
         })
       } else {
         setUser(null)

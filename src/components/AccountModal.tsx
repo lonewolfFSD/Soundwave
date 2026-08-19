@@ -6,7 +6,9 @@ import {
   Activity, Sliders, Info, Smartphone, Zap, Cpu, MonitorPlay, Fingerprint, Database, Github, ExternalLink, ChevronRight, ChevronLeft,
   Type, Wifi, Home, Mic,
   Battery,
-  Lock
+  Lock,
+  Sparkles,
+  Vibrate
 } from 'lucide-react';
 import { getAuth, deleteUser, updateProfile } from 'firebase/auth';
 import { collection, getDocs, doc, deleteDoc } from 'firebase/firestore';
@@ -120,7 +122,7 @@ const AVAILABLE_APP_ICONS = [
   },
 ];
 
-type TabType = 'profile' | 'appearance' | 'playback' | 'data' | 'security' | 'device' | 'about' ;
+type TabType = 'profile' | 'appearance' | 'playback' | 'mobile' | 'data' | 'security' | 'device' | 'about' ;
 
 const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose, user }) => {
   const triggerHaptic = async (style: any = ImpactStyle.Light) => {
@@ -140,11 +142,17 @@ const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose, user }) =>
   const [showDownloadModal, setShowDownloadModal] = useState(false); // 🔥 State for Download Modal
   
   // Base Settings States
-  // Update the state (around line 65)
-const [currentTheme, setCurrentTheme] = useState(() => {
-  // Always trust localStorage regardless of platform
-  return localStorage.getItem('soundwave_theme') || 'default';
-});
+  const [currentTheme, setCurrentTheme] = useState(() => {
+    return localStorage.getItem('soundwave_theme') || 'default';
+  });
+
+  // Mobile Native Hardware Preferences
+  const [hapticsEnabled, setHapticsEnabled] = useState(localStorage.getItem('sw_haptics') !== 'false');
+  const [shakeEnabled, setShakeEnabled] = useState(localStorage.getItem('sw_shake_shuffle') !== 'false');
+  const [duckingEnabled, setDuckingEnabled] = useState(localStorage.getItem('sw_ducking') !== 'false');
+  const [keepAwakeEnabled, setKeepAwakeEnabled] = useState(localStorage.getItem('sw_keep_awake') === 'true');
+  const [soundieMobileEnabled, setSoundieMobileEnabled] = useState(localStorage.getItem('sw_soundie_enabled') !== 'false');
+  const [startupScreen, setStartupScreen] = useState(localStorage.getItem('sw_startup_screen') || 'home');
 
 // Update the theme listener effect
 useEffect(() => {
@@ -182,7 +190,6 @@ useEffect(() => {
   const [normalizationType, setNormalizationType] = useState(localStorage.getItem('sw_norm_type') || 'loudness');
   const [sleepTimer, setSleepTimer] = useState(Number(localStorage.getItem('sw_sleep_timer') || 0));
   const [wifiOnly, setWifiOnly] = useState(localStorage.getItem('sw_wifi_only') !== 'false');
-  const [startupScreen, setStartupScreen] = useState(localStorage.getItem('sw_startup_screen') || 'dashboard');
   const [monoAudio, setMonoAudio] = useState(localStorage.getItem('sw_mono_audio') === 'true');
   const [lyricsFontSize, setLyricsFontSize] = useState(Number(localStorage.getItem('sw_lyrics_size') || 18));
   
@@ -527,6 +534,7 @@ const [unrealKey, setUnrealKey] = useState(localStorage.getItem('sw_unreal_key')
     { id: 'profile', label: 'Profile', description: 'Manage your identity, avatar, and account details.', icon: User },
     { id: 'appearance', label: 'Appearance', description: 'Customize themes, layouts, and animations.', icon: Palette },
     { id: 'playback', label: 'Playback', description: 'Fine-tune equalizer, crossfade, and audio rules.', icon: Headphones },
+    { id: 'mobile', label: 'Mobile & Gestures', description: 'Haptic feedback, shake to shuffle & mobile controls.', icon: Smartphone },
     { id: 'data', label: 'App Data', description: 'Manage local cache, history, and storage.', icon: HardDrive },
     { id: 'security', label: 'Security', description: 'Session control, logout, and account deletion.', icon: Shield },
     { id: 'about', label: 'About', description: 'App version, developer info, and resources.', icon: Info },
@@ -1183,6 +1191,172 @@ const [unrealKey, setUnrealKey] = useState(localStorage.getItem('sw_unreal_key')
                       </div>
                       <button onClick={() => toggleSetting('sw_autoplay', !autoPlay, setAutoPlay)} className={`w-12 h-6 rounded-full p-0.5 transition-colors border border-white/10 shrink-0 ${autoPlay ? 'bg-slate-300' : 'bg-black'}`}>
                         <div className={`w-4 h-4 rounded-full transition-transform ${autoPlay ? 'translate-x-6 bg-black' : 'translate-x-0 bg-zinc-500'}`}></div>
+                      </button>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            )}
+
+            {/* TAB: MOBILE & HARDWARE GESTURES */}
+            {activeTab === 'mobile' && (
+              <div className={`space-y-6 ${animationClass}`}>
+                <div className="hidden md:block">
+                  <h3 className="text-2xl font-bold text-slate-100 mb-1" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Mobile & Hardware Controls</h3>
+                  <p className="text-zinc-500 text-sm" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Configure vibration, physical gestures, audio ducking, and native hardware features.</p>
+                </div>
+
+                <div className="space-y-6 backdrop-blur-sm" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                  
+                  {/* 1. Haptic Feedback */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-white/5 pb-6">
+                    <div className="pr-4">
+                      <h4 className="text-slate-200 font-bold text-base flex items-center gap-2">
+                        <Vibrate size={18} className={activeThemeObj.highlight} /> Haptic Feedback
+                      </h4>
+                      <p className="text-xs text-zinc-500 mt-1 max-w-[420px]">
+                        Tactile vibration responses when tapping playback controls, dragging the bottom navigation bar, and seeking tracks.
+                      </p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const next = !hapticsEnabled;
+                        setHapticsEnabled(next);
+                        localStorage.setItem('sw_haptics', String(next));
+                        if (next && Capacitor.isNativePlatform()) {
+                          try { await Haptics.impact({ style: ImpactStyle.Heavy }); } catch {}
+                        }
+                        window.dispatchEvent(new Event('sw-settings-updated'));
+                      }}
+                      className={`w-12 h-6 rounded-full p-1 transition-colors border border-white/10 shrink-0 ${hapticsEnabled ? activeThemeObj.activeToggle : 'bg-black'}`}
+                    >
+                      <div className={`w-4 h-4 rounded-full transition-transform ${hapticsEnabled ? 'translate-x-6 bg-black' : 'translate-x-0 bg-zinc-500'}`} />
+                    </button>
+                  </div>
+
+                  {/* 2. Shake to Shuffle */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-white/5 pb-6">
+                    <div className="pr-4">
+                      <h4 className="text-slate-200 font-bold text-base flex items-center gap-2">
+                        <Zap size={18} className={activeThemeObj.highlight} /> Shake to Shuffle
+                      </h4>
+                      <p className="text-xs text-zinc-500 mt-1 max-w-[420px]">
+                        Physically shake your mobile device to randomize and shuffle the current playing queue.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const next = !shakeEnabled;
+                        setShakeEnabled(next);
+                        localStorage.setItem('sw_shake_shuffle', String(next));
+                        triggerHaptic();
+                        window.dispatchEvent(new Event('sw-settings-updated'));
+                      }}
+                      className={`w-12 h-6 rounded-full p-1 transition-colors border border-white/10 shrink-0 ${shakeEnabled ? activeThemeObj.activeToggle : 'bg-black'}`}
+                    >
+                      <div className={`w-4 h-4 rounded-full transition-transform ${shakeEnabled ? 'translate-x-6 bg-black' : 'translate-x-0 bg-zinc-500'}`} />
+                    </button>
+                  </div>
+
+                  {/* 3. Audio Ducking */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-white/5 pb-6">
+                    <div className="pr-4">
+                      <h4 className="text-slate-200 font-bold text-base flex items-center gap-2">
+                        <Volume2 size={18} className={activeThemeObj.highlight} /> Smart Audio Ducking
+                      </h4>
+                      <p className="text-xs text-zinc-500 mt-1 max-w-[420px]">
+                        Temporarily reduce music volume when system notifications or voice navigation announcements arrive.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const next = !duckingEnabled;
+                        setDuckingEnabled(next);
+                        localStorage.setItem('sw_ducking', String(next));
+                        triggerHaptic();
+                        window.dispatchEvent(new Event('sw-settings-updated'));
+                      }}
+                      className={`w-12 h-6 rounded-full p-1 transition-colors border border-white/10 shrink-0 ${duckingEnabled ? activeThemeObj.activeToggle : 'bg-black'}`}
+                    >
+                      <div className={`w-4 h-4 rounded-full transition-transform ${duckingEnabled ? 'translate-x-6 bg-black' : 'translate-x-0 bg-zinc-500'}`} />
+                    </button>
+                  </div>
+
+                  {/* 4. Keep Screen Awake */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-white/5 pb-6">
+                    <div className="pr-4">
+                      <h4 className="text-slate-200 font-bold text-base flex items-center gap-2">
+                        <Smartphone size={18} className={activeThemeObj.highlight} /> Keep Screen Awake
+                      </h4>
+                      <p className="text-xs text-zinc-500 mt-1 max-w-[420px]">
+                        Prevent the device screen from dimming or locking while lyrics or full-screen visualizers are open.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const next = !keepAwakeEnabled;
+                        setKeepAwakeEnabled(next);
+                        localStorage.setItem('sw_keep_awake', String(next));
+                        triggerHaptic();
+                        window.dispatchEvent(new Event('sw-settings-updated'));
+                      }}
+                      className={`w-12 h-6 rounded-full p-1 transition-colors border border-white/10 shrink-0 ${keepAwakeEnabled ? activeThemeObj.activeToggle : 'bg-black'}`}
+                    >
+                      <div className={`w-4 h-4 rounded-full transition-transform ${keepAwakeEnabled ? 'translate-x-6 bg-black' : 'translate-x-0 bg-zinc-500'}`} />
+                    </button>
+                  </div>
+
+                  {/* 5. Soundie AI on Mobile */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-white/5 pb-6">
+                    <div className="pr-4">
+                      <h4 className="text-slate-200 font-bold text-base flex items-center gap-2">
+                        <Sparkles size={18} className={activeThemeObj.highlight} /> Soundie AI Voice Assistant
+                      </h4>
+                      <p className="text-xs text-zinc-500 mt-1 max-w-[420px]">
+                        Display the Soundie AI orb in mobile navigation and quick-access header.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const next = !soundieMobileEnabled;
+                        setSoundieMobileEnabled(next);
+                        localStorage.setItem('sw_soundie_enabled', String(next));
+                        triggerHaptic();
+                        window.dispatchEvent(new Event('sw-settings-updated'));
+                      }}
+                      className={`w-12 h-6 rounded-full p-1 transition-colors border border-white/10 shrink-0 ${soundieMobileEnabled ? activeThemeObj.activeToggle : 'bg-black'}`}
+                    >
+                      <div className={`w-4 h-4 rounded-full transition-transform ${soundieMobileEnabled ? 'translate-x-6 bg-black' : 'translate-x-0 bg-zinc-500'}`} />
+                    </button>
+                  </div>
+
+                  {/* 6. Default Startup Screen */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-2">
+                    <div>
+                      <h4 className="text-slate-200 font-bold text-base">Startup Screen</h4>
+                      <p className="text-xs text-zinc-500 mt-1">Choose which view loads when opening the SoundWave app.</p>
+                    </div>
+                    <div className="flex bg-black/40 border border-white/10 rounded-xl p-1 shrink-0">
+                      <button
+                        onClick={() => {
+                          setStartupScreen('home');
+                          localStorage.setItem('sw_startup_screen', 'home');
+                          triggerHaptic();
+                        }}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-colors ${startupScreen === 'home' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white'}`}
+                      >
+                        Discover Home
+                      </button>
+                      <button
+                        onClick={() => {
+                          setStartupScreen('library');
+                          localStorage.setItem('sw_startup_screen', 'library');
+                          triggerHaptic();
+                        }}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-colors ${startupScreen === 'library' ? 'bg-white text-black' : 'text-zinc-400 hover:text-white'}`}
+                      >
+                        Your Library
                       </button>
                     </div>
                   </div>

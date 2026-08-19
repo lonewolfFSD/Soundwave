@@ -87,13 +87,20 @@ const Dashboard = () => {
       setShowLibrary(false)
       setSelectedPlaylist(null)
     }
+    const handleOpenSoundie = () => {
+      setSoundieOpen(true)
+    }
     window.addEventListener('soundwave-open-artist', handleOpenArtist)
     window.addEventListener('soundwave-open-settings', handleOpenSettings)
     window.addEventListener('soundwave-open-listen-together', handleOpenListenTogether)
+    window.addEventListener('open-soundie', handleOpenSoundie)
+    window.addEventListener('soundwave-open-soundie', handleOpenSoundie)
     return () => {
       window.removeEventListener('soundwave-open-artist', handleOpenArtist)
       window.removeEventListener('soundwave-open-settings', handleOpenSettings)
       window.removeEventListener('soundwave-open-listen-together', handleOpenListenTogether)
+      window.removeEventListener('open-soundie', handleOpenSoundie)
+      window.removeEventListener('soundwave-open-soundie', handleOpenSoundie)
     }
   }, [])
 

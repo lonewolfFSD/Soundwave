@@ -65,8 +65,56 @@ const Sidebar: React.FC<SidebarProps> = ({
   // Reduce motion active for all platforms
   const [reduceMotion, setReduceMotion] = useState(localStorage.getItem('sw_reduce_motion') === 'true');
 
-  // Soundie enabled — reactive so nav auto-adjusts when toggled in settings
-  const [soundieEnabled, setSoundieEnabled] = useState(localStorage.getItem('sw_soundie_enabled') === 'true');
+  // Soundie enabled — default true so Soundie is enabled out of the box
+  const [soundieEnabled, setSoundieEnabled] = useState(localStorage.getItem('sw_soundie_enabled') !== 'false');
+
+  // --- APPLE-STYLE DRAG & DROP NAV STATE ---
+  const mobileNavRef = useRef<HTMLDivElement>(null);
+  const [isDraggingNav, setIsDraggingNav] = useState(false);
+  const [dragHoverTab, setDragHoverTab] = useState<number | null>(null);
+  const lastHoverTabRef = useRef<number>(0);
+  const totalNavTabs = 6;
+
+  const triggerNavHaptic = async (style: ImpactStyle = ImpactStyle.Light) => {
+    const isHapticEnabled = localStorage.getItem('sw_haptics') !== 'false';
+    if (isHapticEnabled && Capacitor.isNativePlatform()) {
+      try { await Haptics.impact({ style }); } catch {}
+    }
+  };
+
+  const getHoverTabFromTouch = (clientX: number): number => {
+    if (!mobileNavRef.current) return 0;
+    const rect = mobileNavRef.current.getBoundingClientRect();
+    const relX = Math.max(0, Math.min(rect.width, clientX - rect.left));
+    const tabWidth = rect.width / totalNavTabs;
+    return Math.min(totalNavTabs - 1, Math.max(0, Math.floor(relX / tabWidth)));
+  };
+
+  const handleNavTouchStart = (e: React.TouchEvent) => {
+    setIsDraggingNav(true);
+    const initialTab = getHoverTabFromTouch(e.touches[0].clientX);
+    setDragHoverTab(initialTab);
+    lastHoverTabRef.current = initialTab;
+    triggerNavHaptic(ImpactStyle.Light);
+  };
+
+  const handleNavTouchMove = (e: React.TouchEvent) => {
+    if (!isDraggingNav) return;
+    const currentTab = getHoverTabFromTouch(e.touches[0].clientX);
+    if (currentTab !== lastHoverTabRef.current) {
+      lastHoverTabRef.current = currentTab;
+      setDragHoverTab(currentTab);
+      triggerNavHaptic(ImpactStyle.Light);
+    }
+  };
+
+  const handleNavTouchEnd = () => {
+    setIsDraggingNav(false);
+    const finalTab = lastHoverTabRef.current;
+    setDragHoverTab(null);
+    triggerNavHaptic(ImpactStyle.Medium);
+    handleMobileNav(finalTab);
+  };
   
   useEffect(() => {
     const isNative = Capacitor.isNativePlatform();
@@ -79,7 +127,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     const handleSettingsUpdate = () => {
       // Allow reduce motion to update everywhere
       setReduceMotion(localStorage.getItem('sw_reduce_motion') === 'true');
-      setSoundieEnabled(localStorage.getItem('sw_soundie_enabled') === 'true');
+      setSoundieEnabled(localStorage.getItem('sw_soundie_enabled') !== 'false');
     };
 
     handleThemeUpdate();
@@ -525,84 +573,86 @@ const themeConfig: Record<string, any> = {
       </aside>
 
       {/* ========================================= */}
-      {/* FLOATING MOBILE BOTTOM NAV (Glassmorphic) */}
+      {/* FLOATING MOBILE BOTTOM NAV (Apple-Style Drag & Drop Glassmorphic) */}
       {/* ========================================= */}
-      <div className={`
-        md:hidden fixed bottom-6 left-4 right-4 z-[20] max-w-sm m-auto
-        backdrop-blur-md border border-white/20 rounded-full shadow-2xl 
-        transition-all ${reduceMotion ? 'duration-0' : 'duration-500'} ease-[cubic-bezier(0.23,1,0.32,1)]
-        ${mobileNavBg || 'bg-black/80'}
-        ${currentSong ? '-translate-y-[80px]' : 'translate-y-0'} 
-      `}>
+      <div 
+        ref={mobileNavRef}
+        onTouchStart={handleNavTouchStart}
+        onTouchMove={handleNavTouchMove}
+        onTouchEnd={handleNavTouchEnd}
+        className={`
+          md:hidden fixed bottom-6 left-4 right-4 z-[20] max-w-sm m-auto
+          backdrop-blur-md border border-white/20 rounded-full shadow-2xl 
+          transition-all ${reduceMotion ? 'duration-0' : 'duration-500'} ease-[cubic-bezier(0.23,1,0.32,1)] select-none touch-none
+          ${mobileNavBg || 'bg-black/80'}
+          ${currentSong ? '-translate-y-[80px]' : 'translate-y-0'} 
+          ${isDraggingNav ? 'scale-[1.02] border-white/40 shadow-[0_0_30px_rgba(255,255,255,0.15)]' : ''}
+        `}
+      >
         <div className="p-2">
           <div className="relative flex items-center h-[48px] w-full">
             
-            {/* 🔥 THE SLIDING PILL - Adjusted for removed Settings on web 🔥 */}
+            {/* 🔥 THE APPLE SLIDING PILL (Fluid Touch-Drag & Drop Spring Animation) 🔥 */}
             <div 
-              className={`absolute top-0 bottom-0 border border-white/10 rounded-full transition-transform ${reduceMotion ? 'duration-0' : 'duration-500'} ease-[cubic-bezier(0.23,1,0.32,1)] z-0 ${activePill || 'bg-white/15'}`}
+              className={`absolute top-0 bottom-0 border border-white/10 rounded-full transition-transform ${isDraggingNav ? 'duration-75 scale-y-105' : (reduceMotion ? 'duration-0' : 'duration-300')} ease-[cubic-bezier(0.23,1,0.32,1)] z-0 ${activePill || 'bg-white/15'}`}
               style={{ 
-                // If on web, we now only have 5 items (Home, Library, Plus, Import, Soundie)
-                width: Capacitor.isNativePlatform() ? (soundieEnabled ? '16.666%' : '20%') : '20%',
-                transform: `translateX(${activeTab * 100}%)` 
+                width: `${100 / totalNavTabs}%`,
+                transform: `translateX(${dragHoverTab !== null ? dragHoverTab * 100 : activeTab * 100}%)` 
               }}
             />
 
-            {/* BUTTONS */}
+            {/* BUTTON 0: HOME */}
             <button onClick={() => handleMobileNav(0)} className="relative z-10 flex flex-col items-center justify-center flex-1 h-full gap-1 rounded-full bg-transparent">
               <Home size={20} strokeWidth={activeTab === 0 ? 3 : 2} className={`${reduceMotion ? '' : 'transition-colors duration-300'} ${activeTab === 0 ? (iconActive || 'text-white') : (iconInactive || 'text-white/50')}`} />
             </button>
 
+            {/* BUTTON 1: LIBRARY */}
             <button onClick={() => handleMobileNav(1)} className="relative z-10 flex flex-col items-center justify-center flex-1 h-full gap-1 rounded-full bg-transparent">
               <Library size={20} strokeWidth={activeTab === 1 ? 3 : 2} className={`${reduceMotion ? '' : 'transition-colors duration-300'} ${activeTab === 1 ? (iconActive || 'text-white') : (iconInactive || 'text-white/50')}`} />
             </button>
 
+            {/* BUTTON 2: CREATE PLAYLIST */}
             <button onClick={() => handleMobileNav(2)} className="relative z-10 flex flex-col items-center justify-center flex-1 h-full gap-1 rounded-full bg-transparent">
               <Plus size={20} strokeWidth={activeTab === 2 ? 3 : 2} className={`${reduceMotion ? '' : 'transition-colors duration-300'} ${activeTab === 2 ? (iconActive || 'text-white') : (iconInactive || 'text-white/50')}`} />
             </button>
 
+            {/* BUTTON 3: UPLOAD */}
             <button onClick={() => handleMobileNav(3)} className="relative z-10 flex flex-col items-center justify-center flex-1 h-full gap-1 rounded-full bg-transparent">
               <Import size={20} strokeWidth={activeTab === 3 ? 3 : 2} className={`${reduceMotion ? '' : 'transition-colors duration-300'} ${activeTab === 3 ? (iconActive || 'text-white') : (iconInactive || 'text-white/50')}`} />
-              
             </button>
 
-            {/* SETTINGS BUTTON - Only visible on Native Mobile */}
-            {Capacitor.isNativePlatform() && (
-              <button 
-                onClick={() => handleMobileNav(4)} 
-                className={`relative z-10 flex flex-col items-center justify-center flex-1 h-full gap-1 rounded-full bg-transparent ${reduceMotion ? '' : 'transition-opacity duration-300'}`}
-              >
-                <Settings2 
-                  size={20} 
-                  strokeWidth={activeTab === 4 ? 3 : 2} 
-                  className={`${reduceMotion ? '' : 'transition-colors duration-300'} ${activeTab === 4 ? (iconActive || 'text-white') : (iconInactive || 'text-white/50')}`} 
-                />
-              </button>
-            )}
+            {/* BUTTON 4: SETTINGS (Native & Mobile) */}
+            <button 
+              onClick={() => handleMobileNav(4)} 
+              className={`relative z-10 flex flex-col items-center justify-center flex-1 h-full gap-1 rounded-full bg-transparent ${reduceMotion ? '' : 'transition-opacity duration-300'}`}
+            >
+              <Settings2 
+                size={20} 
+                strokeWidth={activeTab === 4 ? 3 : 2} 
+                className={`${reduceMotion ? '' : 'transition-colors duration-300'} ${activeTab === 4 ? (iconActive || 'text-white') : (iconInactive || 'text-white/50')}`} 
+              />
+            </button>
 
-            {/* Soundie AI button — Always shown on Web (redirects to download), shown on Native only if enabled */}
-            {(soundieEnabled || !Capacitor.isNativePlatform()) && (
-  <button
-    onClick={() => handleMobileNav(5)}
-    className={`relative z-10 flex flex-col items-center justify-center flex-1 h-full gap-1 rounded-full bg-transparent ${!Capacitor.isNativePlatform() ? 'opacity-70' : ''}`}
-  >
-    {/* --- NEW TAG --- */}
-    <div className="absolute top-1.5 right-2 z-20">
-  {/* Added flex, items-center, and justify-center to the container */}
-  <div className="bg-white px-1.5 h-[16px] rounded-md shadow-lg scale-[0.8] flex items-center justify-center">
-    <span 
-      className="text-[9px] font-black text-black leading-none uppercase" 
-      style={{ fontFamily: 'Syne, sans-serif' }}
-    >
-      AI
-    </span>
-  </div>
-</div>
+            {/* BUTTON 5: SOUNDIE AI ASSISTANT */}
+            <button
+              onClick={() => handleMobileNav(5)}
+              className="relative z-10 flex flex-col items-center justify-center flex-1 h-full gap-1 rounded-full bg-transparent"
+            >
+              <div className="absolute top-1.5 right-1.5 z-20">
+                <div className="bg-white px-1 h-[14px] rounded-md shadow-lg scale-[0.75] flex items-center justify-center">
+                  <span 
+                    className="text-[8px] font-black text-black leading-none uppercase" 
+                    style={{ fontFamily: 'Syne, sans-serif' }}
+                  >
+                    AI
+                  </span>
+                </div>
+              </div>
 
-    <div className="relative w-6 h-6 rounded-full overflow-hidden soundie-nav-orb">
-      <div className="absolute inset-0 elevenlabs-mesh-nav" />
-    </div>
-  </button>
-)}
+              <div className="relative w-6 h-6 rounded-full overflow-hidden soundie-nav-orb shadow-[0_0_12px_rgba(139,92,246,0.5)]">
+                <div className="absolute inset-0 elevenlabs-mesh-nav" />
+              </div>
+            </button>
 
           </div>
         </div>
