@@ -1,11 +1,18 @@
 import React, { createContext, useContext, useState, useRef, useEffect } from 'react'
 import { MediaSession } from '@capgo/capacitor-media-session';
-import { resolveFullLengthSong } from '../utils/ytMusic';
+import { resolveFullLengthSong, isYoutubeVideoId } from '../utils/ytMusic';
 import { fetchLyrics } from '../utils/lyrics';
 import { getMoodCoherentQueue, getSongRadioQueue } from '../utils/aiRecommender';
 import { getLocalLikedSongs, saveLocalLikedSongs, fetchRemoteLikedSongs } from '../utils/likedSongs';
 import { getLocalListenHistory, recordSongPlay } from '../utils/listenHistory';
 import { auth } from '../utils/firebase';
+
+declare global {
+  interface Window {
+    YT: any
+    onYouTubeIframeAPIReady: () => void
+  }
+}
 
 export interface Song {
   id: string
@@ -58,6 +65,7 @@ interface PlayerContextType {
   setSongLyrics: (lyrics: string) => void
   clearQueue: () => void
   setGlobalLibrary: React.Dispatch<React.SetStateAction<Song[]>>
+  clearHistory: () => void
   isDragging: boolean
   setIsDragging: (dragging: boolean) => void
 }
@@ -66,6 +74,8 @@ const PlayerContext = createContext<PlayerContextType | null>(null)
 
 export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const audioRef = useRef<HTMLAudioElement>(null)
+  const ytPlayerRef = useRef<any>(null)
+  const activeEngineRef = useRef<'html5' | 'youtube'>('html5')
 
   const [currentSong, setCurrentSong] = useState<Song | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -94,6 +104,96 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   })
 
   const [isDragging, setIsDragging] = useState(false)
+
+  // ── YOUTUBE GLOBAL PLAYER INITIALIZATION (Official Google Stream API) ──
+  useEffect(() => {
+    const initYt = () => {
+      if (!window.YT || !window.YT.Player || ytPlayerRef.current) return
+      try {
+        const mountEl = document.getElementById('soundwave-global-yt-player')
+        if (!mountEl) return
+        ytPlayerRef.current = new window.YT.Player('soundwave-global-yt-player', {
+          height: '1',
+          width: '1',
+          playerVars: {
+            playsinline: 1,
+            controls: 0,
+            disablekb: 1,
+            fs: 0,
+            rel: 0
+          },
+          events: {
+            onStateChange: (event: any) => {
+              if (event.data === 0) {
+                // Track Ended
+                nextSong()
+              } else if (event.data === 1) {
+                setIsPlaying(true)
+              } else if (event.data === 2) {
+                setIsPlaying(false)
+              }
+            },
+            onError: (err: any) => {
+              console.warn('YouTube Player API message:', err)
+            }
+          }
+        })
+      } catch (e) {
+        console.warn('Error initializing YouTube Player:', e)
+      }
+    }
+
+    if (window.YT && window.YT.Player) {
+      initYt()
+    } else {
+      const existing = document.getElementById('soundwave-youtube-iframe-api')
+      if (!existing) {
+        const tag = document.createElement('script')
+        tag.id = 'soundwave-youtube-iframe-api'
+        tag.src = 'https://www.youtube.com/iframe_api'
+        const first = document.getElementsByTagName('script')[0]
+        first?.parentNode?.insertBefore(tag, first)
+      }
+
+      const prev = window.onYouTubeIframeAPIReady
+      window.onYouTubeIframeAPIReady = () => {
+        if (prev) prev()
+        initYt()
+      }
+
+      const interval = setInterval(() => {
+        if (window.YT && window.YT.Player) {
+          initYt()
+          clearInterval(interval)
+        }
+      }, 300)
+      return () => clearInterval(interval)
+    }
+  }, [])
+
+  // Sync time ticker when playing via YouTube
+  useEffect(() => {
+    let timer: any = null
+    if (isPlaying) {
+      timer = setInterval(() => {
+        if (activeEngineRef.current === 'youtube' && ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function') {
+          try {
+            const cur = ytPlayerRef.current.getCurrentTime()
+            const dur = ytPlayerRef.current.getDuration()
+            if (typeof cur === 'number' && !isNaN(cur)) {
+              setCurrentTime(cur)
+            }
+            if (typeof dur === 'number' && !isNaN(dur) && dur > 0) {
+              setDuration(dur)
+            }
+          } catch {}
+        }
+      }, 250)
+    }
+    return () => {
+      if (timer) clearInterval(timer)
+    }
+  }, [isPlaying])
 
   const setAudioQuality = (quality: 'best' | 'standard') => {
     setAudioQualityState(quality)
@@ -159,183 +259,142 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       let panner: StereoPannerNode | null = null
       if (ctx.createStereoPanner) {
         panner = ctx.createStereoPanner()
+        panner.pan.value = 0
         pannerNodeRef.current = panner
       }
 
-      // 3. Dynamics Compressor (Volume Normalization / ReplayGain)
+      // 3. Dynamic Compressor (Lossless Limiter)
       const compressor = ctx.createDynamicsCompressor()
-      compressor.threshold.value = -24
-      compressor.knee.value = 30
-      compressor.ratio.value = 12
-      compressor.attack.value = 0.003
-      compressor.release.value = 0.25
+      compressor.threshold.setValueAtTime(-14, ctx.currentTime)
+      compressor.knee.setValueAtTime(40, ctx.currentTime)
+      compressor.ratio.setValueAtTime(12, ctx.currentTime)
+      compressor.attack.setValueAtTime(0.003, ctx.currentTime)
+      compressor.release.setValueAtTime(0.25, ctx.currentTime)
       compressorRef.current = compressor
 
-      // 4. Master Gain Node
+      // 4. Output Gain Node
       const gainNode = ctx.createGain()
+      gainNode.gain.setValueAtTime(1.0, ctx.currentTime)
       gainNodeRef.current = gainNode
 
-      // Connect Signal Chain
-      let lastNode: AudioNode = source
-      lastNode = lastNode.connect(lowFilter)
-      lastNode = lastNode.connect(midFilter)
-      lastNode = lastNode.connect(highFilter)
-
+      // Connect Graph
       if (panner) {
-        lastNode = lastNode.connect(panner)
+        source.connect(lowFilter)
+        lowFilter.connect(midFilter)
+        midFilter.connect(highFilter)
+        highFilter.connect(panner)
+        panner.connect(compressor)
+        compressor.connect(gainNode)
+        gainNode.connect(ctx.destination)
+      } else {
+        source.connect(lowFilter)
+        lowFilter.connect(midFilter)
+        midFilter.connect(highFilter)
+        highFilter.connect(compressor)
+        compressor.connect(gainNode)
+        gainNode.connect(ctx.destination)
       }
 
-      const isNormalizeOn = localStorage.getItem('sw_normalize') === 'true'
-      if (isNormalizeOn) {
-        lastNode = lastNode.connect(compressor)
-      }
-
-      lastNode.connect(gainNode)
-      gainNode.connect(ctx.destination)
-
-      applyEqualizerPreset(localStorage.getItem('sw_eq_preset') || 'Flat')
+      // Apply saved EQ presets
+      loadSavedEqualizer(lowFilter, midFilter, highFilter)
     } catch (e) {
-      console.warn('Web Audio initialization fallback:', e)
+      console.warn("Web Audio API initialization failed:", e)
     }
   }
 
-  // Apply Equalizer Preset to Filters
-  const applyEqualizerPreset = (preset: string) => {
-    const EQ_MAP: Record<string, { low: number; mid: number; high: number }> = {
-      'Flat': { low: 0, mid: 0, high: 0 },
-      'Bass Boost': { low: 7, mid: 0, high: -1 },
-      'Electronic': { low: 5, mid: 2, high: 4 },
-      'Acoustic': { low: 2, mid: 3, high: 3 },
-      'Vocal Booster': { low: -2, mid: 6, high: 1 },
-      'Rock': { low: 4, mid: 2, high: 5 },
-      'Hi-Fi Master': { low: 3, mid: 1, high: 4 }
-    }
-    const values = EQ_MAP[preset] || EQ_MAP['Flat']
-    if (lowFilterRef.current && audioCtxRef.current) {
-      lowFilterRef.current.gain.setTargetAtTime(values.low, audioCtxRef.current.currentTime, 0.05)
-    }
-    if (midFilterRef.current && audioCtxRef.current) {
-      midFilterRef.current.gain.setTargetAtTime(values.mid, audioCtxRef.current.currentTime, 0.05)
-    }
-    if (highFilterRef.current && audioCtxRef.current) {
-      highFilterRef.current.gain.setTargetAtTime(values.high, audioCtxRef.current.currentTime, 0.05)
+  const loadSavedEqualizer = (low: BiquadFilterNode, mid: BiquadFilterNode, high: BiquadFilterNode) => {
+    const savedEq = localStorage.getItem('sw_eq_preset') || 'flat'
+    applyEqPreset(savedEq, low, mid, high)
+  }
+
+  const applyEqPreset = (preset: string, low?: BiquadFilterNode, mid?: BiquadFilterNode, high?: BiquadFilterNode) => {
+    const l = low || lowFilterRef.current
+    const m = mid || midFilterRef.current
+    const h = high || highFilterRef.current
+    if (!l || !m || !h || !audioCtxRef.current) return
+
+    const now = audioCtxRef.current.currentTime
+    switch (preset) {
+      case 'bass_boost':
+        l.gain.setTargetAtTime(8, now, 0.1)
+        m.gain.setTargetAtTime(1, now, 0.1)
+        h.gain.setTargetAtTime(2, now, 0.1)
+        break
+      case 'vocal':
+        l.gain.setTargetAtTime(-2, now, 0.1)
+        m.gain.setTargetAtTime(6, now, 0.1)
+        h.gain.setTargetAtTime(3, now, 0.1)
+        break
+      case 'treble':
+        l.gain.setTargetAtTime(-3, now, 0.1)
+        m.gain.setTargetAtTime(1, now, 0.1)
+        h.gain.setTargetAtTime(7, now, 0.1)
+        break
+      case 'rock':
+        l.gain.setTargetAtTime(5, now, 0.1)
+        m.gain.setTargetAtTime(-1, now, 0.1)
+        h.gain.setTargetAtTime(5, now, 0.1)
+        break
+      case 'flat':
+      default:
+        l.gain.setTargetAtTime(0, now, 0.1)
+        m.gain.setTargetAtTime(0, now, 0.1)
+        h.gain.setTargetAtTime(0, now, 0.1)
+        break
     }
   }
 
-  // 8D Spatial Audio Continuous Rotation Orbit (Optimized to not freeze UI)
+  // 8D Audio Rotation Loop
   useEffect(() => {
-    const is8DActive = is8DMode || localStorage.getItem('sw_8d_audio') === 'true'
-    if (!is8DActive || !isPlaying) {
+    if (!is8DMode || !pannerNodeRef.current || !isPlaying) {
       if (panAnimFrameRef.current) {
         cancelAnimationFrame(panAnimFrameRef.current)
         panAnimFrameRef.current = null
       }
-      if (pannerNodeRef.current && audioCtxRef.current) {
-        pannerNodeRef.current.pan.setTargetAtTime(0, audioCtxRef.current.currentTime, 0.1)
+      if (pannerNodeRef.current) {
+        pannerNodeRef.current.pan.value = 0
       }
       return
     }
 
-    let lastPanTime = 0
-    const animate8D = (timestamp: number) => {
-      if (timestamp - lastPanTime > 40) { // Limit to 25fps audio pan updates
-        lastPanTime = timestamp
-        if (pannerNodeRef.current && audioCtxRef.current && isPlaying) {
-          const panValue = Math.sin(Date.now() / 2500)
-          pannerNodeRef.current.pan.setValueAtTime(panValue, audioCtxRef.current.currentTime)
-        }
-      }
-      panAnimFrameRef.current = requestAnimationFrame(animate8D)
+    let angle = 0
+    const rotate = () => {
+      if (!pannerNodeRef.current) return
+      angle += 0.015
+      pannerNodeRef.current.pan.value = Math.sin(angle)
+      panAnimFrameRef.current = requestAnimationFrame(rotate)
     }
+    panAnimFrameRef.current = requestAnimationFrame(rotate)
 
-    panAnimFrameRef.current = requestAnimationFrame(animate8D)
     return () => {
-      if (panAnimFrameRef.current) {
-        cancelAnimationFrame(panAnimFrameRef.current)
-        panAnimFrameRef.current = null
-      }
+      if (panAnimFrameRef.current) cancelAnimationFrame(panAnimFrameRef.current)
     }
   }, [is8DMode, isPlaying])
 
-  // Listen to setting updates in real time
+  // Listen to external EQ Preset Changes
   useEffect(() => {
-    const handleSettingsUpdated = () => {
-      const eq = localStorage.getItem('sw_eq_preset') || 'Flat'
-      applyEqualizerPreset(eq)
-
-      const is8D = localStorage.getItem('sw_8d_audio') === 'true'
-      setIs8DMode(is8D)
-
-      const quality = (localStorage.getItem('sw_audio_quality') as 'best' | 'standard') || 'best'
-      setAudioQualityState(quality)
-
-      // Mono Audio
-      if (audioCtxRef.current) {
-        const isMono = localStorage.getItem('sw_mono_audio') === 'true'
-        audioCtxRef.current.destination.channelCount = isMono ? 1 : 2
+    const handleEqChange = (e: any) => {
+      if (e.detail?.preset) {
+        applyEqPreset(e.detail.preset)
       }
     }
-
-    window.addEventListener('sw-settings-updated', handleSettingsUpdated)
-    return () => window.removeEventListener('sw-settings-updated', handleSettingsUpdated)
+    window.addEventListener('sw-eq-change', handleEqChange)
+    return () => window.removeEventListener('sw-eq-change', handleEqChange)
   }, [])
 
-  const addToQueue = (song: Song) => {
-    if (!currentSong) {
-      setQueue(globalLibrary.length > 0 ? globalLibrary : [song]);
-      playSong(song);
-      return;
-    }
-    setUpNextQueue((prev) => {
-      if (prev.some((s) => s.id === song.id)) return prev;
-      return [...prev, song];
-    });
-  }
-
-  const removeFromQueue = (index: number) => {
-    setUpNextQueue((prev) => {
-      const newQueue = [...prev];
-      newQueue.splice(index, 1);
-      return newQueue;
-    });
-  }
-  
-  const setVolume = (vol: number) => {
-    setVolumeState(vol)
-    localStorage.setItem('player_volume', String(vol))
-    if (audioRef.current) {
-      audioRef.current.volume = vol
-    }
-  }
-
-  const setCurrentTimeHandler = (time: number) => {
-    setCurrentTime(time)
-    if (audioRef.current) {
-      audioRef.current.currentTime = time
-    }
-  }
-
+  // ── LIKED SONGS STATE & FIREBASE SYNC ──
   const [likedSongs, setLikedSongs] = useState<Song[]>(() => getLocalLikedSongs())
 
-  // Sync liked songs event across windows/components
   useEffect(() => {
-    const handleLikedUpdate = () => {
-      setLikedSongs(getLocalLikedSongs())
+    const handleLikedUpdate = (e: any) => {
+      if (e.detail?.likedSongs) {
+        setLikedSongs(e.detail.likedSongs)
+      }
     }
-    window.addEventListener('soundwave-liked-updated', handleLikedUpdate)
-    return () => window.removeEventListener('soundwave-liked-updated', handleLikedUpdate)
+    window.addEventListener('sw-liked-songs-updated', handleLikedUpdate)
+    return () => window.removeEventListener('sw-liked-songs-updated', handleLikedUpdate)
   }, [])
 
-  // Sync listening history across windows/components
-  useEffect(() => {
-    const handleHistoryUpdate = () => {
-      setPlayedHistory(getLocalListenHistory())
-    }
-    window.addEventListener('soundwave-history-updated', handleHistoryUpdate)
-    return () => window.removeEventListener('soundwave-history-updated', handleHistoryUpdate)
-  }, [])
-
-  // Fetch remote liked songs on auth state change
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((u) => {
       if (u?.uid) {
@@ -410,7 +469,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     setCurrentSong(song)
     setCurrentTime(0)
-    setDuration(song.duration || 0)
+    setDuration(song.duration || 210)
 
     // 3. Keep Screen Awake API
     if (localStorage.getItem('sw_keep_awake') === 'true' && 'wakeLock' in navigator) {
@@ -439,17 +498,75 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       } catch {}
     }
 
-    // Resolve full-length direct audio stream with chosen audio quality (best / standard)
-    const activeSong = await resolveFullLengthSong(song, audioQuality)
-    setCurrentSong(activeSong)
+    const isLocalHost = typeof window !== 'undefined' && (
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.includes('192.168.')
+    )
 
-    if (audioRef.current && activeSong.url) {
-      audioRef.current.src = activeSong.url
-      audioRef.current.currentTime = 0
-      audioRef.current.volume = volume
-      audioRef.current.play()
-        .then(() => setIsPlaying(true))
-        .catch(e => console.error("Audio playback error:", e))
+    const isUploadedSong = song.url?.startsWith('blob:') ||
+      song.url?.startsWith('data:') ||
+      song.playlistId === 'global' ||
+      song.url?.includes('cloudinary') ||
+      song.url?.includes('firebasestorage')
+
+    if (isUploadedSong) {
+      // Direct file playback via HTML5 Audio
+      activeEngineRef.current = 'html5'
+      try { ytPlayerRef.current?.pauseVideo() } catch {}
+
+      if (audioRef.current && song.url) {
+        audioRef.current.src = song.url
+        audioRef.current.currentTime = 0
+        audioRef.current.volume = volume
+        audioRef.current.play()
+          .then(() => setIsPlaying(true))
+          .catch(e => console.error("Audio playback error:", e))
+      }
+    } else if (isLocalHost) {
+      // Local dev server yt-dlp backend
+      const activeSong = await resolveFullLengthSong(song, audioQuality)
+      setCurrentSong(activeSong)
+      activeEngineRef.current = 'html5'
+      try { ytPlayerRef.current?.pauseVideo() } catch {}
+
+      if (audioRef.current && activeSong.url) {
+        audioRef.current.src = activeSong.url
+        audioRef.current.currentTime = 0
+        audioRef.current.volume = volume
+        audioRef.current.play()
+          .then(() => setIsPlaying(true))
+          .catch(e => console.error("Audio playback error:", e))
+      }
+    } else {
+      // 🌟 Production Environment: 100% Full-Length Official Google YouTube Stream
+      activeEngineRef.current = 'youtube'
+      try { audioRef.current?.pause() } catch {}
+
+      const rawId = (song.id || '').replace('yt_', '').trim()
+      if (isYoutubeVideoId(rawId)) {
+        try {
+          ytPlayerRef.current?.loadVideoById({ videoId: rawId, startSeconds: 0 })
+        } catch {
+          ytPlayerRef.current?.cueVideoById({ videoId: rawId, startSeconds: 0 })
+        }
+      } else {
+        const cleanQuery = `${song.title} ${song.artist}`.trim()
+        try {
+          ytPlayerRef.current?.loadPlaylist({
+            listType: 'search',
+            list: cleanQuery,
+            index: 0,
+            startSeconds: 0
+          })
+        } catch {}
+      }
+
+      try {
+        ytPlayerRef.current?.setVolume(volume * 100)
+        ytPlayerRef.current?.playVideo()
+      } catch {}
+      setIsPlaying(true)
     }
 
     fetchLyrics(song.title, song.artist, song.duration).then((lyrics) => {
@@ -460,7 +577,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }
 
   const pauseSong = () => {
-    audioRef.current?.pause()
+    if (activeEngineRef.current === 'youtube') {
+      try { ytPlayerRef.current?.pauseVideo() } catch {}
+    } else {
+      audioRef.current?.pause()
+    }
     setIsPlaying(false)
     if (wakeLockRef.current) {
       wakeLockRef.current.release().catch(() => {})
@@ -473,16 +594,24 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
       audioCtxRef.current.resume().catch(() => {})
     }
-    if (audioRef.current) {
-      if ((!audioRef.current.src || audioRef.current.src === window.location.href) && currentSong) {
-        const resolved = await resolveFullLengthSong(currentSong, audioQuality)
-        if (resolved.url) {
-          audioRef.current.src = resolved.url
+
+    if (activeEngineRef.current === 'youtube') {
+      try {
+        ytPlayerRef.current?.playVideo()
+      } catch {}
+      setIsPlaying(true)
+    } else {
+      if (audioRef.current) {
+        if ((!audioRef.current.src || audioRef.current.src === window.location.href) && currentSong) {
+          const resolved = await resolveFullLengthSong(currentSong, audioQuality)
+          if (resolved.url) {
+            audioRef.current.src = resolved.url
+          }
         }
+        audioRef.current.play()
+          .then(() => setIsPlaying(true))
+          .catch(e => console.error("Resume failed:", e))
       }
-      audioRef.current.play()
-        .then(() => setIsPlaying(true))
-        .catch(e => console.error("Resume failed:", e))
     }
   }
 
@@ -518,98 +647,121 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         randomIndex = (randomIndex + 1) % effectiveQueue.length;
       }
       playSong(effectiveQueue[randomIndex], false);
+      return;
+    }
+
+    const currentIndex = effectiveQueue.findIndex(s => s.id === currentSong?.id || s.title === currentSong?.title);
+    if (currentIndex !== -1 && currentIndex < effectiveQueue.length - 1) {
+      playSong(effectiveQueue[currentIndex + 1], false);
+    } else if (repeatMode === 'all') {
+      playSong(effectiveQueue[0], false);
     } else {
-      let currentIndex = effectiveQueue.findIndex(s => s.id === currentSong?.id);
-      if (currentIndex === -1) {
-        currentIndex = effectiveQueue.findIndex(s => s.title === currentSong?.title && s.artist === currentSong?.artist);
-      }
-      
-      if (currentIndex >= 0 && currentIndex < effectiveQueue.length - 1) {
-        playSong(effectiveQueue[currentIndex + 1], false);
-      } else if (currentIndex === -1 && effectiveQueue.length > 0) {
-        playSong(effectiveQueue[0], false);
-      } else if (repeatMode === 'all') {
-        playSong(effectiveQueue[0], false);
-      } else {
-        // Infinite Flow Autoplay Check (Continuous ML Vibe Radio)
-        const isAutoplayOn = localStorage.getItem('sw_autoplay') !== 'false' || localStorage.getItem('sw_infinite_feed') !== 'false'
-        if (isAutoplayOn && currentSong) {
-          try {
-            const moodQueue = await getSongRadioQueue(currentSong, effectiveQueue, playedHistory, 15)
-            if (moodQueue.length > 0) {
-              setQueue([currentSong, ...moodQueue])
-              playSong(moodQueue[0], false)
-              return
-            }
-          } catch {}
+      if (currentSong) {
+        try {
+          const moodQueue = await getSongRadioQueue(currentSong, playedHistory, 10);
+          if (moodQueue.length > 0) {
+            setQueue(moodQueue);
+            playSong(moodQueue[0], false);
+            return;
+          }
+        } catch (e) {
+          console.warn('Continuous mood queue resolution error:', e);
         }
-        setIsPlaying(false);
       }
+      playSong(effectiveQueue[0], false);
     }
   }
 
   const previousSong = () => {
     if (currentTime > 3) {
-      setCurrentTimeHandler(0);
-      return;
+      setCurrentTimeHandler(0)
+      return
     }
 
     if (playedHistory.length > 0) {
-      const prevSong = playedHistory[playedHistory.length - 1];
-      setPlayedHistory(prev => prev.slice(0, -1));
+      const prevSong = playedHistory[playedHistory.length - 1]
+      setPlayedHistory(prev => prev.slice(0, -1))
       playSong(prevSong, false);
-      return;
+      return
     }
 
     const effectiveQueue = queue.length > 0 ? queue : globalLibrary;
     if (effectiveQueue.length === 0) return;
 
-    let currentIndex = effectiveQueue.findIndex(s => s.id === currentSong?.id);
-    if (currentIndex === -1) {
-      currentIndex = effectiveQueue.findIndex(s => s.title === currentSong?.title && s.artist === currentSong?.artist);
-    }
-
+    const currentIndex = effectiveQueue.findIndex(s => s.id === currentSong?.id);
     if (currentIndex > 0) {
       playSong(effectiveQueue[currentIndex - 1], false);
-    } else if (currentIndex === -1 && effectiveQueue.length > 0) {
-      playSong(effectiveQueue[0], false);
-    } else {
+    } else if (repeatMode === 'all') {
       playSong(effectiveQueue[effectiveQueue.length - 1], false);
+    } else {
+      playSong(effectiveQueue[0], false);
     }
   }
 
-  const lastTimeUpdateTickRef = useRef(0)
+  const setCurrentTimeHandler = (time: number) => {
+    setCurrentTime(time)
+    if (activeEngineRef.current === 'youtube') {
+      try {
+        ytPlayerRef.current?.seekTo(time, true)
+      } catch {}
+    } else {
+      if (audioRef.current) {
+        audioRef.current.currentTime = time
+      }
+    }
+  }
 
+  const setVolume = (newVol: number) => {
+    setVolumeState(newVol)
+    localStorage.setItem('player_volume', String(newVol))
+    if (audioRef.current) {
+      audioRef.current.volume = newVol
+    }
+    try {
+      ytPlayerRef.current?.setVolume(newVol * 100)
+    } catch {}
+  }
+
+  const addToQueue = (song: Song) => {
+    setUpNextQueue(prev => [...prev, song])
+  }
+
+  const removeFromQueue = (index: number) => {
+    setUpNextQueue(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Handle Audio Element Lifecycle
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
 
+    let lastTimeUpdate = 0
     const handleTimeUpdate = () => {
-      const now = Date.now()
-      // Throttle React state update to at most once every 250ms to eliminate UI stutter
-      if (now - lastTimeUpdateTickRef.current > 220) {
-        lastTimeUpdateTickRef.current = now
-        setCurrentTime(audio.currentTime)
-      }
+      if (activeEngineRef.current !== 'html5') return
+      const now = performance.now()
+      if (now - lastTimeUpdate < 220) return
+      lastTimeUpdate = now
 
-      // Crossfade logic
-      const crossfadeSec = Number(localStorage.getItem('sw_crossfade') || 0)
-      if (crossfadeSec > 0 && audio.duration && audio.duration > crossfadeSec + 4) {
-        const remaining = audio.duration - audio.currentTime
-        if (remaining <= crossfadeSec && remaining > 0.3 && gainNodeRef.current && audioCtxRef.current) {
+      setCurrentTime(audio.currentTime)
+
+      // Crossfade Engine
+      const crossfadeSec = Number(localStorage.getItem('sw_crossfade_duration') || 0)
+      if (crossfadeSec > 0 && audio.duration && !isNaN(audio.duration) && gainNodeRef.current && audioCtxRef.current) {
+        const timeLeft = audio.duration - audio.currentTime
+        if (timeLeft <= crossfadeSec && timeLeft > 0) {
           gainNodeRef.current.gain.setTargetAtTime(0.05, audioCtxRef.current.currentTime, crossfadeSec / 2)
         }
       }
     }
 
     const handleLoadedMetadata = () => {
-      if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
+      if (activeEngineRef.current === 'html5' && audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
         setDuration(audio.duration)
       }
     }
 
     const handleError = () => {
-      if (currentSong?.previewUrl && audio.src !== currentSong.previewUrl) {
+      if (activeEngineRef.current === 'html5' && currentSong?.previewUrl && audio.src !== currentSong.previewUrl) {
         console.warn('Audio stream failed, switching to backup stream fallback...')
         audio.src = currentSong.previewUrl
         audio.play().then(() => setIsPlaying(true)).catch(() => {})
@@ -617,6 +769,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     const handleEnded = () => {
+      if (activeEngineRef.current !== 'html5') return
       if (repeatMode === 'one') {
         audio.currentTime = 0
         audio.play().catch(() => {})
@@ -705,6 +858,22 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     >
       {children}
       <audio ref={audioRef} />
+      {/* 🌟 Global Official YouTube Stream Bridge for Full-Length Playback in Production */}
+      <div
+        id="soundwave-global-yt-player-container"
+        style={{
+          position: 'fixed',
+          top: -9999,
+          left: -9999,
+          width: 1,
+          height: 1,
+          opacity: 0,
+          pointerEvents: 'none',
+          zIndex: -1
+        }}
+      >
+        <div id="soundwave-global-yt-player" />
+      </div>
     </PlayerContext.Provider>
   )
 }
