@@ -1465,24 +1465,23 @@ useEffect(() => {
                   className="w-full h-full overflow-y-auto scrollbar-hide py-[25vh] space-y-8 px-6 text-left"
                 >
                   {parsedLyrics.length > 0 ? (
-                    parsedLyrics.map((item, index) => {
-                      const isActive = index === activeLyricIndex;
-                      return (
-                        <AppleLyricsLine
-                          key={index}
-                          line={item}
-                          isActive={isActive}
-                          currentTime={currentTime}
-                          onClick={() => {
-                            triggerHaptic();
-                            setCurrentTime(item.time);
-                          }}
-                          fontSize={lyricsFontSize}
-                          activeColor={lyricsActive}
-                          inactiveColor={lyricsMuted}
-                        />
-                      );
-                    })
+                    parsedLyrics.map((item, index) => (
+                      <AppleLyricsLine
+                        key={index}
+                        elementId={`mobile-lyric-line-${index}`}
+                        line={item}
+                        index={index}
+                        activeLineIndex={activeLineIndex}
+                        currentTime={currentTime}
+                        nextLineTime={parsedLyrics[index + 1]?.time}
+                        fontSize={lyricsFontSize}
+                        onClick={(t) => {
+                          triggerHaptic();
+                          if (t !== -1) setCurrentTime(t);
+                        }}
+                        align="left"
+                      />
+                    ))
                   ) : (
                     <div className={`flex flex-col items-center justify-center h-full gap-4 ${lyricsMuted}`}>
                       <FileMusic size={42} className="opacity-50" />
