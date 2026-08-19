@@ -20,6 +20,7 @@ export interface Song {
   isOffline?: boolean
   sizeBytes?: number
   downloadedAt?: number
+  previewUrl?: string
 }
 
 interface PlayerContextType {
@@ -601,6 +602,14 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     }
 
+    const handleError = () => {
+      if (currentSong?.previewUrl && audio.src !== currentSong.previewUrl) {
+        console.warn('Audio stream failed, switching to backup stream fallback...')
+        audio.src = currentSong.previewUrl
+        audio.play().then(() => setIsPlaying(true)).catch(() => {})
+      }
+    }
+
     const handleEnded = () => {
       if (repeatMode === 'one') {
         audio.currentTime = 0
@@ -612,11 +621,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     audio.addEventListener('timeupdate', handleTimeUpdate)
     audio.addEventListener('loadedmetadata', handleLoadedMetadata)
+    audio.addEventListener('error', handleError)
     audio.addEventListener('ended', handleEnded)
 
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate)
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata)
+      audio.removeEventListener('error', handleError)
       audio.removeEventListener('ended', handleEnded)
     }
   }, [repeatMode, queue, currentSong])
