@@ -68,6 +68,9 @@ interface PlayerContextType {
   clearHistory: () => void
   isDragging: boolean
   setIsDragging: (dragging: boolean) => void
+  activeJamRoom: any | null
+  setActiveJamRoom: (room: any | null) => void
+  isInJam: boolean
 }
 
 const PlayerContext = createContext<PlayerContextType | null>(null)
@@ -76,6 +79,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const audioRef = useRef<HTMLAudioElement>(null)
   const ytPlayerRef = useRef<any>(null)
   const activeEngineRef = useRef<'html5' | 'youtube'>('html5')
+
+  const [activeJamRoom, setActiveJamRoom] = useState<any | null>(null)
+  const isInJam = !!activeJamRoom
 
   const [currentSong, setCurrentSong] = useState<Song | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -840,6 +846,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         removeFromQueue,
         isDragging,
         setIsDragging,
+        activeJamRoom,
+        setActiveJamRoom,
+        isInJam,
       }}
     >
       {children}

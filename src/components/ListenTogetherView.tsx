@@ -64,7 +64,19 @@ interface ListenTogetherViewProps {
 const REACTION_EMOJIS = ['🔥', '❤️', '🚀', '🎧', '💃', '⚡', '🤯', '🥳']
 
 export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, user }) => {
-  const { currentSong, isPlaying, playSong, pauseSong, resumeSong, audioRef, volume, setVolume } = usePlayer()
+  const { 
+    currentSong, 
+    isPlaying, 
+    playSong, 
+    pauseSong, 
+    resumeSong, 
+    audioRef, 
+    volume, 
+    setVolume,
+    currentTime,
+    setCurrentTime,
+    setActiveJamRoom 
+  } = usePlayer()
 
   const currentUserUid = user?.uid || user?.id || auth.currentUser?.uid || ''
   const currentUserName = user?.displayName || auth.currentUser?.displayName || (user?.email ? user.email.split('@')[0] : 'Soundwave Listener')
@@ -108,6 +120,14 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
     }
   }
 
+  // Sync activeJamRoom with PlayerContext
+  useEffect(() => {
+    setActiveJamRoom(activeRoom)
+    return () => {
+      setActiveJamRoom(null)
+    }
+  }, [activeRoom])
+
   // Load public rooms on lobby mount
   useEffect(() => {
     if (!activeRoom) {
@@ -138,9 +158,8 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
           }
         }
 
-        // 2. Sync Audio Time Position & Playback State (Latency Compensated)
-        if (audioRef.current && updatedRoom.currentSong) {
-          const audio = audioRef.current
+        // 2. Sync Audio Time Position & Playback State (Latency Compensated across all engines)
+        if (updatedRoom.currentSong) {
           const now = Date.now()
           const timeElapsedSinceUpdate = (now - (updatedRoom.lastUpdatedTimestamp || now)) / 1000
 
@@ -149,18 +168,17 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
             targetPosition += Math.max(0, timeElapsedSinceUpdate)
           }
 
-          const currentAudioTime = audio.currentTime
-          const drift = Math.abs(currentAudioTime - targetPosition)
+          const drift = Math.abs(currentTime - targetPosition)
 
-          // If out of sync by > 1.2s, adjust seamlessly
-          if (drift > 1.2 && !isSyncingPlaybackRef.current) {
-            audio.currentTime = targetPosition
+          // If out of sync by > 1.0s, adjust seamlessly
+          if (drift > 1.0 && !isSyncingPlaybackRef.current) {
+            setCurrentTime(targetPosition)
           }
 
-          if (updatedRoom.isPlaying && audio.paused) {
-            audio.play().catch(() => {})
-          } else if (!updatedRoom.isPlaying && !audio.paused) {
-            audio.pause()
+          if (updatedRoom.isPlaying && !isPlaying) {
+            resumeSong()
+          } else if (!updatedRoom.isPlaying && isPlaying) {
+            pauseSong()
           }
         }
 
@@ -177,7 +195,7 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
     )
 
     return () => unsubscribe()
-  }, [activeRoom?.id, currentSong?.id])
+  }, [activeRoom?.id, currentSong?.id, isPlaying, currentTime])
 
   // Scroll chat to bottom on new message
   useEffect(() => {
@@ -275,13 +293,21 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
   const handleSeek = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!canControlPlayback || !activeRoom) return
     const targetPos = Number(e.target.value)
-    if (audioRef.current) {
-      audioRef.current.currentTime = targetPos
-    }
+    setCurrentTime(targetPos)
     await updateJamPlayback(activeRoom.id, {
       position: targetPos,
       isPlaying: activeRoom.isPlaying
     })
+  }
+
+  // Synced Previous Song / Seek to Beginning
+  const handleSkipPrev = async () => {
+    if (!canControlPlayback || !activeRoom) return
+    setCurrentTime(0)
+    await updateJamPlayback(activeRoom.id, {
+      position: 0
+    })
+    triggerHaptic()
   }
 
   // Synced Skip Next Song
@@ -719,25 +745,25 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
                 <input
                   type="range"
                   min={0}
-                  max={activeRoom.currentSong?.duration || 210}
-                  value={audioRef.current?.currentTime || activeRoom.position || 0}
+                  max={currentSong?.duration || activeRoom.currentSong?.duration || 210}
+                  value={currentTime || activeRoom.position || 0}
                   onChange={handleSeek}
                   disabled={!canControlPlayback}
                   className={`w-full accent-violet-400 cursor-pointer ${!canControlPlayback ? 'opacity-50 cursor-not-allowed' : ''}`}
                 />
                 <div className="flex justify-between text-[11px] font-mono text-white/40">
-                  <span>{formatSec(audioRef.current?.currentTime || activeRoom.position || 0)}</span>
-                  <span>{formatSec(activeRoom.currentSong?.duration || 210)}</span>
+                  <span>{formatSec(currentTime || activeRoom.position || 0)}</span>
+                  <span>{formatSec(currentSong?.duration || activeRoom.currentSong?.duration || 210)}</span>
                 </div>
               </div>
 
               {/* Synced Playback Controls */}
               <div className="flex items-center justify-center gap-4 pt-2">
                 <button
-                  onClick={handleSkipNext}
+                  onClick={handleSkipPrev}
                   disabled={!canControlPlayback}
                   className="p-3 rounded-full bg-white/5 hover:bg-white/10 text-white transition-all disabled:opacity-40"
-                  title="Previous"
+                  title="Previous / Restart"
                 >
                   <SkipBack size={18} />
                 </button>

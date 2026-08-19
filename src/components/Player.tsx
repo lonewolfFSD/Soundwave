@@ -30,7 +30,8 @@ import {
   Loader2,
   Sparkles,
   RotateCcw,
-  Heart
+  Heart,
+  Radio
 } from 'lucide-react'
 import { MediaSession } from '@capgo/capacitor-media-session';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
@@ -38,6 +39,7 @@ import { Capacitor } from '@capacitor/core';
 import { parseLrc } from '../utils/lyrics';
 import { downloadSongForOffline, isSongOffline, deleteOfflineSong } from '../utils/offlineStorage';
 import { findYouTubeVideoId } from '../utils/ytMusic';
+import { updateJamPlayback } from '../utils/jamRoomService';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import { AppleLyricsLine } from './AppleLyricsLine';
 import { SyncedVideoPlayer } from './SyncedVideoPlayer';
@@ -100,8 +102,25 @@ const Player: React.FC = () => {
     setAudioQuality,
     likedSongs,
     isSongLiked,
-    toggleLikeSong
+    toggleLikeSong,
+    isInJam,
+    activeJamRoom
   } = usePlayer()
+
+  const handlePlayPause = async () => {
+    triggerHaptic(ImpactStyle.Medium);
+    if (isInJam && activeJamRoom?.id) {
+      const nextState = !isPlaying;
+      if (nextState) resumeSong();
+      else pauseSong();
+      await updateJamPlayback(activeJamRoom.id, {
+        isPlaying: nextState,
+        position: currentTime
+      });
+    } else {
+      isPlaying ? pauseSong() : resumeSong();
+    }
+  };
 
   const hiddenVideoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1567,6 +1586,20 @@ useEffect(() => {
 
           {/* ── Progress Bar ── */}
           <div className="mb-7 px-2 shrink-0">
+            {isInJam && (
+              <div className="flex items-center justify-center gap-1.5 mb-2.5">
+                <button
+                  onClick={() => {
+                    setIsFullScreen(false);
+                    window.dispatchEvent(new Event('soundwave-open-listen-together'));
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-violet-500/20 border border-violet-500/30 text-violet-300 text-xs font-bold animate-pulse hover:bg-violet-500/30 transition-colors"
+                >
+                  <Radio size={13} />
+                  <span>Jam: {activeJamRoom?.name || 'Live Room'} • Synced Playback</span>
+                </button>
+              </div>
+            )}
             <div className="w-full h-1.5 bg-white/15 rounded-full relative group mb-2.5">
               <div
                 className="absolute h-full rounded-full bg-white pointer-events-none"
@@ -1575,16 +1608,18 @@ useEffect(() => {
               <input
                 type="range" min="0" max={duration || 0} step="any"
                 value={isDragging ? sliderValue : currentTime}
+                disabled={isInJam}
                 onChange={(e) => {
+                  if (isInJam) return;
                   const newTime = parseFloat(e.target.value);
                   setSliderValue(newTime);
                   setCurrentTime(newTime);
                   if (audioRef.current) audioRef.current.currentTime = newTime;
                 }}
-                onPointerDown={() => setIsDragging(true)}
+                onPointerDown={() => !isInJam && setIsDragging(true)}
                 onPointerUp={() => setIsDragging(false)}
                 onPointerCancel={() => setIsDragging(false)}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                className={`absolute inset-0 w-full h-full opacity-0 ${isInJam ? 'cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
               />
             </div>
             <div className={`flex justify-between text-[11px] font-mono tabular-nums ${textMuted}`}>
@@ -1597,26 +1632,27 @@ useEffect(() => {
           <div className="flex items-center justify-between px-2 mb-10 shrink-0">
             <button
               onClick={() => { triggerHaptic(); toggleShuffle(); }}
-              className={`p-2 transition-colors ${isShuffle ? activeColor : textMuted}`}
+              disabled={isInJam}
+              className={`p-2 transition-colors ${isInJam ? 'opacity-30 cursor-not-allowed' : (isShuffle ? activeColor : textMuted)}`}
+              title={isInJam ? "Queue controlled inside Jam Room" : undefined}
             >
               <Shuffle size={22} />
             </button>
 
             <button
               onClick={() => { triggerHaptic(); handlePrev(); }}
-              disabled={!hasPrev}
+              disabled={!hasPrev || isInJam}
               className={`${textMain} disabled:opacity-25 transition-opacity`}
+              title={isInJam ? "Controls synced inside Jam Room" : undefined}
             >
               <SkipBack size={32} fill="currentColor" />
             </button>
 
             {/* Play/Pause — large rounded pill */}
             <button
-              onClick={() => {
-                triggerHaptic(ImpactStyle.Medium);
-                isPlaying ? pauseSong() : resumeSong();
-              }}
+              onClick={handlePlayPause}
               className="w-[72px] h-[72px] bg-white rounded-3xl flex items-center justify-center text-black shadow-2xl active:scale-95 transition-transform"
+              title={isInJam ? "Sync playback with Jam Room" : undefined}
             >
               {isPlaying
                 ? <Pause size={28} fill="currentColor" />
@@ -1626,18 +1662,21 @@ useEffect(() => {
 
             <button
               onClick={() => { triggerHaptic(); handleNext(); }}
-              disabled={!hasNext}
+              disabled={!hasNext || isInJam}
               className={`${textMain} disabled:opacity-25 transition-opacity`}
+              title={isInJam ? "Controls synced inside Jam Room" : undefined}
             >
               <SkipForward size={32} fill="currentColor" />
             </button>
 
             <button
               onClick={() => { triggerHaptic(); toggleRepeat(); }}
-              className={`p-2 relative transition-colors ${repeatMode !== 'none' ? activeColor : textMuted}`}
+              disabled={isInJam}
+              className={`p-2 transition-colors ${isInJam ? 'opacity-30 cursor-not-allowed' : (repeatMode !== 'none' ? activeColor : textMuted)}`}
+              title={isInJam ? "Queue controlled inside Jam Room" : undefined}
             >
               <Repeat size={22} />
-              {repeatMode === 'one' && (
+              {repeatMode === 'one' && !isInJam && (
                 <span className="absolute -top-0.5 -right-0.5 text-[8px] font-black bg-white text-black rounded-full w-3.5 h-3.5 flex items-center justify-center">1</span>
               )}
             </button>
@@ -1715,8 +1754,9 @@ useEffect(() => {
 
           {/* ── Mobile play/pause ── */}
           <button
-            onClick={(e) => { e.stopPropagation(); triggerHaptic(ImpactStyle.Medium); isPlaying ? pauseSong() : resumeSong(); }}
+            onClick={(e) => { e.stopPropagation(); handlePlayPause(); }}
             className={`md:hidden w-11 h-11 rounded-xl flex items-center justify-center ${textMain} bg-white/10 active:scale-90 transition-transform`}
+            title={isInJam ? "Sync playback with Jam Room" : undefined}
           >
             {isPlaying ? <Pause size={21} fill="currentColor" /> : <Play size={21} fill="currentColor" className="ml-0.5" />}
           </button>
@@ -1728,38 +1768,62 @@ useEffect(() => {
             <div className="flex items-center gap-5">
               <button
                 onClick={toggleShuffle}
-                title={isShuffle ? 'Shuffle On' : 'Shuffle Off'}
-                className={`transition-colors ${isShuffle ? activeColor : `${textMuted} hover:text-white/70`}`}
+                disabled={isInJam}
+                title={isInJam ? 'Queue controlled inside Jam Room' : (isShuffle ? 'Shuffle On' : 'Shuffle Off')}
+                className={`transition-colors ${isInJam ? 'opacity-30 cursor-not-allowed' : (isShuffle ? activeColor : `${textMuted} hover:text-white/70`)}`}
               >
                 <Shuffle size={15} />
               </button>
 
-              <button onClick={handlePrev} disabled={!hasPrev} className={`transition-opacity disabled:opacity-20 ${textMuted} hover:text-white/80`}>
+              <button 
+                onClick={handlePrev} 
+                disabled={!hasPrev || isInJam} 
+                title={isInJam ? 'Controls synced inside Jam Room' : undefined}
+                className={`transition-opacity disabled:opacity-20 ${textMuted} hover:text-white/80`}
+              >
                 <SkipBack size={20} fill="currentColor" />
               </button>
 
               {/* Play / Pause pill */}
               <button
-                onClick={isPlaying ? pauseSong : resumeSong}
+                onClick={handlePlayPause}
+                title={isInJam ? 'Sync playback with Jam Room' : undefined}
                 className={`w-9 h-9 rounded-full flex items-center justify-center bg-white text-black hover:scale-105 active:scale-95 transition-transform shadow-lg`}
               >
                 {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" className="ml-0.5" />}
               </button>
 
-              <button onClick={handleNext} disabled={!hasNext} className={`transition-opacity disabled:opacity-20 ${textMuted} hover:text-white/80`}>
+              <button 
+                onClick={handleNext} 
+                disabled={!hasNext || isInJam} 
+                title={isInJam ? 'Controls synced inside Jam Room' : undefined}
+                className={`transition-opacity disabled:opacity-20 ${textMuted} hover:text-white/80`}
+              >
                 <SkipForward size={20} fill="currentColor" />
               </button>
 
               <button
                 onClick={toggleRepeat}
-                title={`Repeat: ${repeatMode}`}
-                className={`relative transition-colors ${repeatMode !== 'none' ? activeColor : `${textMuted} hover:text-white/70`}`}
+                disabled={isInJam}
+                title={isInJam ? 'Queue controlled inside Jam Room' : `Repeat: ${repeatMode}`}
+                className={`relative transition-colors ${isInJam ? 'opacity-30 cursor-not-allowed' : (repeatMode !== 'none' ? activeColor : `${textMuted} hover:text-white/70`)}`}
               >
                 <Repeat size={15} />
-                {repeatMode === 'one' && (
+                {repeatMode === 'one' && !isInJam && (
                   <span className="absolute -top-1.5 -right-1.5 text-[8px] font-black bg-white text-black rounded-full w-3.5 h-3.5 flex items-center justify-center">1</span>
                 )}
               </button>
+
+              {isInJam && (
+                <button
+                  onClick={() => window.dispatchEvent(new Event('soundwave-open-listen-together'))}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-500/20 border border-violet-500/30 text-violet-300 text-[10px] font-bold animate-pulse hover:bg-violet-500/30 transition-colors"
+                  title="Playback synced with Jam Room"
+                >
+                  <Radio size={10} />
+                  <span>Jam Synced</span>
+                </button>
+              )}
             </div>
 
             {/* Seek bar */}
@@ -1769,8 +1833,10 @@ useEffect(() => {
                 <input
                   type="range" min="0" max={duration || 0} step="any"
                   value={isDragging ? sliderValue : currentTime}
-                  onPointerDown={() => setIsDragging(true)}
+                  disabled={isInJam}
+                  onPointerDown={() => !isInJam && setIsDragging(true)}
                   onChange={(e) => {
+                    if (isInJam) return;
                     const newTime = parseFloat(e.target.value);
                     setSliderValue(newTime);
                     setCurrentTime(newTime);
@@ -1779,7 +1845,7 @@ useEffect(() => {
                   onPointerUp={() => setIsDragging(false)}
                   onPointerCancel={() => setIsDragging(false)}
                   onMouseLeave={() => setIsDragging(false)}
-                  className="absolute w-full h-full opacity-0 cursor-pointer z-20"
+                  className={`absolute w-full h-full opacity-0 z-20 ${isInJam ? 'cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
                 />
                 {/* Track */}
                 <div className="w-full h-[3px] bg-white/10 rounded-full overflow-hidden relative">
