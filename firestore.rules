@@ -2,71 +2,76 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
-    function isAuthenticated() {
-      return request.auth != null;
+    // ── Admin Helper ──
+    function isAdmin() {
+      return request.auth != null && request.auth.uid == 'sKYA2iNBmOeUlb2uxyUkxZaI14G2';
+    }
+
+    // ── Users collection ──
+    match /users/{userId} {
+      // Users can manage themselves, but Admin can see and manage EVERYONE
+      allow read, write: if isAdmin(); 
+      allow read, create, update: if request.auth != null && request.auth.uid == userId;
+
+      match /uploads/{songId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create: if request.auth != null 
+                      && request.auth.uid == userId
+                      && request.resource.data.title is string
+                      && request.resource.data.artist is string
+                      && request.resource.data.coverArtBase64 is string;
+        allow update, delete: if request.auth != null && request.auth.uid == userId;
+      }
     }
     
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    // ── LISTEN TOGETHER (JAM ROOMS) ──
-    match /jamRooms/{roomId} {
-      // Anyone can read public rooms or lookup room by code
-      allow read: if true;
-      
-      // Authenticated users can create new Jam rooms
-      allow create: if isAuthenticated();
-      
-      // Authenticated users can update playback state, join, chat, react, or add songs to queue
-      allow update: if isAuthenticated();
-      
-      // Only the host can delete the Jam room
-      allow delete: if isAuthenticated() && (
-        resource.data.hostUid == request.auth.uid ||
-        request.auth.uid != null
-      );
-    }
-
-    // ── USERS & USER PROFILES ──
-    match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow write: if isOwner(userId);
-
-      // User Song Uploads
-      match /uploads/{songId} {
-        allow read: if true;
-        allow write, delete: if isOwner(userId);
-      }
-      
-      // User Liked Songs & History
-      match /{document=**} {
-        allow read, write: if isOwner(userId);
-      }
-    }
-
-    // ── PLAYLISTS ──
+    // ── Playlists Collection ──
     match /playlists/{playlistId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update, delete: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        request.resource.data.userId == request.auth.uid
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+
+      // ── Songs Subcollection ──
+      match /songs/{songId} {
+        // Ensures the document actually exists before checking userId
+        function isPlaylistOwner() {
+          let pDoc = get(/databases/$(database)/documents/playlists/$(playlistId));
+          return pDoc != null && pDoc.data.userId == request.auth.uid;
+        }
+
+        allow read, update, delete: if request.auth != null && isPlaylistOwner();
+        
+        allow create: if request.auth != null 
+                      && isPlaylistOwner()
+                      && request.resource.data.title is string
+                      && request.resource.data.coverArtBase64 is string;
+      }
+    }
+
+    // ── 🎵 Listen Together (Jam Rooms) ──
+    match /jamRooms/{roomId} {
+      // Anyone can discover public rooms in lobby or lookup room code
+      allow read: if true;
+
+      // Logged-in users can create rooms
+      allow create: if request.auth != null;
+
+      // Logged-in participants can sync playback, seek, chat, react, & add to queue
+      allow update: if request.auth != null;
+
+      // Room host or admin can delete room
+      allow delete: if request.auth != null && (
+        resource.data.hostUid == request.auth.uid ||
+        isAdmin()
       );
     }
 
-    // ── SOUNDIE AI CONVERSATIONS & MEMORY ──
+    // ── 🤖 Soundie AI Conversations & Memories ──
     match /soundie_conversations/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if request.auth != null;
     }
     match /soundie_memories/{docId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if request.auth != null;
     }
 
-    // Default fallback
-    match /{document=**} {
-      allow read, write: if isAuthenticated();
-    }
   }
 }
