@@ -49,16 +49,19 @@ service cloud.firestore {
 
     // ── 🎵 Listen Together (Jam Rooms) ──
     match /jamRooms/{roomId} {
-      // Anyone can discover public rooms in lobby or lookup room code
       allow read: if true;
-
-      // Logged-in users can create rooms
       allow create: if request.auth != null;
-
-      // Logged-in participants can sync playback, seek, chat, react, & add to queue
       allow update: if request.auth != null;
+      allow delete: if request.auth != null && (
+        resource.data.hostUid == request.auth.uid ||
+        isAdmin()
+      );
+    }
 
-      // Room host or admin can delete room
+    match /rooms/{roomId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
       allow delete: if request.auth != null && (
         resource.data.hostUid == request.auth.uid ||
         isAdmin()

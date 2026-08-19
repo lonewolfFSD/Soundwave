@@ -129,7 +129,7 @@ export const createJamRoom = async (
     createdAt: now
   }
 
-  const roomRef = doc(db, 'rooms', roomId)
+  const roomRef = doc(db, 'jamRooms', roomId)
   await setDoc(roomRef, newRoom)
   return newRoom
 }
@@ -143,7 +143,7 @@ export const joinJamRoom = async (
 ): Promise<JamRoom> => {
   const cleanCode = code.toUpperCase().trim()
   const roomId = `room_${cleanCode}`
-  const roomRef = doc(db, 'rooms', roomId)
+  const roomRef = doc(db, 'jamRooms', roomId)
   const snap = await getDoc(roomRef)
 
   if (!snap.exists()) {
@@ -190,7 +190,7 @@ export const joinJamRoom = async (
  */
 export const leaveJamRoom = async (roomId: string, uid: string, displayName?: string) => {
   try {
-    const roomRef = doc(db, 'rooms', roomId)
+    const roomRef = doc(db, 'jamRooms', roomId)
     const snap = await getDoc(roomRef)
     if (!snap.exists()) return
 
@@ -248,7 +248,7 @@ export const subscribeToJamRoom = (
   onUpdate: (room: JamRoom) => void,
   onError?: (err: any) => void
 ) => {
-  const roomRef = doc(db, 'rooms', roomId)
+  const roomRef = doc(db, 'jamRooms', roomId)
   return onSnapshot(
     roomRef,
     (snap) => {
@@ -274,7 +274,7 @@ export const updateJamPlayback = async (
     queue?: Song[]
   }
 ) => {
-  const roomRef = doc(db, 'rooms', roomId)
+  const roomRef = doc(db, 'jamRooms', roomId)
   const updateData: any = {
     lastUpdatedTimestamp: Date.now()
   }
@@ -295,7 +295,7 @@ export const addSongToJamQueue = async (
   song: Song,
   addedByName?: string
 ) => {
-  const roomRef = doc(db, 'rooms', roomId)
+  const roomRef = doc(db, 'jamRooms', roomId)
   const snap = await getDoc(roomRef)
   if (!snap.exists()) return
 
@@ -336,7 +336,7 @@ export const removeSongFromJamQueue = async (
   roomId: string,
   songIndex: number
 ) => {
-  const roomRef = doc(db, 'rooms', roomId)
+  const roomRef = doc(db, 'jamRooms', roomId)
   const snap = await getDoc(roomRef)
   if (!snap.exists()) return
 
@@ -355,7 +355,7 @@ export const sendJamReaction = async (
   emoji: string,
   userName: string
 ) => {
-  const roomRef = doc(db, 'rooms', roomId)
+  const roomRef = doc(db, 'jamRooms', roomId)
   const reaction: JamReaction = {
     id: `react_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     emoji,
@@ -381,7 +381,7 @@ export const sendJamChatMessage = async (
   user: { displayName?: string; photoURL?: string }
 ) => {
   if (!message || !message.trim()) return
-  const roomRef = doc(db, 'rooms', roomId)
+  const roomRef = doc(db, 'jamRooms', roomId)
   const msg: JamChatMessage = {
     id: `msg_${Date.now()}`,
     user: user.displayName || 'Listener',
@@ -399,7 +399,7 @@ export const sendJamChatMessage = async (
  * Toggle Open DJ Mode
  */
 export const toggleOpenDjMode = async (roomId: string, openDjMode: boolean) => {
-  const roomRef = doc(db, 'rooms', roomId)
+  const roomRef = doc(db, 'jamRooms', roomId)
   await updateDoc(roomRef, { openDjMode }).catch(() => {})
 }
 
@@ -407,7 +407,7 @@ export const toggleOpenDjMode = async (roomId: string, openDjMode: boolean) => {
  * Transfer Host DJ Role
  */
 export const transferJamHost = async (roomId: string, newHostUid: string) => {
-  const roomRef = doc(db, 'rooms', roomId)
+  const roomRef = doc(db, 'jamRooms', roomId)
   const snap = await getDoc(roomRef)
   if (!snap.exists()) return
 
@@ -434,7 +434,7 @@ export const transferJamHost = async (roomId: string, newHostUid: string) => {
  */
 export const getActivePublicJamRooms = async (): Promise<JamRoom[]> => {
   try {
-    const q = query(collection(db, 'rooms'), where('isPublic', '==', true), limit(12))
+    const q = query(collection(db, 'jamRooms'), where('isPublic', '==', true), limit(12))
     const snap = await getDocs(q)
     const rooms = snap.docs.map(d => d.data() as JamRoom)
     // Filter rooms updated in the last 24 hours
