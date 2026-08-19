@@ -111,6 +111,21 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
   const isSyncingPlaybackRef = useRef(false)
   const lastProcessedReactionRef = useRef<string>('')
 
+  // Live refs for stable subscription
+  const currentSongRef = useRef(currentSong)
+  currentSongRef.current = currentSong
+
+  const isPlayingRef = useRef(isPlaying)
+  isPlayingRef.current = isPlaying
+
+  const currentTimeRef = useRef(currentTime)
+  currentTimeRef.current = currentTime
+
+  const [isScrubbing, setIsScrubbing] = useState(false)
+  const [scrubTime, setScrubTime] = useState(0)
+  const isScrubbingRef = useRef(false)
+  isScrubbingRef.current = isScrubbing
+
   const isHost = activeRoom ? activeRoom.hostUid === currentUserUid : false
   const canControlPlayback = activeRoom ? (activeRoom.openDjMode || isHost) : true
 
@@ -138,7 +153,7 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
     }
   }, [activeRoom])
 
-  // Real-time Jam Room Subscription & Sync Engine
+  // Real-time Jam Room Subscription & Sync Engine (Stable, Non-Reconnecting)
   useEffect(() => {
     if (!activeRoom?.id) return
 
@@ -149,36 +164,54 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
 
         // 1. Sync Audio Track Selection
         if (updatedRoom.currentSong) {
-          const isDifferentSong = !currentSong || currentSong.id !== updatedRoom.currentSong.id
+          const currentLocalSong = currentSongRef.current
+          const isDifferentSong = !currentLocalSong || currentLocalSong.id !== updatedRoom.currentSong.id
           if (isDifferentSong) {
             isSyncingPlaybackRef.current = true
             const resolved = await resolveFullLengthSong(updatedRoom.currentSong)
             playSong(resolved, false)
-            setTimeout(() => { isSyncingPlaybackRef.current = false }, 800)
+            setTimeout(() => { 
+              isSyncingPlaybackRef.current = false 
+              if (!updatedRoom.isPlaying) {
+                pauseSong()
+              }
+              if (updatedRoom.position !== undefined) {
+                setCurrentTime(updatedRoom.position)
+              }
+            }, 600)
+            return
           }
         }
 
-        // 2. Sync Audio Time Position & Playback State (Latency Compensated across all engines)
-        if (updatedRoom.currentSong) {
-          const now = Date.now()
-          const timeElapsedSinceUpdate = (now - (updatedRoom.lastUpdatedTimestamp || now)) / 1000
+        // 2. Real-Time Playback & Position Sync
+        if (updatedRoom.currentSong && !isSyncingPlaybackRef.current && !isScrubbingRef.current) {
+          const localIsPlaying = isPlayingRef.current
+          const localCurrentTime = currentTimeRef.current
 
-          let targetPosition = updatedRoom.position
-          if (updatedRoom.isPlaying) {
-            targetPosition += Math.max(0, timeElapsedSinceUpdate)
-          }
+          if (!updatedRoom.isPlaying) {
+            // REMOTE IS PAUSED -> Force pause immediately and snap to exact paused position
+            if (localIsPlaying) {
+              pauseSong()
+            }
+            const posDiff = Math.abs(localCurrentTime - (updatedRoom.position || 0))
+            if (posDiff > 0.3) {
+              setCurrentTime(updatedRoom.position || 0)
+            }
+          } else {
+            // REMOTE IS PLAYING -> Latency-compensated time alignment
+            const now = Date.now()
+            const timeElapsed = Math.max(0, (now - (updatedRoom.lastUpdatedTimestamp || now)) / 1000)
+            const targetPosition = (updatedRoom.position || 0) + timeElapsed
 
-          const drift = Math.abs(currentTime - targetPosition)
+            if (!localIsPlaying) {
+              resumeSong()
+            }
 
-          // If out of sync by > 1.0s, adjust seamlessly
-          if (drift > 1.0 && !isSyncingPlaybackRef.current) {
-            setCurrentTime(targetPosition)
-          }
-
-          if (updatedRoom.isPlaying && !isPlaying) {
-            resumeSong()
-          } else if (!updatedRoom.isPlaying && isPlaying) {
-            pauseSong()
+            const drift = Math.abs(localCurrentTime - targetPosition)
+            // If drift exceeds 0.5s, seamlessly snap
+            if (drift > 0.5) {
+              setCurrentTime(targetPosition)
+            }
           }
         }
 
@@ -191,11 +224,11 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
           }
         }
       },
-      (err) => console.error('Jam Room error:', err)
+      (err) => console.error('Jam Room sync error:', err)
     )
 
     return () => unsubscribe()
-  }, [activeRoom?.id, currentSong?.id, isPlaying, currentTime])
+  }, [activeRoom?.id])
 
   // Scroll chat to bottom on new message
   useEffect(() => {
@@ -277,27 +310,46 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
   const handleTogglePlay = async () => {
     if (!canControlPlayback || !activeRoom) return
     const nextPlayState = !activeRoom.isPlaying
-    const currentPos = audioRef.current?.currentTime || 0
+    const currentPos = currentTimeRef.current || 0
 
-    if (nextPlayState) resumeSong()
-    else pauseSong()
+    if (nextPlayState) {
+      resumeSong()
+    } else {
+      pauseSong()
+    }
 
     await updateJamPlayback(activeRoom.id, {
       isPlaying: nextPlayState,
       position: currentPos
     })
-    triggerHaptic()
+    triggerHaptic(ImpactStyle.Medium)
   }
 
-  // Synced Timeline Seek
-  const handleSeek = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!canControlPlayback || !activeRoom) return
+  // Synced Timeline Seek Handlers
+  const handleSeekStart = () => {
+    if (!canControlPlayback) return
+    setIsScrubbing(true)
+    setScrubTime(currentTimeRef.current)
+  }
+
+  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canControlPlayback) return
     const targetPos = Number(e.target.value)
+    setScrubTime(targetPos)
+  }
+
+  const handleSeekCommit = async (targetPos: number) => {
+    if (!canControlPlayback || !activeRoom) {
+      setIsScrubbing(false)
+      return
+    }
+    setIsScrubbing(false)
     setCurrentTime(targetPos)
     await updateJamPlayback(activeRoom.id, {
       position: targetPos,
-      isPlaying: activeRoom.isPlaying
+      isPlaying: isPlayingRef.current
     })
+    triggerHaptic(ImpactStyle.Light)
   }
 
   // Synced Previous Song / Seek to Beginning
@@ -746,13 +798,16 @@ export const ListenTogetherView: React.FC<ListenTogetherViewProps> = ({ onBack, 
                   type="range"
                   min={0}
                   max={currentSong?.duration || activeRoom.currentSong?.duration || 210}
-                  value={currentTime || activeRoom.position || 0}
-                  onChange={handleSeek}
+                  value={isScrubbing ? scrubTime : (currentTime || activeRoom.position || 0)}
+                  onPointerDown={handleSeekStart}
+                  onChange={handleSeekChange}
+                  onPointerUp={(e) => handleSeekCommit(Number((e.target as HTMLInputElement).value))}
+                  onPointerCancel={() => setIsScrubbing(false)}
                   disabled={!canControlPlayback}
                   className={`w-full accent-violet-400 cursor-pointer ${!canControlPlayback ? 'opacity-50 cursor-not-allowed' : ''}`}
                 />
                 <div className="flex justify-between text-[11px] font-mono text-white/40">
-                  <span>{formatSec(currentTime || activeRoom.position || 0)}</span>
+                  <span>{formatSec(isScrubbing ? scrubTime : (currentTime || activeRoom.position || 0))}</span>
                   <span>{formatSec(currentSong?.duration || activeRoom.currentSong?.duration || 210)}</span>
                 </div>
               </div>
