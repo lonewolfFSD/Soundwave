@@ -358,6 +358,14 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       audioCtxRef.current.resume().catch(() => {})
     }
 
+    // Reset gain node in case crossfade lowered it
+    if (gainNodeRef.current && audioCtxRef.current) {
+      try {
+        gainNodeRef.current.gain.cancelScheduledValues(audioCtxRef.current.currentTime)
+        gainNodeRef.current.gain.setValueAtTime(1.0, audioCtxRef.current.currentTime)
+      } catch {}
+    }
+
     // 2. Private Session Check (Incognito Mode)
     const isPrivate = localStorage.getItem('sw_private_session') === 'true'
     if (addToHistory && !isPrivate) {
@@ -406,12 +414,21 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setDuration(activeSong.duration)
     }
 
+    const targetVol = typeof volume === 'number' && !isNaN(volume) && volume >= 0 ? volume : 1
+
     if (audioRef.current && activeSong.url) {
+      audioRef.current.crossOrigin = 'anonymous'
       audioRef.current.src = activeSong.url
       audioRef.current.currentTime = 0
-      audioRef.current.volume = volume
+      audioRef.current.volume = targetVol
+      audioRef.current.muted = false
       audioRef.current.play()
-        .then(() => setIsPlaying(true))
+        .then(() => {
+          setIsPlaying(true)
+          if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+            audioCtxRef.current.resume().catch(() => {})
+          }
+        })
         .catch(e => console.error("Audio playback error:", e))
     }
 
@@ -436,10 +453,24 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
       audioCtxRef.current.resume().catch(() => {})
     }
+    if (gainNodeRef.current && audioCtxRef.current) {
+      try {
+        gainNodeRef.current.gain.cancelScheduledValues(audioCtxRef.current.currentTime)
+        gainNodeRef.current.gain.setValueAtTime(1.0, audioCtxRef.current.currentTime)
+      } catch {}
+    }
 
     if (audioRef.current) {
+      const targetVol = typeof volume === 'number' && !isNaN(volume) && volume >= 0 ? volume : 1
+      audioRef.current.volume = targetVol
+      audioRef.current.muted = false
       audioRef.current.play()
-        .then(() => setIsPlaying(true))
+        .then(() => {
+          setIsPlaying(true)
+          if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+            audioCtxRef.current.resume().catch(() => {})
+          }
+        })
         .catch(e => console.error("Resume failed:", e))
     }
   }
@@ -675,7 +706,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }}
     >
       {children}
-      <audio ref={audioRef} />
+      <audio ref={audioRef} crossOrigin="anonymous" preload="auto" />
     </PlayerContext.Provider>
   )
 }
