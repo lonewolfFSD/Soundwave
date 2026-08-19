@@ -341,20 +341,17 @@ const themeConfig: Record<string, any> = {
 
   // Handle Soundie (Index 5)
   if (index === 5) {
-    if (isNative) {
-      setShowUploadModal(false);
-      setShowNewPlaylistModal(false);
+    setShowUploadModal(false);
+    setShowNewPlaylistModal(false);
 
-      // Show terms modal first if not yet accepted
-      if (!hasSoundieTermsAccepted()) {
-        setShowSoundieTerms(true);
-        return;
-      }
+    // Show terms modal first if not yet accepted
+    if (!hasSoundieTermsAccepted()) {
+      setShowSoundieTerms(true);
+      return;
+    }
 
-      if (onOpenSoundie) onOpenSoundie();
-    } else {
-    navigate('/soundie');
-    } 
+    if (onOpenSoundie) onOpenSoundie();
+    window.dispatchEvent(new Event('open-soundie'));
     return;
   }
 
@@ -513,10 +510,34 @@ const themeConfig: Record<string, any> = {
 
             <button 
               onClick={() => setShowUploadModal(true)}
-              className={`w-full flex items-center justify-left gap-2 py-3.5 px-5 mt-0.5 text-sm rounded-b-md ${reduceMotion ? '' : 'transition-all duration-200'} animate-sidebar ${navBtnClass}`} 
+              className={`w-full flex items-center justify-left gap-2 py-3.5 px-5 mt-0.5 text-sm ${reduceMotion ? '' : 'transition-all duration-200'} animate-sidebar ${navBtnClass}`} 
               style={{ fontFamily: 'Space Grotesk, sans-serif', animationDelay: reduceMotion ? '0ms' : '200ms' }}
             >
               <Import size={22} /> <span className='text-[14px] mt-0.5 font-bold'>Import Music</span>
+            </button>
+
+            <button 
+              onClick={() => {
+                if (!hasSoundieTermsAccepted()) {
+                  setShowSoundieTerms(true);
+                  return;
+                }
+                if (onOpenSoundie) onOpenSoundie();
+                window.dispatchEvent(new Event('open-soundie'));
+                if (onClose) onClose();
+              }}
+              className={`w-full flex items-center justify-left gap-2 py-3.5 px-5 mt-0.5 text-sm rounded-b-md ${reduceMotion ? '' : 'transition-all duration-200'} animate-sidebar ${navBtnClass}`} 
+              style={{ fontFamily: 'Space Grotesk, sans-serif', animationDelay: reduceMotion ? '0ms' : '220ms' }}
+            >
+              <div className="relative w-5 h-5 rounded-full overflow-hidden soundie-nav-orb shadow-[0_0_10px_rgba(139,92,246,0.6)] shrink-0">
+                <div className="absolute inset-0 elevenlabs-mesh-nav" />
+              </div>
+              <div className="flex items-center justify-between flex-1">
+                <span className='text-[14px] mt-0.5 font-bold'>Soundie AI</span>
+                <span className="text-[9px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1.5 py-0.5 rounded-full">
+                  AI
+                </span>
+              </div>
             </button>
           </div>
 
