@@ -1,9 +1,8 @@
-// Music Streaming Service: Production Full-Length Audio Resolver & Catalog Discovery
+// YouTube Music Service: Clean Metadata & Accurate Video Discovery
 import type { Song } from '../context/PlayerContext'
 
-// In-memory cache for video IDs and resolved stream URLs
+// In-memory cache for video IDs
 const videoIdCache = new Map<string, string>()
-const streamCache = new Map<string, { url: string; duration: number }>()
 
 /**
  * Clean track title
@@ -28,68 +27,54 @@ export const isYoutubeVideoId = (id: string): boolean => {
 }
 
 /**
- * Search YouTube Video ID (used in local dev server environment)
+ * Search YouTube Video ID by title and artist
  */
 export const findYouTubeVideoId = async (title: string, artist: string): Promise<string> => {
   const cleanQ = `${sanitizeTitle(title)} ${sanitizeTitle(artist)} official audio`.trim()
   const cacheKey = cleanQ.toLowerCase()
   if (videoIdCache.has(cacheKey)) return videoIdCache.get(cacheKey)!
 
-  const isLocalHost = typeof window !== 'undefined' && (
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1' ||
-    window.location.hostname.includes('192.168.')
-  )
+  // 1. Check local/production /api/yt-search endpoint
+  try {
+    const res = await fetch(`/api/yt-search?q=${encodeURIComponent(cleanQ)}`, { signal: AbortSignal.timeout(4000) })
+    if (res.ok) {
+      const items = await res.json()
+      if (Array.isArray(items) && items.length > 0 && items[0]?.id) {
+        const id = items[0].id.replace('yt_', '')
+        if (isYoutubeVideoId(id)) {
+          videoIdCache.set(cacheKey, id)
+          return id
+        }
+      }
+    }
+  } catch {}
 
-  if (isLocalHost) {
-    try {
-      const res = await fetch(`/api/yt-search?q=${encodeURIComponent(cleanQ)}`, { signal: AbortSignal.timeout(3000) })
-      if (res.ok) {
-        const items = await res.json()
-        if (Array.isArray(items) && items.length > 0 && items[0]?.id) {
-          const id = items[0].id.replace('yt_', '')
+  // 2. Fallback: Search direct YouTube metadata endpoint
+  try {
+    const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(cleanQ)}&sp=EgIQAQ%253D%253D`
+    const res = await fetch(ytUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept-Language': 'en-US,en;q=0.9'
+      },
+      signal: AbortSignal.timeout(4000)
+    })
+    if (res.ok) {
+      const html = await res.text()
+      const matches = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/g)
+      if (matches && matches.length > 0) {
+        for (const m of matches) {
+          const id = m.replace('"videoId":"', '').replace('"', '')
           if (isYoutubeVideoId(id)) {
             videoIdCache.set(cacheKey, id)
             return id
           }
         }
       }
-    } catch {}
-  }
-
-  return ''
-}
-
-/**
- * Resolve Full-Length Audio Stream from Audius Decentralized Music Network (100% CORS-Safe, No Limits)
- */
-export const resolveAudiusStream = async (title: string, artist: string): Promise<{ url: string; duration: number } | null> => {
-  const cleanQ = `${sanitizeTitle(title)} ${sanitizeTitle(artist)}`.trim()
-  const cacheKey = cleanQ.toLowerCase()
-  if (streamCache.has(cacheKey)) return streamCache.get(cacheKey)!
-
-  try {
-    const res = await fetch(
-      `https://discoveryprovider.audius.co/v1/tracks/search?query=${encodeURIComponent(cleanQ)}&app_name=SOUNDWAVE_APP`,
-      { signal: AbortSignal.timeout(3500) }
-    )
-    if (res.ok) {
-      const data = await res.json()
-      if (data.data && Array.isArray(data.data) && data.data.length > 0) {
-        const track = data.data[0]
-        if (track.id) {
-          const result = {
-            url: `https://discoveryprovider.audius.co/v1/tracks/${track.id}/stream?app_name=SOUNDWAVE_APP`,
-            duration: track.duration || 210
-          }
-          streamCache.set(cacheKey, result)
-          return result
-        }
-      }
     }
   } catch {}
 
-  return null
+  return ''
 }
 
 /**
@@ -105,24 +90,7 @@ export const getAudioStreamUrl = async (
   if (!isYoutubeVideoId(videoId) && title) {
     videoId = await findYouTubeVideoId(title, artist || '')
   }
-  if (!videoId) return ''
-
-  const isLocalHost = typeof window !== 'undefined' && (
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1' ||
-    window.location.hostname.includes('192.168.')
-  )
-
-  if (isLocalHost) {
-    return `/api/yt-stream?id=${videoId}&quality=${quality}`
-  }
-
-  if (title) {
-    const fullTrack = await resolveAudiusStream(title, artist || '')
-    if (fullTrack?.url) return fullTrack.url
-  }
-
-  return `https://www.youtube.com/watch?v=${videoId}`
+  return videoId ? `/api/yt-stream?id=${videoId}&quality=${quality}` : ''
 }
 
 /**
@@ -135,7 +103,6 @@ export const resolveFullLengthSong = async (
   if (!song) return song
   const updatedSong = { ...song }
 
-  // 1. If already direct valid audio stream (blob, data, Firebase, Cloudinary)
   if (updatedSong.url?.startsWith('blob:') || updatedSong.url?.startsWith('data:')) {
     return updatedSong
   }
@@ -148,73 +115,43 @@ export const resolveFullLengthSong = async (
     return updatedSong
   }
 
-  const isLocalHost = typeof window !== 'undefined' && (
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1' ||
-    window.location.hostname.includes('192.168.')
-  )
-
-  // 2. On Localhost dev server: resolve with local Python yt-dlp backend
-  if (isLocalHost) {
-    let videoId = ''
-    if (isYoutubeVideoId(updatedSong.id.replace('yt_', ''))) {
-      videoId = updatedSong.id.replace('yt_', '')
-    } else {
-      videoId = await findYouTubeVideoId(updatedSong.title, updatedSong.artist)
-    }
-
-    if (videoId) {
-      updatedSong.url = `/api/yt-stream?id=${videoId}&quality=${quality}`
-      updatedSong.youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`
-      return updatedSong
-    }
+  let videoId = ''
+  if (isYoutubeVideoId(updatedSong.id.replace('yt_', ''))) {
+    videoId = updatedSong.id.replace('yt_', '')
+  } else {
+    videoId = await findYouTubeVideoId(updatedSong.title, updatedSong.artist)
   }
 
-  // 3. In Production Deployment (e.g. soundwave.lonewolffsd.in):
-  // Resolve Full-Length Audio Stream from Audius (100% CORS-Safe, 3-6+ minutes full track)
-  const audiusStream = await resolveAudiusStream(updatedSong.title, updatedSong.artist)
-  if (audiusStream?.url) {
-    updatedSong.url = audiusStream.url
-    if (audiusStream.duration && audiusStream.duration > 0) {
-      updatedSong.duration = audiusStream.duration
-    }
-    return updatedSong
-  }
-
-  // 4. Fail-Safe: Direct Apple Akamai CDN stream fallback
-  if (updatedSong.previewUrl && (updatedSong.previewUrl.startsWith('http://') || updatedSong.previewUrl.startsWith('https://'))) {
-    updatedSong.url = updatedSong.previewUrl
-    return updatedSong
-  }
-
-  // 5. Query online catalog metadata if stream is missing
-  if (!updatedSong.url || !updatedSong.url.startsWith('http')) {
-    try {
-      const q = `${updatedSong.title} ${updatedSong.artist}`.trim()
-      const itunesRes = await fetch(
-        `https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=1`
-      )
-      if (itunesRes.ok) {
-        const data = await itunesRes.json()
-        if (data.results && data.results.length > 0 && data.results[0].previewUrl) {
-          updatedSong.url = data.results[0].previewUrl
-          updatedSong.previewUrl = data.results[0].previewUrl
-          return updatedSong
-        }
-      }
-    } catch {}
+  if (videoId) {
+    updatedSong.id = `yt_${videoId}`
+    updatedSong.url = `/api/yt-stream?id=${videoId}&quality=${quality}`
+    updatedSong.youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`
   }
 
   return updatedSong
 }
 
 /**
- * Search Online Music Catalog (100% clean metadata, exact titles & artists)
+ * Search Online Music Catalog (Exact YouTube Music tracks)
  */
 export const searchYouTubeMusic = async (query: string): Promise<Song[]> => {
   if (!query || query.trim().length === 0) return []
   const cleanQ = query.trim()
 
+  // 1. Primary: Search YouTube directly via /api/yt-search
+  try {
+    const res = await fetch(`/api/yt-search?q=${encodeURIComponent(cleanQ)}`, { signal: AbortSignal.timeout(4000) })
+    if (res.ok) {
+      const items = await res.json()
+      if (Array.isArray(items) && items.length > 0) {
+        return items
+      }
+    }
+  } catch (err) {
+    console.warn('API yt-search error, attempting iTunes catalog fallback:', err)
+  }
+
+  // 2. Fallback: Search iTunes catalog
   try {
     const res = await fetch(
       `https://itunes.apple.com/search?term=${encodeURIComponent(cleanQ)}&media=music&entity=song&limit=25`
@@ -251,6 +188,18 @@ export const searchYouTubeMusic = async (query: string): Promise<Song[]> => {
  * Fetch Top Trending Online Tracks
  */
 export const getTrendingYouTubeMusic = async (): Promise<Song[]> => {
+  // 1. Try YouTube Search for top hits
+  try {
+    const res = await fetch(`/api/yt-search?q=${encodeURIComponent('Top Hits 2024 Popular Songs')}`, { signal: AbortSignal.timeout(3500) })
+    if (res.ok) {
+      const items = await res.json()
+      if (Array.isArray(items) && items.length > 0) {
+        return items.map((song: any) => ({ ...song, playlistId: 'trending' }))
+      }
+    }
+  } catch {}
+
+  // 2. Fallback to iTunes Top Charts
   try {
     const res = await fetch('https://itunes.apple.com/us/rss/topsongs/limit=50/json')
     if (res.ok) {
@@ -262,16 +211,7 @@ export const getTrendingYouTubeMusic = async (): Promise<Song[]> => {
         const rawCover = entry['im:image']?.[2]?.label || entry['im:image']?.[0]?.label
         const cover = rawCover ? rawCover.replace(/170x170bb/g, '600x600bb') : ''
         const trackId = entry.id?.attributes?.['im:id'] || Math.random().toString(36).slice(2, 9)
-        
-        let preview = ''
-        if (Array.isArray(entry.link)) {
-          const audioLink = entry.link.find((l: any) =>
-            l?.attributes?.type?.includes('audio') || l?.attributes?.rel === 'enclosure' || l?.attributes?.title === 'Preview'
-          )
-          preview = audioLink?.attributes?.href || entry.link[1]?.attributes?.href || ''
-        } else if (entry.link?.attributes?.href) {
-          preview = entry.link.attributes.href
-        }
+        const preview = entry?.link?.[1]?.attributes?.href || ''
 
         return {
           id: `top_${trackId}`,
@@ -301,25 +241,17 @@ export const getSearchSuggestions = async (query: string): Promise<string[]> => 
   if (!query || !query.trim()) return []
   const cleanQ = query.trim()
 
-  const isLocalHost = typeof window !== 'undefined' && (
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1' ||
-    window.location.hostname.includes('192.168.')
-  )
-
-  if (isLocalHost) {
-    try {
-      const res = await fetch(`/api/yt-suggest?q=${encodeURIComponent(cleanQ)}`, { signal: AbortSignal.timeout(2000) })
-      if (res.ok) {
-        const suggestions = await res.json()
-        if (Array.isArray(suggestions) && suggestions.length > 0) {
-          return suggestions
-        }
+  try {
+    const res = await fetch(`/api/yt-suggest?q=${encodeURIComponent(cleanQ)}`, { signal: AbortSignal.timeout(2000) })
+    if (res.ok) {
+      const suggestions = await res.json()
+      if (Array.isArray(suggestions) && suggestions.length > 0) {
+        return suggestions
       }
-    } catch {}
-  }
+    }
+  } catch {}
 
-  // Fallback to iTunes track names (CORS-compliant)
+  // Fallback to iTunes track names
   try {
     const res = await fetch(
       `https://itunes.apple.com/search?term=${encodeURIComponent(cleanQ)}&media=music&entity=song&limit=6`
@@ -337,6 +269,18 @@ export const getSearchSuggestions = async (query: string): Promise<string[]> => 
  * Fetch tracks for specific mood/genre categories
  */
 export const getCategoryTracks = async (searchQuery: string, limit = 20): Promise<Song[]> => {
+  // 1. Try YouTube Search
+  try {
+    const res = await fetch(`/api/yt-search?q=${encodeURIComponent(searchQuery + ' audio')}`, { signal: AbortSignal.timeout(3500) })
+    if (res.ok) {
+      const items = await res.json()
+      if (Array.isArray(items) && items.length > 0) {
+        return items.slice(0, limit).map((song: any) => ({ ...song, playlistId: 'category' }))
+      }
+    }
+  } catch {}
+
+  // 2. Fallback to iTunes Category Search
   try {
     const res = await fetch(
       `https://itunes.apple.com/search?term=${encodeURIComponent(searchQuery)}&media=music&entity=song&limit=${limit}`

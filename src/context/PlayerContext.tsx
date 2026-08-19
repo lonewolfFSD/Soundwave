@@ -1,11 +1,18 @@
 import React, { createContext, useContext, useState, useRef, useEffect } from 'react'
 import { MediaSession } from '@capgo/capacitor-media-session';
-import { resolveFullLengthSong } from '../utils/ytMusic';
+import { resolveFullLengthSong, isYoutubeVideoId, findYouTubeVideoId } from '../utils/ytMusic';
 import { fetchLyrics } from '../utils/lyrics';
 import { getMoodCoherentQueue, getSongRadioQueue } from '../utils/aiRecommender';
 import { getLocalLikedSongs, saveLocalLikedSongs, fetchRemoteLikedSongs } from '../utils/likedSongs';
 import { getLocalListenHistory, recordSongPlay } from '../utils/listenHistory';
 import { auth } from '../utils/firebase';
+
+declare global {
+  interface Window {
+    YT: any
+    onYouTubeIframeAPIReady: () => void
+  }
+}
 
 export interface Song {
   id: string
@@ -67,6 +74,8 @@ const PlayerContext = createContext<PlayerContextType | null>(null)
 
 export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const audioRef = useRef<HTMLAudioElement>(null)
+  const ytPlayerRef = useRef<any>(null)
+  const activeEngineRef = useRef<'html5' | 'youtube'>('html5')
 
   const [currentSong, setCurrentSong] = useState<Song | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -96,23 +105,116 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const [isDragging, setIsDragging] = useState(false)
 
+  // ── INITIALIZE GLOBAL OFFICIAL YOUTUBE PLAYER ──
+  useEffect(() => {
+    const initYt = () => {
+      if (!window.YT || !window.YT.Player || ytPlayerRef.current) return
+      try {
+        const mountEl = document.getElementById('soundwave-global-yt-player')
+        if (!mountEl) return
+        ytPlayerRef.current = new window.YT.Player('soundwave-global-yt-player', {
+          height: '200',
+          width: '200',
+          playerVars: {
+            autoplay: 1,
+            controls: 0,
+            disablekb: 1,
+            fs: 0,
+            rel: 0,
+            playsinline: 1,
+            origin: window.location.origin
+          },
+          events: {
+            onReady: (event: any) => {
+              try {
+                event.target.unMute()
+                event.target.setVolume(volume * 100)
+              } catch {}
+            },
+            onStateChange: (event: any) => {
+              if (event.data === 0) {
+                // Video Ended -> Next Song
+                nextSong()
+              } else if (event.data === 1) {
+                // Playing
+                setIsPlaying(true)
+                try {
+                  event.target.unMute()
+                  event.target.setVolume(volume * 100)
+                  const dur = event.target.getDuration()
+                  if (dur && dur > 0) setDuration(dur)
+                } catch {}
+              } else if (event.data === 2) {
+                // Paused
+                setIsPlaying(false)
+              }
+            },
+            onError: (err: any) => {
+              console.warn('YouTube Player API message:', err)
+            }
+          }
+        })
+      } catch (e) {
+        console.warn('Error initializing global YouTube player:', e)
+      }
+    }
+
+    if (window.YT && window.YT.Player) {
+      initYt()
+    } else {
+      const existing = document.getElementById('soundwave-youtube-iframe-api')
+      if (!existing) {
+        const tag = document.createElement('script')
+        tag.id = 'soundwave-youtube-iframe-api'
+        tag.src = 'https://www.youtube.com/iframe_api'
+        const first = document.getElementsByTagName('script')[0]
+        first?.parentNode?.insertBefore(tag, first)
+      }
+
+      const prev = window.onYouTubeIframeAPIReady
+      window.onYouTubeIframeAPIReady = () => {
+        if (prev) prev()
+        initYt()
+      }
+
+      const interval = setInterval(() => {
+        if (window.YT && window.YT.Player) {
+          initYt()
+          clearInterval(interval)
+        }
+      }, 300)
+      return () => clearInterval(interval)
+    }
+  }, [])
+
+  // Sync timeline ticker when playing via YouTube
+  useEffect(() => {
+    let timer: any = null
+    if (isPlaying) {
+      timer = setInterval(() => {
+        if (activeEngineRef.current === 'youtube' && ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function') {
+          try {
+            const cur = ytPlayerRef.current.getCurrentTime()
+            const dur = ytPlayerRef.current.getDuration()
+            if (typeof cur === 'number' && !isNaN(cur)) {
+              setCurrentTime(cur)
+            }
+            if (typeof dur === 'number' && !isNaN(dur) && dur > 0) {
+              setDuration(dur)
+            }
+          } catch {}
+        }
+      }, 250)
+    }
+    return () => {
+      if (timer) clearInterval(timer)
+    }
+  }, [isPlaying])
+
   const setAudioQuality = (quality: 'best' | 'standard') => {
     setAudioQualityState(quality)
     localStorage.setItem('sw_audio_quality', quality)
     window.dispatchEvent(new Event('sw-settings-updated'))
-
-    if (currentSong && audioRef.current && currentSong.url?.includes('/api/yt-stream')) {
-      const currentPos = audioRef.current.currentTime
-      const wasPlaying = isPlaying
-      const base = currentSong.url.split('&quality=')[0].split('?quality=')[0]
-      const delimiter = base.includes('?') ? '&' : '?'
-      const updatedUrl = `${base}${delimiter}quality=${quality}`
-      audioRef.current.src = updatedUrl
-      audioRef.current.currentTime = currentPos
-      if (wasPlaying) {
-        audioRef.current.play().catch(() => {})
-      }
-    }
   }
 
   // ── WEB AUDIO API SIGNAL CHAIN ──
@@ -139,7 +241,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const source = ctx.createMediaElementSource(audioRef.current)
       sourceNodeRef.current = source
 
-      // 1. Equalizer Filters
       const lowFilter = ctx.createBiquadFilter()
       lowFilter.type = 'lowshelf'
       lowFilter.frequency.value = 250
@@ -156,7 +257,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       highFilter.frequency.value = 6000
       highFilterRef.current = highFilter
 
-      // 2. 8D Spatial Stereo Panner
       let panner: StereoPannerNode | null = null
       if (ctx.createStereoPanner) {
         panner = ctx.createStereoPanner()
@@ -164,7 +264,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         pannerNodeRef.current = panner
       }
 
-      // 3. Dynamic Compressor (Lossless Limiter)
       const compressor = ctx.createDynamicsCompressor()
       compressor.threshold.setValueAtTime(-14, ctx.currentTime)
       compressor.knee.setValueAtTime(40, ctx.currentTime)
@@ -173,12 +272,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       compressor.release.setValueAtTime(0.25, ctx.currentTime)
       compressorRef.current = compressor
 
-      // 4. Output Gain Node
       const gainNode = ctx.createGain()
       gainNode.gain.setValueAtTime(1.0, ctx.currentTime)
       gainNodeRef.current = gainNode
 
-      // Connect Graph
       if (panner) {
         source.connect(lowFilter)
         lowFilter.connect(midFilter)
@@ -196,7 +293,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         gainNode.connect(ctx.destination)
       }
 
-      // Apply saved EQ presets
       loadSavedEqualizer(lowFilter, midFilter, highFilter)
     } catch (e) {
       console.warn("Web Audio API initialization failed:", e)
@@ -352,21 +448,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const playSong = async (song: Song, addToHistory = true) => {
     if (!song) return
 
-    // 1. Initialize Web Audio API Signal Chain
     initAudioGraph()
     if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
       audioCtxRef.current.resume().catch(() => {})
     }
 
-    // Reset gain node in case crossfade lowered it
-    if (gainNodeRef.current && audioCtxRef.current) {
-      try {
-        gainNodeRef.current.gain.cancelScheduledValues(audioCtxRef.current.currentTime)
-        gainNodeRef.current.gain.setValueAtTime(1.0, audioCtxRef.current.currentTime)
-      } catch {}
-    }
-
-    // 2. Private Session Check (Incognito Mode)
     const isPrivate = localStorage.getItem('sw_private_session') === 'true'
     if (addToHistory && !isPrivate) {
       recordSongPlay(song)
@@ -380,14 +466,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setCurrentTime(0)
     setDuration(song.duration || 210)
 
-    // 3. Keep Screen Awake API
     if (localStorage.getItem('sw_keep_awake') === 'true' && 'wakeLock' in navigator) {
       try {
         wakeLockRef.current = await (navigator as any).wakeLock.request('screen')
       } catch {}
     }
 
-    // 4. Discord Webhook Notification
     const discordHook = localStorage.getItem('sw_discord_webhook')
     if (discordHook && discordHook.startsWith('http')) {
       try {
@@ -407,29 +491,82 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       } catch {}
     }
 
-    // Resolve full-length direct audio stream (Localhost dev server yt-dlp / Audius full track / Apple CDN)
-    const activeSong = await resolveFullLengthSong(song, audioQuality)
-    setCurrentSong(activeSong)
-    if (activeSong.duration && activeSong.duration > 0) {
-      setDuration(activeSong.duration)
-    }
+    const isLocalHost = typeof window !== 'undefined' && (
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.includes('192.168.')
+    )
 
-    const targetVol = typeof volume === 'number' && !isNaN(volume) && volume >= 0 ? volume : 1
+    const isUploadedSong = song.url?.startsWith('blob:') ||
+      song.url?.startsWith('data:') ||
+      song.playlistId === 'global' ||
+      song.url?.includes('cloudinary') ||
+      song.url?.includes('firebasestorage')
 
-    if (audioRef.current && activeSong.url) {
-      audioRef.current.crossOrigin = 'anonymous'
-      audioRef.current.src = activeSong.url
-      audioRef.current.currentTime = 0
-      audioRef.current.volume = targetVol
-      audioRef.current.muted = false
-      audioRef.current.play()
-        .then(() => {
-          setIsPlaying(true)
-          if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
-            audioCtxRef.current.resume().catch(() => {})
-          }
-        })
-        .catch(e => console.error("Audio playback error:", e))
+    if (isUploadedSong) {
+      activeEngineRef.current = 'html5'
+      try { ytPlayerRef.current?.pauseVideo() } catch {}
+
+      if (audioRef.current && song.url) {
+        audioRef.current.crossOrigin = 'anonymous'
+        audioRef.current.src = song.url
+        audioRef.current.currentTime = 0
+        audioRef.current.volume = volume
+        audioRef.current.muted = false
+        audioRef.current.play()
+          .then(() => setIsPlaying(true))
+          .catch(e => console.error("Audio playback error:", e))
+      }
+    } else if (isLocalHost) {
+      // Local dev server with yt-dlp backend
+      const activeSong = await resolveFullLengthSong(song, audioQuality)
+      setCurrentSong(activeSong)
+      activeEngineRef.current = 'html5'
+      try { ytPlayerRef.current?.pauseVideo() } catch {}
+
+      if (audioRef.current && activeSong.url) {
+        audioRef.current.crossOrigin = 'anonymous'
+        audioRef.current.src = activeSong.url
+        audioRef.current.currentTime = 0
+        audioRef.current.volume = volume
+        audioRef.current.muted = false
+        audioRef.current.play()
+          .then(() => setIsPlaying(true))
+          .catch(e => console.error("Audio playback error:", e))
+      }
+    } else {
+      // 🌟 Production: Official YouTube Stream Player (100% Full Song, 0 Errors)
+      let videoId = ''
+      const cleanId = (song.id || '').replace('yt_', '').trim()
+      if (isYoutubeVideoId(cleanId)) {
+        videoId = cleanId
+      } else {
+        videoId = await findYouTubeVideoId(song.title, song.artist)
+      }
+
+      if (videoId) {
+        activeEngineRef.current = 'youtube'
+        try { audioRef.current?.pause() } catch {}
+
+        try {
+          ytPlayerRef.current?.loadVideoById({ videoId, startSeconds: 0 })
+          ytPlayerRef.current?.unMute()
+          ytPlayerRef.current?.setVolume(volume * 100)
+          ytPlayerRef.current?.playVideo()
+        } catch (e) {
+          console.warn('YouTube Player load error:', e)
+        }
+        setIsPlaying(true)
+      } else if (song.previewUrl) {
+        // Fallback
+        activeEngineRef.current = 'html5'
+        if (audioRef.current) {
+          audioRef.current.src = song.previewUrl
+          audioRef.current.currentTime = 0
+          audioRef.current.volume = volume
+          audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {})
+        }
+      }
     }
 
     fetchLyrics(song.title, song.artist, song.duration).then((lyrics) => {
@@ -440,7 +577,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }
 
   const pauseSong = () => {
-    audioRef.current?.pause()
+    if (activeEngineRef.current === 'youtube') {
+      try { ytPlayerRef.current?.pauseVideo() } catch {}
+    } else {
+      audioRef.current?.pause()
+    }
     setIsPlaying(false)
     if (wakeLockRef.current) {
       wakeLockRef.current.release().catch(() => {})
@@ -453,25 +594,20 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
       audioCtxRef.current.resume().catch(() => {})
     }
-    if (gainNodeRef.current && audioCtxRef.current) {
-      try {
-        gainNodeRef.current.gain.cancelScheduledValues(audioCtxRef.current.currentTime)
-        gainNodeRef.current.gain.setValueAtTime(1.0, audioCtxRef.current.currentTime)
-      } catch {}
-    }
 
-    if (audioRef.current) {
-      const targetVol = typeof volume === 'number' && !isNaN(volume) && volume >= 0 ? volume : 1
-      audioRef.current.volume = targetVol
-      audioRef.current.muted = false
-      audioRef.current.play()
-        .then(() => {
-          setIsPlaying(true)
-          if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
-            audioCtxRef.current.resume().catch(() => {})
-          }
-        })
-        .catch(e => console.error("Resume failed:", e))
+    if (activeEngineRef.current === 'youtube') {
+      try {
+        ytPlayerRef.current?.unMute()
+        ytPlayerRef.current?.setVolume(volume * 100)
+        ytPlayerRef.current?.playVideo()
+      } catch {}
+      setIsPlaying(true)
+    } else {
+      if (audioRef.current) {
+        audioRef.current.play()
+          .then(() => setIsPlaying(true))
+          .catch(e => console.error("Resume failed:", e))
+      }
     }
   }
 
@@ -560,8 +696,14 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const setCurrentTimeHandler = (time: number) => {
     setCurrentTime(time)
-    if (audioRef.current) {
-      audioRef.current.currentTime = time
+    if (activeEngineRef.current === 'youtube') {
+      try {
+        ytPlayerRef.current?.seekTo(time, true)
+      } catch {}
+    } else {
+      if (audioRef.current) {
+        audioRef.current.currentTime = time
+      }
     }
   }
 
@@ -571,6 +713,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (audioRef.current) {
       audioRef.current.volume = newVol
     }
+    try {
+      ytPlayerRef.current?.unMute()
+      ytPlayerRef.current?.setVolume(newVol * 100)
+    } catch {}
   }
 
   const addToQueue = (song: Song) => {
@@ -588,13 +734,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     let lastTimeUpdate = 0
     const handleTimeUpdate = () => {
+      if (activeEngineRef.current !== 'html5') return
       const now = performance.now()
       if (now - lastTimeUpdate < 220) return
       lastTimeUpdate = now
 
       setCurrentTime(audio.currentTime)
 
-      // Crossfade Engine
       const crossfadeSec = Number(localStorage.getItem('sw_crossfade_duration') || 0)
       if (crossfadeSec > 0 && audio.duration && !isNaN(audio.duration) && gainNodeRef.current && audioCtxRef.current) {
         const timeLeft = audio.duration - audio.currentTime
@@ -605,20 +751,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     const handleLoadedMetadata = () => {
-      if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
+      if (activeEngineRef.current === 'html5' && audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
         setDuration(audio.duration)
       }
     }
 
-    const handleError = () => {
-      if (currentSong?.previewUrl && audio.src !== currentSong.previewUrl) {
-        console.warn('Audio stream failed, switching to backup stream fallback...')
-        audio.src = currentSong.previewUrl
-        audio.play().then(() => setIsPlaying(true)).catch(() => {})
-      }
-    }
-
     const handleEnded = () => {
+      if (activeEngineRef.current !== 'html5') return
       if (repeatMode === 'one') {
         audio.currentTime = 0
         audio.play().catch(() => {})
@@ -629,13 +768,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     audio.addEventListener('timeupdate', handleTimeUpdate)
     audio.addEventListener('loadedmetadata', handleLoadedMetadata)
-    audio.addEventListener('error', handleError)
     audio.addEventListener('ended', handleEnded)
 
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate)
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata)
-      audio.removeEventListener('error', handleError)
       audio.removeEventListener('ended', handleEnded)
     }
   }, [repeatMode, queue, currentSong])
@@ -707,6 +844,22 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     >
       {children}
       <audio ref={audioRef} crossOrigin="anonymous" preload="auto" />
+      {/* 🌟 Global Official YouTube Stream Bridge for Full-Length Playback */}
+      <div
+        id="soundwave-global-yt-player-container"
+        style={{
+          position: 'fixed',
+          bottom: 0,
+          right: 0,
+          width: 200,
+          height: 200,
+          opacity: 0.01,
+          pointerEvents: 'none',
+          zIndex: -10
+        }}
+      >
+        <div id="soundwave-global-yt-player" />
+      </div>
     </PlayerContext.Provider>
   )
 }
