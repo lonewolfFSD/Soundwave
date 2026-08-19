@@ -147,6 +147,24 @@ export const resolveFullLengthSong = async (
     return updatedSong
   }
 
+  // 4. Guaranteed Fail-Safe: Query online metadata for playable audio stream
+  if (!updatedSong.url || !updatedSong.url.startsWith('http')) {
+    try {
+      const q = `${updatedSong.title} ${updatedSong.artist}`.trim()
+      const itunesRes = await fetch(
+        `https://itunes.apple.com/search?term=${encodeURIComponent(q)}&media=music&entity=song&limit=1`
+      )
+      if (itunesRes.ok) {
+        const data = await itunesRes.json()
+        if (data.results && data.results.length > 0 && data.results[0].previewUrl) {
+          updatedSong.url = data.results[0].previewUrl
+          updatedSong.previewUrl = data.results[0].previewUrl
+          return updatedSong
+        }
+      }
+    } catch {}
+  }
+
   return updatedSong
 }
 
@@ -204,15 +222,24 @@ export const getTrendingYouTubeMusic = async (): Promise<Song[]> => {
         const rawCover = entry['im:image']?.[2]?.label || entry['im:image']?.[0]?.label
         const cover = rawCover ? rawCover.replace(/170x170bb/g, '600x600bb') : ''
         const trackId = entry.id?.attributes?.['im:id'] || Math.random().toString(36).slice(2, 9)
-        const preview = entry?.link?.[1]?.attributes?.href || ''
+        
+        let preview = ''
+        if (Array.isArray(entry.link)) {
+          const audioLink = entry.link.find((l: any) =>
+            l?.attributes?.type?.includes('audio') || l?.attributes?.rel === 'enclosure' || l?.attributes?.title === 'Preview'
+          )
+          preview = audioLink?.attributes?.href || entry.link[1]?.attributes?.href || ''
+        } else if (entry.link?.attributes?.href) {
+          preview = entry.link.attributes.href
+        }
 
         return {
           id: `top_${trackId}`,
           title: sanitizeTitle(title),
           artist: sanitizeTitle(artist),
           duration: 210,
-          url: preview,
-          previewUrl: preview,
+          url: preview || '',
+          previewUrl: preview || '',
           playlistId: 'trending',
           coverArtBase64: cover,
           youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + ' ' + artist)}`

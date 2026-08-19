@@ -468,12 +468,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }
 
-  const resumeSong = () => {
+  const resumeSong = async () => {
     initAudioGraph()
     if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
       audioCtxRef.current.resume().catch(() => {})
     }
     if (audioRef.current) {
+      if ((!audioRef.current.src || audioRef.current.src === window.location.href) && currentSong) {
+        const resolved = await resolveFullLengthSong(currentSong, audioQuality)
+        if (resolved.url) {
+          audioRef.current.src = resolved.url
+        }
+      }
       audioRef.current.play()
         .then(() => setIsPlaying(true))
         .catch(e => console.error("Resume failed:", e))
