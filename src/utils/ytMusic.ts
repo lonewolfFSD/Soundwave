@@ -1,10 +1,11 @@
-// YouTube Music Service: Production Resilient Metadata & Audio Stream Discovery
+// YouTube Music Service: 100% CORS-Safe Production Metadata & Audio Stream Discovery
 import type { Song } from '../context/PlayerContext'
 
-// In-memory cache for video IDs
+// In-memory cache for video IDs and resolved audio streams
 const videoIdCache = new Map<string, string>()
+const streamCache = new Map<string, string>()
 
-// Public Invidious & Piped CORS-friendly instances for production fallback
+// Public Invidious & Piped instances
 const PUBLIC_INVIDIOUS_INSTANCES = [
   'https://inv.nadeko.net',
   'https://invidious.nerdvpn.de',
@@ -20,6 +21,39 @@ const PUBLIC_PIPED_INSTANCES = [
   'https://api.piped.privacy.com.de',
   'https://piped-api.garudalinux.org'
 ]
+
+const COBALT_INSTANCES = [
+  'https://cobalt-api.kwiatekm.tokyo',
+  'https://api.cobalt.tools',
+  'https://co.wuk.sh/api/json'
+]
+
+/**
+ * Universal CORS-safe fetcher: tries direct, then falls back to trusted CORS proxy tunnels
+ */
+export const corsSafeFetch = async (url: string, options: RequestInit = {}, timeoutMs = 3500): Promise<Response> => {
+  // 1. Direct fetch attempt
+  try {
+    const directRes = await fetch(url, { ...options, signal: AbortSignal.timeout(timeoutMs) })
+    if (directRes.ok) return directRes
+  } catch {}
+
+  // 2. CORS Proxy Tunnel: corsproxy.io
+  try {
+    const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(url)}`
+    const proxyRes = await fetch(proxyUrl, { ...options, signal: AbortSignal.timeout(timeoutMs) })
+    if (proxyRes.ok) return proxyRes
+  } catch {}
+
+  // 3. CORS Proxy Tunnel: allorigins.win
+  try {
+    const allOriginsUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+    const allRes = await fetch(allOriginsUrl, { ...options, signal: AbortSignal.timeout(timeoutMs) })
+    if (allRes.ok) return allRes
+  } catch {}
+
+  throw new Error(`CORS-safe fetch failed for ${url}`)
+}
 
 /**
  * Clean track title
@@ -44,36 +78,43 @@ export const isYoutubeVideoId = (id: string): boolean => {
 }
 
 /**
- * Search YouTube Video ID with multi-tier CORS-compliant fallbacks
+ * Search YouTube Video ID with CORS-safe proxy fallback
  */
 export const findYouTubeVideoId = async (title: string, artist: string): Promise<string> => {
   const cleanQ = `${sanitizeTitle(title)} ${sanitizeTitle(artist)} official audio`.trim()
   const cacheKey = cleanQ.toLowerCase()
   if (videoIdCache.has(cacheKey)) return videoIdCache.get(cacheKey)!
 
-  // 1. Try local dev backend search if on localhost or proxy available
-  try {
-    const res = await fetch(`/api/yt-search?q=${encodeURIComponent(cleanQ)}`, { signal: AbortSignal.timeout(3500) })
-    if (res.ok) {
-      const items = await res.json()
-      if (Array.isArray(items) && items.length > 0 && items[0]?.id) {
-        const id = items[0].id.replace('yt_', '')
-        if (isYoutubeVideoId(id)) {
-          videoIdCache.set(cacheKey, id)
-          return id
+  const isLocalHost = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname.includes('192.168.')
+  )
+
+  // 1. If on localhost dev server, use local /api/yt-search
+  if (isLocalHost) {
+    try {
+      const res = await fetch(`/api/yt-search?q=${encodeURIComponent(cleanQ)}`, { signal: AbortSignal.timeout(3000) })
+      if (res.ok) {
+        const items = await res.json()
+        if (Array.isArray(items) && items.length > 0 && items[0]?.id) {
+          const id = items[0].id.replace('yt_', '')
+          if (isYoutubeVideoId(id)) {
+            videoIdCache.set(cacheKey, id)
+            return id
+          }
         }
       }
-    }
-  } catch {}
+    } catch {}
+  }
 
-  // 2. Try Invidious Public APIs (CORS-friendly, works in production browsers)
-  for (const instance of PUBLIC_INVIDIOUS_INSTANCES) {
+  // 2. Try Invidious instances with CORS-safe tunnel
+  for (const instance of PUBLIC_INVIDIOUS_INSTANCES.slice(0, 3)) {
     try {
-      const invRes = await fetch(`${instance}/api/v1/search?q=${encodeURIComponent(cleanQ)}&type=video`, {
-        signal: AbortSignal.timeout(3500)
-      })
-      if (invRes.ok) {
-        const data = await invRes.json()
+      const targetUrl = `${instance}/api/v1/search?q=${encodeURIComponent(cleanQ)}&type=video`
+      const res = await corsSafeFetch(targetUrl, {}, 3000)
+      if (res.ok) {
+        const data = await res.json()
         if (Array.isArray(data) && data.length > 0) {
           const first = data.find((item: any) => item.videoId && isYoutubeVideoId(item.videoId)) || data[0]
           if (first && first.videoId && isYoutubeVideoId(first.videoId)) {
@@ -85,14 +126,13 @@ export const findYouTubeVideoId = async (title: string, artist: string): Promise
     } catch {}
   }
 
-  // 3. Try Piped Public APIs
-  for (const piped of PUBLIC_PIPED_INSTANCES) {
+  // 3. Try Piped instances with CORS-safe tunnel
+  for (const piped of PUBLIC_PIPED_INSTANCES.slice(0, 2)) {
     try {
-      const pRes = await fetch(`${piped}/search?q=${encodeURIComponent(cleanQ)}&filter=videos`, {
-        signal: AbortSignal.timeout(3500)
-      })
-      if (pRes.ok) {
-        const pData = await pRes.json()
+      const targetUrl = `${piped}/search?q=${encodeURIComponent(cleanQ)}&filter=videos`
+      const res = await corsSafeFetch(targetUrl, {}, 3000)
+      if (res.ok) {
+        const pData = await res.json()
         const items = pData.items || []
         if (Array.isArray(items) && items.length > 0) {
           const first = items[0]
@@ -124,6 +164,8 @@ export const getAudioStreamUrl = async (
   }
   if (!videoId) return ''
 
+  if (streamCache.has(videoId)) return streamCache.get(videoId)!
+
   const isLocalHost = typeof window !== 'undefined' && (
     window.location.hostname === 'localhost' ||
     window.location.hostname === '127.0.0.1' ||
@@ -132,39 +174,69 @@ export const getAudioStreamUrl = async (
 
   // On localhost dev server, use the local yt-dlp backend
   if (isLocalHost) {
-    return `/api/yt-stream?id=${videoId}&quality=${quality}`
+    const localUrl = `/api/yt-stream?id=${videoId}&quality=${quality}`
+    streamCache.set(videoId, localUrl)
+    return localUrl
   }
 
-  // In production deployment (e.g. soundwave.lonewolffsd.in), query direct stream endpoints
-  for (const instance of PUBLIC_INVIDIOUS_INSTANCES.slice(0, 4)) {
+  // In production deployment (e.g. soundwave.lonewolffsd.in):
+  // 1. Try Cobalt API (CORS-friendly direct audio stream)
+  for (const cobalt of COBALT_INSTANCES) {
     try {
-      const streamRes = await fetch(`${instance}/api/v1/videos/${videoId}`, {
-        signal: AbortSignal.timeout(3000)
+      const res = await fetch(cobalt, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          url: `https://www.youtube.com/watch?v=${videoId}`,
+          isAudioOnly: true,
+          audioFormat: 'mp3'
+        }),
+        signal: AbortSignal.timeout(3500)
       })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.url && typeof data.url === 'string') {
+          streamCache.set(videoId, data.url)
+          return data.url
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Try Invidious Video Info API via CORS-safe tunnel
+  for (const instance of PUBLIC_INVIDIOUS_INSTANCES.slice(0, 3)) {
+    try {
+      const targetUrl = `${instance}/api/v1/videos/${videoId}`
+      const streamRes = await corsSafeFetch(targetUrl, {}, 3000)
       if (streamRes.ok) {
         const videoData = await streamRes.json()
-        // Check adaptive audio formats (m4a, webm, mp4)
         const audioFormats = (videoData.adaptiveFormats || []).filter((f: any) =>
           f.type?.includes('audio') || f.mimeType?.includes('audio')
         )
         if (audioFormats.length > 0) {
-          // Sort by highest bitrate/quality
           audioFormats.sort((a: any, b: any) => (b.bitrate || b.audioSampleRate || 0) - (a.bitrate || a.audioSampleRate || 0))
           const chosen = audioFormats[0]
-          if (chosen.url) return chosen.url
+          if (chosen.url) {
+            streamCache.set(videoId, chosen.url)
+            return chosen.url
+          }
         }
-
-        // Direct format streams fallback
         const formatStreams = videoData.formatStreams || []
         if (formatStreams.length > 0 && formatStreams[0]?.url) {
+          streamCache.set(videoId, formatStreams[0].url)
           return formatStreams[0].url
         }
       }
     } catch {}
   }
 
-  // Fallback to Invidious audio proxy stream
-  return `https://inv.nadeko.net/latest_version?id=${videoId}&itag=140`
+  // 3. Fallback to direct public Invidious audio proxy
+  const fallbackUrl = `https://inv.nadeko.net/latest_version?id=${videoId}&itag=140`
+  streamCache.set(videoId, fallbackUrl)
+  return fallbackUrl
 }
 
 /**
@@ -211,7 +283,6 @@ export const resolveFullLengthSong = async (
     }
     updatedSong.youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`
   } else if (updatedSong.previewUrl) {
-    // If no video ID found, fall back to iTunes preview stream
     updatedSong.url = updatedSong.previewUrl
   }
 
@@ -245,7 +316,7 @@ export const searchYouTubeMusic = async (query: string): Promise<Song[]> => {
             previewUrl: item.previewUrl || '',
             playlistId: 'online_search',
             coverArtBase64: highResCover,
-            youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent((item.trackName || '') + ' ' + (item.artistName || ''))}`
+            youtubeUrl: `https://www.youtube.com/watch?v=${item.trackId}`
           }
         })
       }
@@ -283,7 +354,7 @@ export const getTrendingYouTubeMusic = async (): Promise<Song[]> => {
           previewUrl: preview,
           playlistId: 'trending',
           coverArtBase64: cover,
-          youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + ' ' + artist)}`
+          youtubeUrl: `https://www.youtube.com/watch?v=${trackId}`
         }
       })
 
@@ -350,7 +421,7 @@ export const getCategoryTracks = async (searchQuery: string, limit = 20): Promis
             previewUrl: item.previewUrl || '',
             playlistId: 'category',
             coverArtBase64: highResCover,
-            youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent((item.trackName || '') + ' ' + (item.artistName || ''))}`
+            youtubeUrl: `https://www.youtube.com/watch?v=${item.trackId}`
           }
         })
         return [...songs].sort(() => 0.5 - Math.random())
