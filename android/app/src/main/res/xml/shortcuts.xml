@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="search_song"
+        android:enabled="true"
+        android:icon="@drawable/ic_search"
+        android:shortcutShortLabel="@string/shortcut_search"
+        android:shortcutLongLabel="@string/shortcut_search_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.lonewolffsd.soundwave"
+            android:targetClass="com.lonewolffsd.soundwave.MainActivity"
+            android:data="soundwave://search" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="access_account"
+        android:enabled="true"
+        android:icon="@drawable/ic_account"
+        android:shortcutShortLabel="@string/shortcut_account"
+        android:shortcutLongLabel="@string/shortcut_account_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.lonewolffsd.soundwave"
+            android:targetClass="com.lonewolffsd.soundwave.MainActivity"
+            android:data="soundwave://account" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="play_random"
+        android:enabled="true"
+        android:icon="@drawable/ic_shuffle"
+        android:shortcutShortLabel="@string/shortcut_shuffle"
+        android:shortcutLongLabel="@string/shortcut_shuffle_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.lonewolffsd.soundwave"
+            android:targetClass="com.lonewolffsd.soundwave.MainActivity"
+            android:data="soundwave://shuffle" />
+    </shortcut>
+</shortcuts>

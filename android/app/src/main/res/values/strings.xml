@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Soundwave Music</string>
+    <string name="title_activity_main">Soundwave Music</string>
+    <string name="package_name">com.lonewolffsd.soundwave</string>
+    <string name="custom_url_scheme">com.lonewolffsd.soundwave</string>
+
+    <!-- Shortcut Labels -->
+    <string name="shortcut_search">Search</string>
+    <string name="shortcut_search_long">Search for a song</string>
+    <string name="shortcut_account">Account</string>
+    <string name="shortcut_account_long">Access your account</string>
+    <string name="shortcut_shuffle">Shuffle</string>
+    <string name="shortcut_shuffle_long">Play random music</string>
+</resources>

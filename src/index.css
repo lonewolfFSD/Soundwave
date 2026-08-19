@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.custom-text-style {
+    color: black;
+}
+
+/* src/index.css */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.6; /* Matches the opacity in your component */
+  }
+}
+
+@keyframes sw-grid-drift {
+  0% {
+    background-position: 0px 0px, 0px 0px;
+  }
+  100% {
+    background-position: 60px 60px, 60px 60px;
+  }
+}
+
+.sw-grid-animated {
+  animation: sw-grid-drift 18s linear infinite;
+}
+
+.animate-fade-in {
+  animation: fadeIn 1s ease-in-out forwards;
+}

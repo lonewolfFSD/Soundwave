@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "928688843298",
+    "project_id": "music-player-c4be1",
+    "storage_bucket": "music-player-c4be1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:928688843298:android:3f2f26b7952dc596e4f87b",
+        "android_client_info": {
+          "package_name": "com.lonewolffsd.soundwave"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "928688843298-tuvkab8jhcphjuuf2ee36ogu0054t30d.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAhYuE7hBBfFN-RVcVj8Wd3VFsUNxxeeuA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "928688843298-mnq71t4hk7g57nlikhtd5nmvimb2927d.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
