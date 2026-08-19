@@ -1461,7 +1461,7 @@ useEffect(() => {
               <div className="w-full h-full relative overflow-hidden flex flex-col">
                 <div 
                   ref={mobileLyricsContainerRef}
-                  onScroll={handleUserScrollMobile}
+                  onScroll={handleMobileLyricsScroll}
                   className="w-full h-full overflow-y-auto scrollbar-hide py-[25vh] space-y-8 px-6 text-left"
                 >
                   {parsedLyrics.length > 0 ? (
