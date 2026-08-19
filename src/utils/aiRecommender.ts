@@ -350,7 +350,8 @@ export const getSongRadioQueue = async (
               title: item.trackName || 'Unknown Title',
               artist: item.artistName || 'Unknown Artist',
               duration: Math.floor((item.trackTimeMillis || 0) / 1000) || 210,
-              url: `yt_online://${item.trackId}`,
+              url: item.previewUrl || `yt_online://${item.trackId}`,
+              previewUrl: item.previewUrl || '',
               playlistId: 'radio',
               coverArtBase64: highResCover,
               youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent((item.trackName || '') + ' ' + (item.artistName || ''))}`

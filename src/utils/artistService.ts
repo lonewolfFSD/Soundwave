@@ -121,7 +121,8 @@ export const fetchArtistProfile = async (artistName: string): Promise<ArtistProf
               title: item.trackName,
               artist: item.artistName || cleanName,
               duration: item.trackTimeMillis ? Math.round(item.trackTimeMillis / 1000) : 210,
-              url: `yt_online://${item.trackId}`,
+              url: item.previewUrl || `yt_online://${item.trackId}`,
+              previewUrl: item.previewUrl || '',
               playlistId: 'artist_top',
               coverArtBase64: highCover,
               youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent((item.trackName || '') + ' ' + (item.artistName || cleanName))}`
