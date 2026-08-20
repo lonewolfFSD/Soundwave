@@ -3,8 +3,6 @@ import { useAuth } from '../context/AuthContext'
 import { db } from '../utils/firebase'
 import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { Plus, Music, X, Home, Import, Library, User, User2, Phone, Settings2, Mic, Radio } from 'lucide-react' 
-import PlaylistManager from './PlaylistManager'
-import Modal from './Modal'
 import GlobalSongUpload from './GlobalSongUpload' 
 import { useNavigate } from 'react-router-dom'
 import Logo from '../images/logo.png';
@@ -31,6 +29,7 @@ interface SidebarProps {
   onClose?: () => void
   onShowLibrary: () => void
   onOpenSoundie?: () => void
+  onOpenCreatePlaylist?: () => void
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -40,12 +39,12 @@ const Sidebar: React.FC<SidebarProps> = ({
   onClose,
   onShowLibrary,
   onOpenSoundie,
+  onOpenCreatePlaylist,
 }) => {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [loading, setLoading] = useState(true)
-  const [showNewPlaylistModal, setShowNewPlaylistModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const [showMobileSettings, setShowMobileSettings] = useState(false);
@@ -314,8 +313,6 @@ const themeConfig: Record<string, any> = {
       setActiveTab(4);
     } else if (showUploadModal) {
       setActiveTab(3);
-    } else if (showNewPlaylistModal) {
-      setActiveTab(2);
     } else if (location.pathname.includes('/library') || selectedPlaylist !== null) {
       setActiveTab(1);
     } else {
@@ -327,7 +324,7 @@ const themeConfig: Record<string, any> = {
         setActiveTab(0);
       }
     }
-  }, [location.pathname, showMobileSettings, showUploadModal, showNewPlaylistModal, selectedPlaylist]);
+  }, [location.pathname, showMobileSettings, showUploadModal, selectedPlaylist]);
 
   const handleMobileNav = async (index: number) => {
   const isHapticEnabled = localStorage.getItem('sw_haptics') !== 'false';
@@ -343,7 +340,6 @@ const themeConfig: Record<string, any> = {
   // Handle Settings (Index 4: Native Mobile Settings)
   if (index === 4) {
     setShowUploadModal(false);
-    setShowNewPlaylistModal(false);
     setShowMobileSettings(true);
     setActiveTab(4);
     return; 
@@ -352,7 +348,6 @@ const themeConfig: Record<string, any> = {
   // Handle Soundie (Index 5)
   if (index === 5) {
     setShowUploadModal(false);
-    setShowNewPlaylistModal(false);
     setShowMobileSettings(false);
 
     // Show terms modal first if not yet accepted
@@ -373,21 +368,19 @@ const themeConfig: Record<string, any> = {
     navigate('/', { replace: true });
     onSelectPlaylist(null);
     setShowUploadModal(false);
-    setShowNewPlaylistModal(false);
     window.dispatchEvent(new Event('sw-go-home')); 
   }
   else if (index === 1) {
     onShowLibrary(); 
     setShowUploadModal(false);
-    setShowNewPlaylistModal(false);
   } 
   else if (index === 2) {
-    setShowNewPlaylistModal(true);
     setShowUploadModal(false);
+    if (onOpenCreatePlaylist) onOpenCreatePlaylist();
+    else window.dispatchEvent(new Event('soundwave-open-create-playlist'));
   } 
   else if (index === 3) {
     setShowUploadModal(true);
-    setShowNewPlaylistModal(false);
   }
 };
 
@@ -513,7 +506,11 @@ const themeConfig: Record<string, any> = {
             </button>
 
             <button 
-              onClick={() => setShowNewPlaylistModal(true)}
+              onClick={() => {
+                if (onOpenCreatePlaylist) onOpenCreatePlaylist();
+                else window.dispatchEvent(new Event('soundwave-open-create-playlist'));
+                if (onClose) onClose();
+              }}
               className={`w-full flex items-center justify-left gap-2 py-3.5 px-5 mt-0.5 text-sm ${reduceMotion ? '' : 'transition-all duration-200'} animate-sidebar ${navBtnClass}`} 
               style={{ fontFamily: 'Space Grotesk, sans-serif', animationDelay: reduceMotion ? '0ms' : '150ms' }}
             >
@@ -694,12 +691,6 @@ const themeConfig: Record<string, any> = {
           </div>
         </div>
       </div>
-
-      {showNewPlaylistModal && (
-        <Modal isOpen={showNewPlaylistModal} onClose={() => setShowNewPlaylistModal(false)} title="Create New Playlist">
-          <PlaylistManager onBack={() => setShowNewPlaylistModal(false)} />
-        </Modal>
-      )}
 
       {showUploadModal && (
         <GlobalSongUpload onClose={() => setShowUploadModal(false)} />

@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../utils/firebase'
 import { collection, addDoc } from 'firebase/firestore'
-import { Image as ImageIcon, ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Sparkles, Image as ImageIcon, Plus, X, FolderPlus } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
+import { Haptics, ImpactStyle } from '@capacitor/haptics'
 
 interface PlaylistManagerProps {
   onBack: () => void
@@ -12,167 +13,208 @@ interface PlaylistManagerProps {
 const getThemeStyles = (theme: string) => {
   const themes: Record<string, any> = {
     default: {
-      mainBg: 'bg-black',
-      textMain: 'text-white',
+      accentColor: '#818cf8',
+      textMain: 'text-slate-100',
       textMuted: 'text-zinc-400',
-      inputBg: 'bg-zinc-900 border-white/10 placeholder-zinc-600',
-      focusRing: 'focus:border-indigo-500 focus:ring-indigo-500',
-      uploadBg: 'bg-zinc-900/50 hover:bg-zinc-900 border-white/10 hover:border-indigo-500/50',
-      iconColor: 'text-zinc-500 group-hover:text-indigo-400',
-      primaryBtn: 'bg-white text-black hover:bg-zinc-200 shadow-white/5',
+      cardBg: 'bg-white/[0.03] border-white/[0.08]',
+      inputBg: 'bg-white/[0.04] border-white/10 focus:border-indigo-400 focus:bg-white/[0.07]',
+      pillBg: 'bg-white/[0.05] border-white/10 hover:border-indigo-400/50 hover:bg-white/[0.08] text-zinc-300',
+      pillActive: 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300',
+      primaryBtn: 'bg-white text-black hover:bg-zinc-200 shadow-[0_0_20px_rgba(255,255,255,0.15)]',
+      dropzoneBg: 'bg-white/[0.02] border-white/10 hover:border-indigo-400/40',
+      headerBadge: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20',
       spinner: 'border-black/30 border-t-black',
-      headerBorder: 'border-white/10'
     },
     sunset: {
-      mainBg: 'bg-[#0f0604]',
+      accentColor: '#f97316',
       textMain: 'text-orange-50',
-      textMuted: 'text-orange-200/60',
-      inputBg: 'bg-[#1a0502]/80 border-orange-500/20 placeholder-orange-500/40',
-      focusRing: 'focus:border-orange-500 focus:ring-orange-500',
-      uploadBg: 'bg-[#1a0502]/50 hover:bg-[#2a0808] border-orange-500/20 hover:border-orange-500/50',
-      iconColor: 'text-orange-500/50 group-hover:text-orange-400',
-      primaryBtn: 'bg-orange-600 text-white hover:bg-orange-500 shadow-orange-600/20',
-      spinner: 'border-white/30 border-t-white',
-      headerBorder: 'border-orange-500/20'
+      textMuted: 'text-orange-200/50',
+      cardBg: 'bg-orange-950/[0.2] border-orange-500/[0.15]',
+      inputBg: 'bg-orange-950/[0.3] border-orange-500/20 focus:border-orange-400 focus:bg-orange-950/[0.4]',
+      pillBg: 'bg-orange-500/[0.06] border-orange-500/20 hover:border-orange-400/50 hover:bg-orange-500/[0.1] text-orange-200',
+      pillActive: 'bg-orange-500/25 border-orange-500/50 text-orange-200',
+      primaryBtn: 'bg-orange-500 text-black hover:bg-orange-400 shadow-[0_0_20px_rgba(249,115,22,0.25)]',
+      dropzoneBg: 'bg-orange-950/[0.2] border-orange-500/20 hover:border-orange-400/40',
+      headerBadge: 'bg-orange-500/10 text-orange-300 border-orange-500/20',
+      spinner: 'border-black/30 border-t-black',
     },
     valentine: {
-      mainBg: 'bg-[#14050a]',
+      accentColor: '#ec4899',
       textMain: 'text-pink-50',
-      textMuted: 'text-pink-200/60',
-      inputBg: 'bg-[#1f0610]/80 border-pink-500/20 placeholder-pink-500/40',
-      focusRing: 'focus:border-pink-500 focus:ring-pink-500',
-      uploadBg: 'bg-[#1f0610]/50 hover:bg-[#330a1a] border-pink-500/20 hover:border-pink-500/50',
-      iconColor: 'text-pink-500/50 group-hover:text-pink-400',
-      primaryBtn: 'bg-pink-600 text-white hover:bg-pink-500 shadow-pink-600/20',
-      spinner: 'border-white/30 border-t-white',
-      headerBorder: 'border-pink-500/20'
+      textMuted: 'text-pink-200/50',
+      cardBg: 'bg-pink-950/[0.2] border-pink-500/[0.15]',
+      inputBg: 'bg-pink-950/[0.3] border-pink-500/20 focus:border-pink-400 focus:bg-pink-950/[0.4]',
+      pillBg: 'bg-pink-500/[0.06] border-pink-500/20 hover:border-pink-400/50 hover:bg-pink-500/[0.1] text-pink-200',
+      pillActive: 'bg-pink-500/25 border-pink-500/50 text-pink-200',
+      primaryBtn: 'bg-pink-500 text-black hover:bg-pink-400 shadow-[0_0_20px_rgba(236,72,153,0.25)]',
+      dropzoneBg: 'bg-pink-950/[0.2] border-pink-500/20 hover:border-pink-400/40',
+      headerBadge: 'bg-pink-500/10 text-pink-300 border-pink-500/20',
+      spinner: 'border-black/30 border-t-black',
     },
     jungle: {
-      mainBg: 'bg-[#021008]',
+      accentColor: '#10b981',
       textMain: 'text-emerald-50',
-      textMuted: 'text-emerald-200/60',
-      inputBg: 'bg-[#03170b]/80 border-emerald-500/20 placeholder-emerald-500/40',
-      focusRing: 'focus:border-emerald-500 focus:ring-emerald-500',
-      uploadBg: 'bg-[#03170b]/50 hover:bg-[#062414] border-emerald-500/20 hover:border-emerald-500/50',
-      iconColor: 'text-emerald-500/50 group-hover:text-emerald-400',
-      primaryBtn: 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-600/20',
-      spinner: 'border-white/30 border-t-white',
-      headerBorder: 'border-emerald-500/20'
+      textMuted: 'text-emerald-200/50',
+      cardBg: 'bg-emerald-950/[0.2] border-emerald-500/[0.15]',
+      inputBg: 'bg-emerald-950/[0.3] border-emerald-500/20 focus:border-emerald-400 focus:bg-emerald-950/[0.4]',
+      pillBg: 'bg-emerald-500/[0.06] border-emerald-500/20 hover:border-emerald-400/50 hover:bg-emerald-500/[0.1] text-emerald-200',
+      pillActive: 'bg-emerald-500/25 border-emerald-500/50 text-emerald-200',
+      primaryBtn: 'bg-emerald-500 text-black hover:bg-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.25)]',
+      dropzoneBg: 'bg-emerald-950/[0.2] border-emerald-500/20 hover:border-emerald-400/40',
+      headerBadge: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
+      spinner: 'border-black/30 border-t-black',
     },
     ocean: {
-      mainBg: 'bg-[#02090e]',
+      accentColor: '#06b6d4',
       textMain: 'text-cyan-50',
-      textMuted: 'text-cyan-200/60',
-      inputBg: 'bg-[#04121c]/80 border-cyan-500/20 placeholder-cyan-500/40',
-      focusRing: 'focus:border-cyan-500 focus:ring-cyan-500',
-      uploadBg: 'bg-[#04121c]/50 hover:bg-[#061a29] border-cyan-500/20 hover:border-cyan-500/50',
-      iconColor: 'text-cyan-500/50 group-hover:text-cyan-400',
-      primaryBtn: 'bg-cyan-600 text-white hover:bg-cyan-500 shadow-cyan-600/20',
-      spinner: 'border-white/30 border-t-white',
-      headerBorder: 'border-cyan-500/20'
+      textMuted: 'text-cyan-200/50',
+      cardBg: 'bg-cyan-950/[0.2] border-cyan-500/[0.15]',
+      inputBg: 'bg-cyan-950/[0.3] border-cyan-500/20 focus:border-cyan-400 focus:bg-cyan-950/[0.4]',
+      pillBg: 'bg-cyan-500/[0.06] border-cyan-500/20 hover:border-cyan-400/50 hover:bg-cyan-500/[0.1] text-cyan-200',
+      pillActive: 'bg-cyan-500/25 border-cyan-500/50 text-cyan-200',
+      primaryBtn: 'bg-cyan-500 text-black hover:bg-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.25)]',
+      dropzoneBg: 'bg-cyan-950/[0.2] border-cyan-500/20 hover:border-cyan-400/40',
+      headerBadge: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20',
+      spinner: 'border-black/30 border-t-black',
     },
     cyberpunk: {
-      mainBg: 'bg-[#090111]',
+      accentColor: '#d946ef',
       textMain: 'text-fuchsia-50',
-      textMuted: 'text-fuchsia-200/60',
-      inputBg: 'bg-[#120322]/80 border-fuchsia-500/20 placeholder-fuchsia-500/40',
-      focusRing: 'focus:border-fuchsia-500 focus:ring-fuchsia-500',
-      uploadBg: 'bg-[#120322]/50 hover:bg-[#22063b] border-fuchsia-500/20 hover:border-fuchsia-500/50',
-      iconColor: 'text-fuchsia-500/50 group-hover:text-fuchsia-400',
-      primaryBtn: 'bg-fuchsia-600 text-white hover:bg-fuchsia-500 shadow-fuchsia-600/20',
-      spinner: 'border-white/30 border-t-white',
-      headerBorder: 'border-fuchsia-500/20'
+      textMuted: 'text-fuchsia-200/50',
+      cardBg: 'bg-fuchsia-950/[0.2] border-fuchsia-500/[0.15]',
+      inputBg: 'bg-fuchsia-950/[0.3] border-fuchsia-500/20 focus:border-fuchsia-400 focus:bg-fuchsia-950/[0.4]',
+      pillBg: 'bg-fuchsia-500/[0.06] border-fuchsia-500/20 hover:border-fuchsia-400/50 hover:bg-fuchsia-500/[0.1] text-fuchsia-200',
+      pillActive: 'bg-fuchsia-500/25 border-fuchsia-500/50 text-fuchsia-200',
+      primaryBtn: 'bg-fuchsia-500 text-black hover:bg-fuchsia-400 shadow-[0_0_20px_rgba(217,70,239,0.25)]',
+      dropzoneBg: 'bg-fuchsia-950/[0.2] border-fuchsia-500/20 hover:border-fuchsia-400/40',
+      headerBadge: 'bg-fuchsia-500/10 text-fuchsia-300 border-fuchsia-500/20',
+      spinner: 'border-black/30 border-t-black',
     },
     midnight: {
-      mainBg: 'bg-[#07030e]',
+      accentColor: '#a78bfa',
       textMain: 'text-violet-50',
-      textMuted: 'text-violet-200/60',
-      inputBg: 'bg-[#0f071c]/80 border-violet-500/20 placeholder-violet-500/40',
-      focusRing: 'focus:border-violet-500 focus:ring-violet-500',
-      uploadBg: 'bg-[#0f071c]/50 hover:bg-[#1a0c30] border-violet-500/20 hover:border-violet-500/50',
-      iconColor: 'text-violet-500/50 group-hover:text-violet-400',
-      primaryBtn: 'bg-violet-600 text-white hover:bg-violet-500 shadow-violet-600/20',
-      spinner: 'border-white/30 border-t-white',
-      headerBorder: 'border-violet-500/20'
+      textMuted: 'text-violet-200/50',
+      cardBg: 'bg-violet-950/[0.2] border-violet-500/[0.15]',
+      inputBg: 'bg-violet-950/[0.3] border-violet-500/20 focus:border-violet-400 focus:bg-violet-950/[0.4]',
+      pillBg: 'bg-violet-500/[0.06] border-violet-500/20 hover:border-violet-400/50 hover:bg-violet-500/[0.1] text-violet-200',
+      pillActive: 'bg-violet-500/25 border-violet-500/50 text-violet-200',
+      primaryBtn: 'bg-violet-500 text-black hover:bg-violet-400 shadow-[0_0_20px_rgba(139,92,246,0.25)]',
+      dropzoneBg: 'bg-violet-950/[0.2] border-violet-500/20 hover:border-violet-400/40',
+      headerBadge: 'bg-violet-500/10 text-violet-300 border-violet-500/20',
+      spinner: 'border-black/30 border-t-black',
     },
     coffee: {
-      mainBg: 'bg-[#0a0603]',
+      accentColor: '#f59e0b',
       textMain: 'text-amber-50',
-      textMuted: 'text-amber-200/60',
-      inputBg: 'bg-[#140c06]/80 border-amber-600/20 placeholder-amber-600/40',
-      focusRing: 'focus:border-amber-600 focus:ring-amber-600',
-      uploadBg: 'bg-[#140c06]/50 hover:bg-[#26150a] border-amber-600/20 hover:border-amber-600/50',
-      iconColor: 'text-amber-600/50 group-hover:text-amber-400',
-      primaryBtn: 'bg-amber-600 text-white hover:bg-amber-500 shadow-amber-600/20',
-      spinner: 'border-white/30 border-t-white',
-      headerBorder: 'border-amber-600/20'
+      textMuted: 'text-amber-200/50',
+      cardBg: 'bg-amber-950/[0.2] border-amber-500/[0.15]',
+      inputBg: 'bg-amber-950/[0.3] border-amber-500/20 focus:border-amber-400 focus:bg-amber-950/[0.4]',
+      pillBg: 'bg-amber-500/[0.06] border-amber-500/20 hover:border-amber-400/50 hover:bg-amber-500/[0.1] text-amber-200',
+      pillActive: 'bg-amber-500/25 border-amber-500/50 text-amber-200',
+      primaryBtn: 'bg-amber-500 text-black hover:bg-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.25)]',
+      dropzoneBg: 'bg-amber-950/[0.2] border-amber-500/20 hover:border-amber-400/40',
+      headerBadge: 'bg-amber-500/10 text-amber-300 border-amber-500/20',
+      spinner: 'border-black/30 border-t-black',
     }
   }
   return themes[theme] || themes['default']
 }
 
-const PlaylistManager: React.FC<PlaylistManagerProps> = ({ onBack }) => {
-  const { user, loading: authLoading } = useAuth()
+const VIBE_PRESETS = [
+  { label: '🔥 Workout & Gym', name: 'Workout Beast Mode' },
+  { label: '🌙 Midnight Chill', name: 'Midnight Lofi Chill' },
+  { label: '⚡ High Energy', name: 'High Energy Boost' },
+  { label: '🚗 Night Drive', name: 'Late Night Drive' },
+  { label: '🎧 Focus & Code', name: 'Deep Focus & Flow' },
+  { label: '💖 Romantic', name: 'Heart & Soul Vibes' },
+  { label: '🌧️ Sad Hours', name: 'Melancholy & Rain' },
+  { label: '🎉 Weekend Party', name: 'Weekend Bangerz' },
+]
+
+export const PlaylistManager: React.FC<PlaylistManagerProps> = ({ onBack }) => {
+  const { user } = useAuth()
   const [playlistName, setPlaylistName] = useState('')
+  const [description, setDescription] = useState('')
   const [coverArtBase64, setCoverArtBase64] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [isDragOver, setIsDragOver] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Theme locked to native only
   const [theme, setTheme] = useState(() => {
-    localStorage.getItem('soundwave_theme') || 'default';
+    return localStorage.getItem('soundwave_theme') || 'default'
   })
 
-  // Reduce motion active for all platforms
-  const [reduceMotion, setReduceMotion] = useState(localStorage.getItem('sw_reduce_motion') === 'true');
-
   useEffect(() => {
-    const isNative = Capacitor.isNativePlatform()
-    
-  const handleThemeUpdate = () => {
-  // Removed the isNative check
-  setTheme(localStorage.getItem('soundwave_theme') || 'default');
-};
-
-    const handleSettingsUpdate = () => {
-      setReduceMotion(localStorage.getItem('sw_reduce_motion') === 'true')
+    const handleThemeUpdate = () => {
+      setTheme(localStorage.getItem('soundwave_theme') || 'default')
     }
-
     window.addEventListener('theme-change', handleThemeUpdate)
-    window.addEventListener('sw-settings-updated', handleSettingsUpdate)
-    
+    window.addEventListener('sw-settings-updated', handleThemeUpdate)
     return () => {
       window.removeEventListener('theme-change', handleThemeUpdate)
-      window.removeEventListener('sw-settings-updated', handleSettingsUpdate)
+      window.removeEventListener('sw-settings-updated', handleThemeUpdate)
     }
   }, [])
 
+  const triggerHaptic = async (style = ImpactStyle.Light) => {
+    if (localStorage.getItem('sw_haptics') !== 'false' && Capacitor.isNativePlatform()) {
+      try { await Haptics.impact({ style }) } catch {}
+    }
+  }
+
   const styles = getThemeStyles(theme)
+
+  const handleImageFile = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setError('Please select a valid image file.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setCoverArtBase64(reader.result as string)
+      setError('')
+    }
+    reader.readAsDataURL(file)
+  }
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onloadend = () => setCoverArtBase64(reader.result as string)
-    reader.readAsDataURL(file)
+    if (file) handleImageFile(file)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) handleImageFile(file)
   }
 
   const handleCreatePlaylist = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    if (!playlistName.trim()) { setError('Playlist name cannot be empty'); return }
-    if (!user) { setError('You must be signed in.'); return }
+    if (!playlistName.trim()) {
+      setError('Playlist name cannot be empty')
+      return
+    }
+    if (!user) {
+      setError('You must be logged in to create playlists.')
+      return
+    }
 
+    triggerHaptic(ImpactStyle.Medium)
     setLoading(true)
     try {
       await addDoc(collection(db, 'playlists'), {
         userId: user.id,
-        name: playlistName,
+        name: playlistName.trim(),
+        description: description.trim() || null,
         songCount: 0,
         createdAt: new Date(),
         coverArtBase64: coverArtBase64 || null,
       })
       setPlaylistName('')
+      setDescription('')
       setCoverArtBase64(null)
       onBack()
     } catch (err: any) {
@@ -182,140 +224,223 @@ const PlaylistManager: React.FC<PlaylistManagerProps> = ({ onBack }) => {
     }
   }
 
-  if (authLoading) {
-    return (
-      <div className={`flex h-full items-center justify-center ${styles.mainBg}`}>
-        <div className={`animate-spin rounded-full h-8 w-8 border-b-2 ${styles.focusRing.split(' ')[0].replace('focus:', '')}`}></div>
-      </div>
-    )
-  }
-
   return (
-    <>
-      {/* We renamed it to animate-slide-up and ONLY inject the CSS 
-        if reduceMotion is false to prevent global conflicts. 
-      */}
-      {!reduceMotion && (
-        <style>{`
-          @keyframes slideUpFadeManager {
-            from { opacity: 0; transform: translateY(15px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-          .animate-slide-up {
-            animation: slideUpFadeManager 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-            opacity: 0; /* starts hidden before animation runs */
-          }
-        `}</style>
-      )}
-
-      <div className={`flex flex-col min-h-screen md:min-h-full w-full md:items-center md:justify-center p-0 md:p-6 ${styles.mainBg} transition-colors duration-500`}>
-        
-        {/* We dynamically apply the class instead of trying to override it with CSS */}
-        <div className={`w-full max-w-md flex flex-col h-full md:h-auto ${!reduceMotion ? 'animate-slide-up' : 'opacity-100'}`}>
+    <div className="flex-1 flex flex-col overflow-y-auto px-4 py-6 md:px-10 md:py-8 sw-scroll">
+      
+      {/* ── TOP HEADER / NAV ── */}
+      <div className="max-w-4xl mx-auto w-full mb-8">
+        <div className="flex items-center justify-between gap-4 mb-3">
+          <button
+            onClick={() => { triggerHaptic(); onBack(); }}
+            className={`p-2.5 rounded-full ${styles.cardBg} ${styles.textMain} hover:scale-105 active:scale-95 transition-transform flex items-center justify-center shrink-0`}
+            title="Back to Home"
+          >
+            <ArrowLeft size={20} />
+          </button>
           
-          <div className={`flex items-center justify-between p-5 md:p-0 border-b md:border-b-0 ${styles.headerBorder} shrink-0 md:mb-6`}>
-            <button onClick={onBack} className={`${styles.textMain} hover:opacity-70 transition-opacity`}>
-              <ArrowLeft size={24} className="md:w-5 md:h-5" />
-            </button>
-            <h1 className={`text-xl md:text-3xl font-bold tracking-tight ${styles.textMain} md:ml-4 flex-1 text-center md:text-left`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-              Create Playlist
+          <div className="flex-1">
+            <h1
+              className={`text-2xl md:text-4xl font-extrabold tracking-tight ${styles.textMain}`}
+              style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+            >
+              Build Your Next Mix
             </h1>
-            <div className="w-6 md:hidden" />
           </div>
-
-          <div className="flex-1 overflow-y-auto p-5 md:p-0 scrollbar-hide">
-            <p className={`hidden md:block ${styles.textMuted} mb-8`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-              Start organizing your music today
-            </p>
-
-            <PlaylistForm 
-              playlistName={playlistName}
-              setPlaylistName={setPlaylistName}
-              coverArtBase64={coverArtBase64}
-              handleImageChange={handleImageChange}
-              handleCreatePlaylist={handleCreatePlaylist}
-              loading={loading}
-              error={error}
-              styles={styles}
-            />
-            <div className="h-20 md:hidden" /> 
-          </div>
-
         </div>
-      </div>
-    </>
-  )
-}
-
-const PlaylistForm = ({ playlistName, setPlaylistName, coverArtBase64, handleImageChange, handleCreatePlaylist, loading, error, styles }: any) => {
-  return (
-    <form onSubmit={handleCreatePlaylist} className="space-y-6 md:space-y-8">
-      <div>
-        <label className={`block text-xs font-bold uppercase tracking-wider mb-2 md:mb-3 ${styles.textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-          Playlist Name
-        </label>
-        <input
-          type="text"
-          value={playlistName}
-          onChange={(e) => setPlaylistName(e.target.value)}
-          className={`w-full px-4 py-3 md:py-4 border rounded-xl focus:outline-none focus:ring-1 transition-all text-base ${styles.inputBg} ${styles.textMain} ${styles.focusRing}`}
-          placeholder="My Awesome Playlist"
-          style={{ fontFamily: 'Space Grotesk, sans-serif' }}
-          required
-        />
+        <p className={`text-sm ${styles.textMuted} max-w-xl`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+          Give your playlist a name, choose a custom cover, or pick a vibe preset to get started.
+        </p>
       </div>
 
-      <div>
-        <label className={`block text-xs font-bold uppercase tracking-wider mb-2 md:mb-3 ${styles.textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-          Cover Image
-        </label>
-        <label className="cursor-pointer group block">
-          <div className={`w-full aspect-video border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-all relative overflow-hidden ${styles.uploadBg}`}>
-            {coverArtBase64 ? (
-              <>
-                <img src={coverArtBase64} alt="Preview" className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                  <div className="flex items-center gap-2 text-white font-bold bg-black/50 px-4 py-2 rounded-full backdrop-blur-sm">
-                    <ImageIcon size={16} /> Change
+      {/* ── MAIN CONTENT FORM ── */}
+      <div className="max-w-4xl mx-auto w-full">
+        <form onSubmit={handleCreatePlaylist} className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          
+          {/* LEFT: COVER ART DROPZONE (5 cols) */}
+          <div className="lg:col-span-5 flex flex-col gap-3">
+            <label className={`text-xs font-bold uppercase tracking-wider ${styles.textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+              Cover Artwork
+            </label>
+
+            <div
+              onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`w-full aspect-square rounded-2xl border-2 border-dashed flex flex-col items-center justify-center relative overflow-hidden cursor-pointer transition-all ${styles.dropzoneBg} ${
+                isDragOver ? 'scale-[1.02] border-indigo-400' : ''
+              }`}
+            >
+              {coverArtBase64 ? (
+                <>
+                  <img src={coverArtBase64} alt="Playlist Cover Preview" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-4">
+                    <span className="text-xs font-bold text-white bg-white/20 backdrop-blur-md px-3.5 py-1.5 rounded-full flex items-center gap-1.5">
+                      <ImageIcon size={14} /> Change Cover
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCoverArtBase64(null);
+                      }}
+                      className="text-xs font-bold text-red-300 bg-red-500/20 backdrop-blur-md px-3 py-1 rounded-full hover:bg-red-500/30 flex items-center gap-1"
+                    >
+                      <X size={12} /> Remove
+                    </button>
                   </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center p-6 text-center">
+                  <div className={`w-16 h-16 rounded-2xl ${styles.cardBg} flex items-center justify-center mb-3 text-zinc-400 group-hover:text-white transition-colors`}>
+                    <FolderPlus size={30} style={{ color: styles.accentColor }} />
+                  </div>
+                  <p className={`text-sm font-bold ${styles.textMain} mb-1`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                    Upload Playlist Cover
+                  </p>
+                  <p className={`text-xs ${styles.textMuted}`}>
+                    Drag and drop or click to browse
+                  </p>
+                  <span className="text-[10px] text-zinc-600 mt-3 uppercase tracking-widest font-mono">
+                    PNG, JPG, WEBP (Square Recommended)
+                  </span>
                 </div>
-              </>
-            ) : (
-              <div className="text-center p-4">
-                 <div className={`w-14 h-14 md:w-16 md:h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-3 md:mb-4 transition-colors ${styles.iconColor}`}>
-                    <ImageIcon size={28} className="md:w-8 md:h-8" />
-                 </div>
-                 <span className={`${styles.textMuted} font-medium group-hover:text-white transition-colors text-xs md:text-sm`}>Tap to upload cover</span>
-              </div>
-            )}
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                hidden
+                accept="image/*"
+                onChange={handleImageChange}
+              />
+            </div>
           </div>
-          <input type="file" hidden accept="image/*" onChange={handleImageChange} />
-        </label>
+
+          {/* RIGHT: DETAILS & PRESETS (7 cols) */}
+          <div className="lg:col-span-7 flex flex-col justify-between gap-6">
+            <div className="space-y-5">
+              
+              {/* PLAYLIST NAME */}
+              <div>
+                <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${styles.textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                  Playlist Name <span className="text-red-400">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={playlistName}
+                    onChange={(e) => setPlaylistName(e.target.value)}
+                    placeholder="e.g. Late Night Drives & Chill"
+                    className={`w-full px-4 py-3.5 rounded-xl border text-sm font-medium transition-all outline-none ${styles.inputBg} ${styles.textMain}`}
+                    style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+                    required
+                  />
+                  {playlistName && (
+                    <button
+                      type="button"
+                      onClick={() => setPlaylistName('')}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white p-1"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* VIBE PRESETS CHIPS */}
+              <div>
+                <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${styles.textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                  Quick Vibe Presets
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {VIBE_PRESETS.map((vibe, i) => {
+                    const isSelected = playlistName === vibe.name
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => {
+                          triggerHaptic();
+                          setPlaylistName(vibe.name);
+                        }}
+                        className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-all ${
+                          isSelected ? styles.pillActive : styles.pillBg
+                        }`}
+                        style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+                      >
+                        {vibe.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* DESCRIPTION (OPTIONAL) */}
+              <div>
+                <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${styles.textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                  Description <span className="text-zinc-500 text-[10px] font-normal normal-case">(Optional)</span>
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Give your playlist a vibe or description..."
+                  rows={3}
+                  className={`w-full px-4 py-3 rounded-xl border text-sm font-medium transition-all outline-none resize-none ${styles.inputBg} ${styles.textMain}`}
+                  style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+                />
+              </div>
+
+              {/* ERROR BANNER */}
+              {error && (
+                <div className="p-3.5 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2.5 text-red-400 text-xs font-bold animate-pulse">
+                  <div className="w-2 h-2 rounded-full bg-red-500" />
+                  {error}
+                </div>
+              )}
+            </div>
+
+            {/* ACTION BUTTONS */}
+            <div className="flex items-center gap-3 pt-4 border-t border-white/5">
+              <button
+                type="button"
+                onClick={() => { triggerHaptic(); onBack(); }}
+                className={`px-6 py-3.5 rounded-xl text-xs font-bold border border-white/10 ${styles.textMuted} hover:text-white hover:bg-white/5 transition-all`}
+                style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                disabled={loading || !playlistName.trim()}
+                className={`flex-1 py-3.5 px-6 font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-sm ${styles.primaryBtn}`}
+                style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+              >
+                {loading ? (
+                  <>
+                    <div className={`w-4 h-4 border-2 rounded-full animate-spin ${styles.spinner}`} />
+                    <span>Creating Playlist...</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus size={16} />
+                    <span>Create Playlist</span>
+                  </>
+                )}
+              </button>
+              
+            </div>
+                <span className='md:hidden'>
+                <br /><br /><br />
+              </span>
+          </div>
+
+        </form>
       </div>
 
-      {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400 text-sm font-medium animate-pulse">
-          <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
-          {error}
-        </div>
-      )}
-
-      <button
-        type="submit"
-        disabled={loading}
-        className={`w-full py-3.5 md:py-4 font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98] shadow-lg flex items-center justify-center gap-2 text-base md:text-lg mt-4 ${styles.primaryBtn}`}
-        style={{ fontFamily: 'Space Grotesk, sans-serif' }}
-      >
-        {loading ? (
-           <>
-              <div className={`w-5 h-5 border-2 rounded-full animate-spin ${styles.spinner}`} />
-              <span>Creating...</span>
-           </>
-        ) : (
-           <span>Create Playlist</span>
-        )}
-      </button>
-    </form>
+      <div className="h-28 md:h-16 shrink-0" />
+    </div>
   )
 }
 

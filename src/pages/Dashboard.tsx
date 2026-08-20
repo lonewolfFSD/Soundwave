@@ -29,6 +29,7 @@ import { DynamicPlaylistView } from '../components/DynamicPlaylistView';
 import { ArtistProfileView } from '../components/ArtistProfileView';
 import { AccountSettingsPage } from '../components/AccountSettingsPage';
 import { ListenTogetherView } from '../components/ListenTogetherView';
+import PlaylistManager from '../components/PlaylistManager';
 
 import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { Capacitor } from '@capacitor/core';
@@ -80,12 +81,23 @@ const Dashboard = () => {
     const handleOpenSettings = () => {
       setShowSettings(true)
       setShowListenTogether(false)
+      setShowPlaylistManager(false)
     }
     const handleOpenListenTogether = () => {
       setShowListenTogether(true)
       setShowSettings(false)
       setShowLibrary(false)
+      setShowPlaylistManager(false)
       setSelectedPlaylist(null)
+    }
+    const handleOpenCreatePlaylist = () => {
+      setShowPlaylistManager(true)
+      setShowSettings(false)
+      setShowListenTogether(false)
+      setShowLibrary(false)
+      setSelectedPlaylist(null)
+      setActiveArtistName(null)
+      setActiveDynamicPlaylist(null)
     }
     const handleOpenSoundie = () => {
       if (Capacitor.isNativePlatform() && localStorage.getItem('sw_soundie_enabled') !== 'false') {
@@ -95,12 +107,14 @@ const Dashboard = () => {
     window.addEventListener('soundwave-open-artist', handleOpenArtist)
     window.addEventListener('soundwave-open-settings', handleOpenSettings)
     window.addEventListener('soundwave-open-listen-together', handleOpenListenTogether)
+    window.addEventListener('soundwave-open-create-playlist', handleOpenCreatePlaylist)
     window.addEventListener('open-soundie', handleOpenSoundie)
     window.addEventListener('soundwave-open-soundie', handleOpenSoundie)
     return () => {
       window.removeEventListener('soundwave-open-artist', handleOpenArtist)
       window.removeEventListener('soundwave-open-settings', handleOpenSettings)
       window.removeEventListener('soundwave-open-listen-together', handleOpenListenTogether)
+      window.removeEventListener('soundwave-open-create-playlist', handleOpenCreatePlaylist)
       window.removeEventListener('open-soundie', handleOpenSoundie)
       window.removeEventListener('soundwave-open-soundie', handleOpenSoundie)
     }
@@ -894,6 +908,7 @@ const Dashboard = () => {
           onClose={() => setSidebarOpen(false)}
           onShowLibrary={handleShowLibrary}
           onOpenSoundie={() => setSoundieOpen(true)}
+          onOpenCreatePlaylist={handleOpenPlaylistManager}
         />
 
         <main className={`flex-1 flex flex-col overflow-hidden relative ${mainBg}`}>
@@ -1001,7 +1016,9 @@ const Dashboard = () => {
           {/* ── CONTENT ── */}
           <div className="relative z-10 flex flex-col h-full overflow-hidden">
             {showPlaylistManager ? (
-              <PlaylistManager onBack={() => setShowPlaylistManager(false)} />
+              <div className="flex-1 flex flex-col mt-20 overflow-hidden">
+                <PlaylistManager onBack={() => setShowPlaylistManager(false)} />
+              </div>
             ) : showSettings ? (
               <div className="flex-1 flex flex-col mt-20 overflow-hidden">
                 <AccountSettingsPage
@@ -1139,9 +1156,6 @@ const Dashboard = () => {
                         <div className="relative overflow-hidden rounded-3xl p-6 md:p-8 bg-white/[0.03] border border-white/10 shadow-2xl backdrop-blur-xl group hover:border-white/20 transition-colors">
                           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
                             <div className="space-y-2 max-w-xl">
-                              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-white/90 border border-white/15 text-[11px] font-bold uppercase tracking-wider">
-                                <Radio size={13} className="text-indigo-400" /> Vibe Station
-                              </div>
                               <h2 className="text-2xl md:text-3xl font-black text-white tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                                 Instant Vibe Radio
                               </h2>
