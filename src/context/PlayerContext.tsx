@@ -241,6 +241,39 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [currentDeviceId])
 
+  // ── PERIODIC POSITION BROADCAST WHILE ACTIVE HOST IS PLAYING ──
+  useEffect(() => {
+    let syncTimer: any = null
+    const currentUser = auth.currentUser
+
+    if (currentUser && isPlaying && !isRemotePlayback && !isInJam && !isSyncingFromRemoteRef.current) {
+      syncTimer = setInterval(() => {
+        let livePos = currentTime
+        if (activeEngineRef.current === 'html5' && audioRef.current && !isNaN(audioRef.current.currentTime) && audioRef.current.currentTime > 0) {
+          livePos = audioRef.current.currentTime
+        } else if (activeEngineRef.current === 'youtube' && ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function') {
+          try {
+            const ytCur = ytPlayerRef.current.getCurrentTime()
+            if (typeof ytCur === 'number' && !isNaN(ytCur) && ytCur > 0) livePos = ytCur
+          } catch {}
+        }
+
+        if (livePos > 0) {
+          syncPlaybackState(currentUser.uid, {
+            activeDeviceId: currentDeviceId,
+            activeDeviceName: localDeviceInfo.name,
+            position: livePos,
+            updatedAt: Date.now()
+          })
+        }
+      }, 2500)
+    }
+
+    return () => {
+      if (syncTimer) clearInterval(syncTimer)
+    }
+  }, [isPlaying, isRemotePlayback, isInJam, currentDeviceId, localDeviceInfo.name, currentTime])
+
   // ── SPOTIFY CONNECT TRANSFER FUNCTION ──
   const transferPlaybackToDevice = async (targetDeviceId: string, targetDeviceName: string) => {
     const user = auth.currentUser
@@ -248,7 +281,17 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     isTransferringRef.current = true
     const isTargetThisDevice = targetDeviceId === currentDeviceId
-    const currentSeekTime = currentTime
+
+    // Grab the exact live seek position
+    let currentSeekTime = currentTime
+    if (activeEngineRef.current === 'html5' && audioRef.current && !isNaN(audioRef.current.currentTime) && audioRef.current.currentTime > 0) {
+      currentSeekTime = audioRef.current.currentTime
+    } else if (activeEngineRef.current === 'youtube' && ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function') {
+      try {
+        const ytCur = ytPlayerRef.current.getCurrentTime()
+        if (typeof ytCur === 'number' && !isNaN(ytCur) && ytCur > 0) currentSeekTime = ytCur
+      } catch {}
+    }
 
     if (isTargetThisDevice) {
       setActiveDeviceId(currentDeviceId)
