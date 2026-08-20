@@ -27,14 +27,14 @@
         android:usesCleartextTraffic="true"
         android:theme="@style/AppTheme">
 
+        <!-- Native Android Media3 / ExoPlayer Foreground Audio Service -->
         <service
-            android:name="com.capgo.mediasession.MediaSessionService"
+            android:name=".SoundwaveAudioService"
             android:enabled="true"
-            android:exported="false"
-            android:stopWithTask="false"
-            android:foregroundServiceType="mediaPlayback"
-            tools:replace="android:exported,android:stopWithTask">
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
             <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </service>
