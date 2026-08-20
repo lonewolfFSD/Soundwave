@@ -143,7 +143,17 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [showDevicePicker, setShowDevicePicker] = useState(false)
   const isSyncingFromRemoteRef = useRef(false)
   const isTransferringRef = useRef(false)
+  const currentSongRef = useRef<Song | null>(null)
+  const isPlayingRef = useRef<boolean>(false)
   const isRemotePlayback = !!(activeDeviceId && activeDeviceId !== currentDeviceId)
+
+  useEffect(() => {
+    currentSongRef.current = currentSong
+  }, [currentSong])
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying
+  }, [isPlaying])
 
   // ── CROSS-DEVICE LIFECYCLE & PRESENCE ──
   useEffect(() => {
@@ -172,6 +182,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const unsubPlayback = subscribeToPlaybackState(firebaseUser.uid, async (remoteState) => {
         if (!remoteState || !remoteState.currentSong) return
         if (isTransferringRef.current) return
+
+        // 🛑 Ignore own echoed broadcasts from Firestore to eliminate infinite loops & crazy track skipping!
+        if (remoteState.senderDeviceId === currentDeviceId) return
 
         // 1. Playback is active on another device (Remote Mode)
         if (remoteState.activeDeviceId && remoteState.activeDeviceId !== currentDeviceId) {
@@ -218,8 +231,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             setIsShuffle(remoteState.isShuffle)
           }
 
-          const isSameSong = currentSong?.id === remoteState.currentSong.id
-          const isLocalPlaying = isPlaying || (audioRef.current && !audioRef.current.paused)
+          const isSameSong = currentSongRef.current?.id === remoteState.currentSong.id
+          const isLocalPlaying = isPlayingRef.current || (audioRef.current && !audioRef.current.paused)
 
           // Latency compensation
           const elapsed = Math.max(0, Math.min(30, (Date.now() - (remoteState.updatedAt || Date.now())) / 1000))
@@ -298,6 +311,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           syncPlaybackState(currentUser.uid, {
             activeDeviceId: currentDeviceId,
             activeDeviceName: localDeviceInfo.name,
+            senderDeviceId: currentDeviceId,
             position: livePos,
             updatedAt: Date.now()
           })
@@ -340,6 +354,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       await syncPlaybackState(user.uid, {
         activeDeviceId: currentDeviceId,
         activeDeviceName: localDeviceInfo.name,
+        senderDeviceId: currentDeviceId,
         currentSong,
         isPlaying: true,
         position: currentSeekTime,
@@ -801,6 +816,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       syncPlaybackState(currentUser.uid, {
         activeDeviceId: currentDeviceId,
         activeDeviceName: localDeviceInfo.name,
+        senderDeviceId: currentDeviceId,
         currentSong: song,
         isPlaying: true,
         position: startPosition,
@@ -994,6 +1010,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       syncPlaybackState(user.uid, {
         activeDeviceId: currentDeviceId,
         activeDeviceName: localDeviceInfo.name,
+        senderDeviceId: currentDeviceId,
         isPlaying: false,
         position: currentTime,
         updatedAt: Date.now()
@@ -1010,6 +1027,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         syncPlaybackState(user.uid, {
           activeDeviceId,
           activeDeviceName,
+          senderDeviceId: currentDeviceId,
           isPlaying: true,
           position: currentTime,
           updatedAt: Date.now()
@@ -1043,6 +1061,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       syncPlaybackState(user.uid, {
         activeDeviceId: currentDeviceId,
         activeDeviceName: localDeviceInfo.name,
+        senderDeviceId: currentDeviceId,
         isPlaying: true,
         position: currentTime,
         updatedAt: Date.now()
@@ -1060,6 +1079,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         syncPlaybackState(auth.currentUser.uid, {
           activeDeviceId,
           activeDeviceName,
+          senderDeviceId: currentDeviceId,
           currentSong: target,
           isPlaying: true,
           position: 0,
@@ -1141,6 +1161,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         syncPlaybackState(auth.currentUser.uid, {
           activeDeviceId,
           activeDeviceName,
+          senderDeviceId: currentDeviceId,
           currentSong: target,
           isPlaying: true,
           position: 0,
@@ -1181,6 +1202,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         syncPlaybackState(user.uid, {
           activeDeviceId,
           activeDeviceName,
+          senderDeviceId: currentDeviceId,
           position: time,
           updatedAt: Date.now()
         })
@@ -1203,6 +1225,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       syncPlaybackState(user.uid, {
         activeDeviceId: currentDeviceId,
         activeDeviceName: localDeviceInfo.name,
+        senderDeviceId: currentDeviceId,
         position: time,
         updatedAt: Date.now()
       })

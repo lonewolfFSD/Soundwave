@@ -22,6 +22,7 @@ export interface DeviceInfo {
 export interface PlaybackState {
   activeDeviceId: string
   activeDeviceName: string
+  senderDeviceId?: string
   currentSong: Song | null
   isPlaying: boolean
   position: number // in seconds

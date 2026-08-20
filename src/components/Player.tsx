@@ -13,6 +13,7 @@ import {
   Shuffle,
   ExternalLink,
   ChevronDown,
+  ChevronUp,
   Mic2,
   X,
   Headphones, 
@@ -2111,23 +2112,7 @@ useEffect(() => {
               <span>{audioQuality === 'best' ? 'HQ' : 'STD'}</span>
             </button>
 
-            {/* Video Player Toggle */}
-            <button
-              onClick={() => {
-                triggerHaptic();
-                setIsVideoMode(true);
-                setIsDesktopFullScreen(true);
-              }}
-              title="Watch Music Video"
-              className={`p-1.5 rounded-lg transition-colors ${
-                isDesktopFullScreen && isVideoMode
-                  ? `${activeColor} bg-white/10`
-                  : `${textMuted} hover:text-white/90 hover:bg-white/5`
-              }`}
-            >
-              <Video size={16} />
-            </button>
-
+            {/* Lyrics Button */}
             <button
               onClick={() => setIsDesktopLyricsOpen(!isDesktopLyricsOpen)}
               title="Lyrics"
@@ -2136,6 +2121,7 @@ useEffect(() => {
               <Mic2 size={16} />
             </button>
 
+            {/* 8D Audio Toggle */}
             <button
               onClick={() => setIs8DMode(!is8DMode)}
               title="8D Audio"
@@ -2160,24 +2146,17 @@ useEffect(() => {
               )}
             </button>
 
-            <button
-              onClick={togglePiP}
-              title="Picture in Picture"
-              className={`p-1.5 rounded-lg transition-colors ${textMuted} hover:text-white/70 hover:bg-white/5`}
-            >
-              <ExternalLink size={16} />
-            </button>
-
-            {/* Volume */}
-            <div className="flex items-center gap-2 ml-1">
+            {/* Volume with hover-reveal slider */}
+            <div className="relative group flex items-center">
               <button
                 onClick={() => setVolume(volume === 0 ? 0.5 : 0)}
-                className={`transition-colors ${textMuted} hover:text-white/70 shrink-0`}
+                className={`p-1.5 rounded-lg transition-colors ${textMuted} hover:text-white/90 hover:bg-white/5 shrink-0`}
+                title="Volume"
               >
                 {volume === 0 ? <VolumeX size={16} /> : volume < 0.5 ? <Volume1 size={16} /> : <Volume2 size={16} />}
               </button>
 
-              <div className="w-20 group relative flex items-center h-5">
+              <div className="w-0 opacity-0 group-hover:w-20 group-hover:opacity-100 group-hover:ml-1 transition-all duration-200 overflow-hidden relative flex items-center h-5">
                 <input
                   type="range" min="0" max="1" step="0.01"
                   value={volume}
@@ -2188,11 +2167,23 @@ useEffect(() => {
                   <div className="h-full bg-white/80 rounded-full" style={{ width: `${volume * 100}%` }} />
                 </div>
                 <div
-                  className="absolute w-3 h-3 bg-white rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
-                  style={{ left: `calc(${volume * 100}% - 6px)` }}
+                  className="absolute w-2.5 h-2.5 bg-white rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+                  style={{ left: `calc(${volume * 100}% - 5px)` }}
                 />
               </div>
             </div>
+
+            {/* Expand Large Player Window Button */}
+            <button
+              onClick={() => {
+                triggerHaptic();
+                setIsFullScreen(true);
+              }}
+              title="Open Full Player"
+              className={`p-1.5 rounded-lg transition-colors ${textMuted} hover:text-white/90 hover:bg-white/5 ml-0.5`}
+            >
+              <ChevronUp size={16} />
+            </button>
           </div>
         </div>
       </div>

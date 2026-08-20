@@ -7,8 +7,7 @@ import {
   X,
   Cast,
   Check,
-  Edit2,
-  Radio
+  Edit2
 } from 'lucide-react'
 import { usePlayer } from '../context/PlayerContext'
 import { DeviceInfo } from '../utils/deviceSync'
