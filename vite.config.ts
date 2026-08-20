@@ -82,71 +82,107 @@ function youtubeMusicPlugin() {
             return
           }
 
-          const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query + ' audio')}&sp=EgIQAQ%253D%253D`
-          let html = ''
+          let songs: any[] = []
+
+          // 1. Primary Strategy: YouTube Innertube JSON API (Super Fast, 0 Rate Limits)
           try {
-            const response = await fetch(ytUrl, {
+            const innertubeRes = await fetch('https://www.youtube.com/youtubei/v1/search?prettyPrint=false', {
+              method: 'POST',
               headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                'Accept-Language': 'en-US,en;q=0.9'
-              }
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+              },
+              body: JSON.stringify({
+                context: {
+                  client: {
+                    clientName: 'WEB',
+                    clientVersion: '2.20240101.00.00',
+                    hl: 'en',
+                    gl: 'US'
+                  }
+                },
+                query: query,
+                params: 'EgIQAQ%3D%3D'
+              }),
+              signal: AbortSignal.timeout(5000)
             })
-            if (response.ok) {
-              html = await response.text()
+
+            if (innertubeRes.ok) {
+              const data = await innertubeRes.json()
+              const contents = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents
+              if (Array.isArray(contents)) {
+                for (const item of contents) {
+                  const v = item.videoRenderer
+                  if (v && v.videoId && v.title?.runs?.[0]?.text) {
+                    const videoId = v.videoId
+                    const title = v.title.runs[0].text
+                    const artist = v.ownerText?.runs?.[0]?.text || v.shortBylineText?.runs?.[0]?.text || 'YouTube Music'
+                    const durationText = v.lengthText?.simpleText || '3:30'
+                    const parts = durationText.split(':').map(p => parseInt(p, 10))
+                    const durationSecs = parts.length === 3 ? parts[0]*3600 + parts[1]*60 + parts[2] : (parts.length === 2 ? parts[0]*60 + parts[1] : 210)
+                    const thumbnail = v.thumbnail?.thumbnails?.[v.thumbnail.thumbnails.length - 1]?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+
+                    songs.push({
+                      id: `yt_${videoId}`,
+                      title,
+                      artist,
+                      duration: durationSecs,
+                      url: `https://www.youtube.com/watch?v=${videoId}`,
+                      playlistId: 'online_search',
+                      coverArtBase64: thumbnail,
+                      youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`
+                    })
+                  }
+                }
+              }
             }
           } catch {}
 
-          if (!html) {
+          // 2. HTML Search Fallback
+          if (songs.length === 0) {
             try {
-              const fallbackUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`
-              const response = await fetch(fallbackUrl, {
+              const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query + ' audio')}&sp=EgIQAQ%253D%253D`
+              const response = await fetch(ytUrl, {
                 headers: {
                   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                   'Accept-Language': 'en-US,en;q=0.9'
                 }
               })
               if (response.ok) {
-                html = await response.text()
-              }
-            } catch {}
-          }
+                const html = await response.text()
+                const jsonMatch = html.match(/var ytInitialData\s*=\s*({.+?});<\/script>/s) ||
+                                  html.match(/ytInitialData\s*=\s*({.+?});/s)
+                if (jsonMatch && jsonMatch[1]) {
+                  const data = JSON.parse(jsonMatch[1])
+                  const contents = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents
+                  if (Array.isArray(contents)) {
+                    for (const item of contents) {
+                      const v = item.videoRenderer
+                      if (v && v.videoId && v.title?.runs?.[0]?.text) {
+                        const videoId = v.videoId
+                        const title = v.title.runs[0].text
+                        const artist = v.ownerText?.runs?.[0]?.text || v.shortBylineText?.runs?.[0]?.text || 'YouTube Music'
+                        const durationText = v.lengthText?.simpleText || '3:30'
+                        const parts = durationText.split(':').map(p => parseInt(p, 10))
+                        const durationSecs = parts.length === 3 ? parts[0]*3600 + parts[1]*60 + parts[2] : (parts.length === 2 ? parts[0]*60 + parts[1] : 210)
+                        const thumbnail = v.thumbnail?.thumbnails?.[v.thumbnail.thumbnails.length - 1]?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
 
-          let songs: any[] = []
-          if (html) {
-            const jsonMatch = html.match(/var ytInitialData\s*=\s*({.+?});<\/script>/s) ||
-                              html.match(/ytInitialData\s*=\s*({.+?});/s)
-            
-            if (jsonMatch && jsonMatch[1]) {
-              try {
-                const data = JSON.parse(jsonMatch[1])
-                const contents = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents
-                if (Array.isArray(contents)) {
-                  for (const item of contents) {
-                    const v = item.videoRenderer
-                    if (v && v.videoId && v.title?.runs?.[0]?.text) {
-                      const videoId = v.videoId
-                      const title = v.title.runs[0].text
-                      const artist = v.ownerText?.runs?.[0]?.text || v.shortBylineText?.runs?.[0]?.text || 'YouTube Music'
-                      const durationText = v.lengthText?.simpleText || '3:30'
-                      const parts = durationText.split(':').map((p: string) => parseInt(p, 10))
-                      const durationSecs = parts.length === 3 ? parts[0]*3600 + parts[1]*60 + parts[2] : (parts.length === 2 ? parts[0]*60 + parts[1] : 210)
-                      const thumbnail = v.thumbnail?.thumbnails?.[v.thumbnail.thumbnails.length - 1]?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
-
-                      songs.push({
-                        id: `yt_${videoId}`,
-                        title,
-                        artist,
-                        duration: durationSecs,
-                        url: `https://www.youtube.com/watch?v=${videoId}`,
-                        playlistId: 'online_search',
-                        coverArtBase64: thumbnail,
-                        youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`
-                      })
+                        songs.push({
+                          id: `yt_${videoId}`,
+                          title,
+                          artist,
+                          duration: durationSecs,
+                          url: `https://www.youtube.com/watch?v=${videoId}`,
+                          playlistId: 'online_search',
+                          coverArtBase64: thumbnail,
+                          youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`
+                        })
+                      }
                     }
                   }
                 }
-              } catch {}
-            }
+              }
+            } catch {}
           }
 
           res.end(JSON.stringify(songs.slice(0, 25)))
