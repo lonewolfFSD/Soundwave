@@ -21,49 +21,42 @@ public class SoundwaveNativePlayerPlugin extends Plugin implements SoundwaveAudi
     }
 
     private void startAndBindService() {
-        Context context = getContext();
-        if (context != null) {
-            Intent serviceIntent = new Intent(context, SoundwaveAudioService.class);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                ContextCompat.startForegroundService(context, serviceIntent);
-            } else {
+        try {
+            Context context = getContext();
+            if (context != null) {
+                Intent serviceIntent = new Intent(context, SoundwaveAudioService.class);
                 context.startService(serviceIntent);
             }
-        }
+        } catch (Exception ignored) {}
     }
 
     @PluginMethod
     public void play(PluginCall call) {
-        String url = call.getString("url");
-        if (url == null || url.isEmpty()) {
-            call.reject("Audio URL is required");
-            return;
-        }
+        try {
+            String url = call.getString("url");
+            if (url == null || url.isEmpty()) {
+                call.reject("Audio URL is required");
+                return;
+            }
 
-        String title = call.getString("title", "Unknown Title");
-        String artist = call.getString("artist", "Unknown Artist");
-        String album = call.getString("album", "");
-        String artwork = call.getString("artwork", "");
-        double positionSec = call.getDouble("position", 0.0);
-        long startPosMs = Math.round(positionSec * 1000.0);
+            String title = call.getString("title", "Unknown Title");
+            String artist = call.getString("artist", "Unknown Artist");
+            String album = call.getString("album", "");
+            String artwork = call.getString("artwork", "");
+            double positionSec = call.getDouble("position", 0.0);
+            long startPosMs = Math.round(positionSec * 1000.0);
 
-        startAndBindService();
+            startAndBindService();
 
-        SoundwaveAudioService service = SoundwaveAudioService.getInstance();
-        if (service != null) {
-            service.play(url, title, artist, album, artwork, startPosMs);
-            call.resolve();
-        } else {
-            // Give service a split-second to spin up if starting from cold
-            getActivity().runOnUiThread(() -> {
-                SoundwaveAudioService retryService = SoundwaveAudioService.getInstance();
-                if (retryService != null) {
-                    retryService.play(url, title, artist, album, artwork, startPosMs);
-                    call.resolve();
-                } else {
-                    call.reject("Audio Service not ready yet");
-                }
-            });
+            SoundwaveAudioService service = SoundwaveAudioService.getInstance();
+            if (service != null) {
+                service.play(url, title, artist, album, artwork, startPosMs);
+                call.resolve();
+            } else {
+                call.resolve();
+            }
+        } catch (Throwable t) {
+            call.reject("Error playing song: " + t.getMessage());
         }
     }
 

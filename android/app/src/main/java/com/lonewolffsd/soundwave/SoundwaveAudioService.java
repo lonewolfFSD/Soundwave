@@ -4,6 +4,7 @@ import android.app.PendingIntent;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import androidx.annotation.Nullable;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
@@ -70,6 +71,14 @@ public class SoundwaveAudioService extends MediaSessionService {
                     }
                 }
             }
+
+            @Override
+            public void onPlayerError(androidx.media3.common.PlaybackException error) {
+                Log.e("SoundwaveAudioService", "ExoPlayer playback error: " + error.getMessage(), error);
+                if (eventListener != null) {
+                    eventListener.onError(error.getMessage());
+                }
+            }
         });
 
         // Intent to open MainActivity when the notification is tapped
@@ -95,28 +104,40 @@ public class SoundwaveAudioService extends MediaSessionService {
     // --- Playback Control Methods for Native Plugin ---
 
     public void play(String url, String title, String artist, String album, String artworkUrl, long startPositionMs) {
-        if (player == null) return;
+        if (player == null || url == null || url.isEmpty()) return;
 
-        MediaMetadata.Builder metaBuilder = new MediaMetadata.Builder()
-                .setTitle(title != null ? title : "Unknown Title")
-                .setArtist(artist != null ? artist : "Unknown Artist")
-                .setAlbumTitle(album != null ? album : "");
+        try {
+            String fullUrl = url;
+            if (fullUrl.startsWith("/")) {
+                fullUrl = "https://soundwave.lonewolffsd.in" + fullUrl;
+            }
 
-        if (artworkUrl != null && !artworkUrl.isEmpty()) {
-            metaBuilder.setArtworkUri(Uri.parse(artworkUrl));
+            MediaMetadata.Builder metaBuilder = new MediaMetadata.Builder()
+                    .setTitle(title != null ? title : "Unknown Title")
+                    .setArtist(artist != null ? artist : "Unknown Artist")
+                    .setAlbumTitle(album != null ? album : "");
+
+            if (artworkUrl != null && !artworkUrl.isEmpty() && artworkUrl.startsWith("http")) {
+                metaBuilder.setArtworkUri(Uri.parse(artworkUrl));
+            }
+
+            MediaItem mediaItem = new MediaItem.Builder()
+                    .setUri(Uri.parse(fullUrl))
+                    .setMediaMetadata(metaBuilder.build())
+                    .build();
+
+            player.setMediaItem(mediaItem);
+            player.prepare();
+            if (startPositionMs > 0) {
+                player.seekTo(startPositionMs);
+            }
+            player.play();
+        } catch (Exception e) {
+            Log.e("SoundwaveAudioService", "Error in play()", e);
+            if (eventListener != null) {
+                eventListener.onError(e.getMessage());
+            }
         }
-
-        MediaItem mediaItem = new MediaItem.Builder()
-                .setUri(Uri.parse(url))
-                .setMediaMetadata(metaBuilder.build())
-                .build();
-
-        player.setMediaItem(mediaItem);
-        player.prepare();
-        if (startPositionMs > 0) {
-            player.seekTo(startPositionMs);
-        }
-        player.play();
     }
 
     public void pause() {
