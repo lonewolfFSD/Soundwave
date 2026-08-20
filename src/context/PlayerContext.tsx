@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useRef, useEffect } from 'react'
 import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@capgo/capacitor-media-session';
-import { resolveFullLengthSong, isYoutubeVideoId, findYouTubeVideoId } from '../utils/ytMusic';
+import { resolveFullLengthSong, isYoutubeVideoId, findYouTubeVideoId, extractYoutubeVideoId } from '../utils/ytMusic';
 import { fetchLyrics } from '../utils/lyrics';
 import { getMoodCoherentQueue, getSongRadioQueue } from '../utils/aiRecommender';
 import { getLocalLikedSongs, saveLocalLikedSongs, fetchRemoteLikedSongs } from '../utils/likedSongs';
@@ -582,14 +582,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     } else {
       // 🌟 Native App & Production: Official YouTube Stream Player (100% Full Song, 0 Errors)
-      let videoId = ''
-      const cleanId = (song.id || '').replace('yt_', '').trim()
-      if (isYoutubeVideoId(cleanId)) {
-        videoId = cleanId
-      } else if (song.youtubeUrl && isYoutubeVideoId(song.youtubeUrl)) {
-        videoId = song.youtubeUrl.replace('yt_', '').replace('/watch?v=', '').trim()
-      } else {
-        videoId = await findYouTubeVideoId(song.title, song.artist)
+      let videoId = extractYoutubeVideoId(song.id) ||
+                    extractYoutubeVideoId((song as any).youtubeId) ||
+                    extractYoutubeVideoId(song.youtubeUrl) ||
+                    extractYoutubeVideoId(song.url);
+
+      if (!videoId) {
+        videoId = await findYouTubeVideoId(song.title, song.artist);
       }
 
       if (videoId && ytPlayerRef.current && typeof ytPlayerRef.current.loadVideoById === 'function') {
@@ -711,7 +710,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } else {
       if (currentSong) {
         try {
-          const moodQueue = await getSongRadioQueue(currentSong, playedHistory, 10);
+          const moodQueue = await getSongRadioQueue(currentSong, [], playedHistory, 15);
           if (moodQueue.length > 0) {
             setQueue(moodQueue);
             playSong(moodQueue[0], false);

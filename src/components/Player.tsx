@@ -229,12 +229,42 @@ const Player: React.FC = () => {
     } else {
       try {
         setIsDownloadingOffline(true);
-        setOfflineDownloadProgress(10);
-        await downloadSongForOffline(currentSong, (p) => setOfflineDownloadProgress(p));
+        setOfflineDownloadProgress(15);
+
+        // 1. Attempt to cache into offline IndexedDB
+        const savedSong = await downloadSongForOffline(currentSong, (p) => setOfflineDownloadProgress(p));
         setIsOfflineDownloaded(true);
+
+        // 2. Also trigger device file download (.mp3) into device Downloads folder
+        if (savedSong?.url) {
+          const a = document.createElement('a');
+          a.href = savedSong.url;
+          a.download = `${currentSong.title} - ${currentSong.artist}`.replace(/[/\\?%*:|"<>]/g, '_') + '.mp3';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
       } catch (err) {
-        console.error('Download offline failed:', err);
-        alert('Failed to download track for offline listening.');
+        console.warn('Direct stream extraction unavailable, checking device file fallback:', err);
+        // Fallback 1: If previewUrl or direct audio URL exists, download directly to device
+        if (currentSong.previewUrl || (currentSong.url && currentSong.url.startsWith('http') && !currentSong.url.includes('yt-stream'))) {
+          const fileUrl = currentSong.previewUrl || currentSong.url;
+          const a = document.createElement('a');
+          a.href = fileUrl;
+          a.download = `${currentSong.title} - ${currentSong.artist}`.replace(/[/\\?%*:|"<>]/g, '_') + '.mp3';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setIsOfflineDownloaded(true);
+        } else {
+          // Fallback 2: Open MP3 audio converter for YouTube track
+          const videoId = extractYouTubeId(currentSong) || (currentSong.id || '').replace('yt_', '');
+          if (videoId && videoId.length === 11) {
+            window.open(`https://www.y2mate.com/youtube/${videoId}`, '_blank');
+          } else {
+            alert('Unable to download this track directly.');
+          }
+        }
       } finally {
         setIsDownloadingOffline(false);
         setOfflineDownloadProgress(0);

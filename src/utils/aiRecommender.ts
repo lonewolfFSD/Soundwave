@@ -279,17 +279,37 @@ export const getSongRadioQueue = async (
     (t || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim()
 
   const seedNormTitle = normalizeTitle(seedSong.title)
+  // Extract significant words (> 3 chars) from seed title
+  const seedTitleWords = (seedSong.title || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .split(/\s+/)
+    .filter(w => w.length > 3)
+
+  const isDuplicateOfSeed = (title: string): boolean => {
+    const norm = normalizeTitle(title)
+    if (!norm) return true
+    if (norm === seedNormTitle) return true
+    if (norm.length > 3 && seedNormTitle.length > 3) {
+      if (norm.includes(seedNormTitle) || seedNormTitle.includes(norm)) return true
+    }
+    // Check if candidate contains the primary title keyword
+    if (seedTitleWords.length > 0) {
+      const matchCount = seedTitleWords.filter(w => norm.includes(w)).length
+      if (matchCount >= Math.min(2, seedTitleWords.length)) return true
+    }
+    return false
+  }
+
   const candidatePool: Song[] = []
   const seenKeys = new Set<string>()
 
   // 1. Add local candidate pool first (filtering out same-title songs)
   for (const s of localCandidatePool) {
     if (!s || s.id === seedSong.id) continue
+    if (isDuplicateOfSeed(s.title)) continue
+    
     const norm = normalizeTitle(s.title)
-    // CRITICAL: Filter out same-name / duplicate tracks!
-    if (norm === seedNormTitle || (norm.length > 3 && seedNormTitle.includes(norm)) || (seedNormTitle.length > 3 && norm.includes(seedNormTitle))) {
-      continue
-    }
     const key = `${norm}_${normalizeTitle(s.artist)}`
     if (!seenKeys.has(key)) {
       seenKeys.add(key)
@@ -301,10 +321,11 @@ export const getSongRadioQueue = async (
   try {
     const fetchPromises: Promise<any>[] = []
     
-    // A. Fetch more distinct songs from the same artist
-    if (seedSong.artist && seedSong.artist !== 'Unknown Artist' && seedSong.artist !== 'Unknown') {
+    // A. Fetch distinct songs from the same artist
+    const cleanArtist = normalizeArtist(seedSong.artist)
+    if (cleanArtist && cleanArtist !== 'Unknown Artist' && cleanArtist !== 'Unknown') {
       fetchPromises.push(
-        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(seedSong.artist)}&media=music&entity=song&limit=25`)
+        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(cleanArtist)}&media=music&entity=song&limit=25`)
           .then(r => r.json())
           .catch(() => ({ results: [] }))
       )
@@ -321,10 +342,17 @@ export const getSongRadioQueue = async (
       }
     })
     const dominantMood = MOOD_KEYS[maxIdx] || 'chill'
-    const vibeQuery = `${seedSong.artist} ${dominantMood}`
+
+    if (cleanArtist) {
+      fetchPromises.push(
+        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(`${cleanArtist} ${dominantMood}`)}&media=music&entity=song&limit=20`)
+          .then(r => r.json())
+          .catch(() => ({ results: [] }))
+      )
+    }
 
     fetchPromises.push(
-      fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(vibeQuery)}&media=music&entity=song&limit=25`)
+      fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(`${dominantMood} pop hits`)}&media=music&entity=song&limit=20`)
         .then(r => r.json())
         .catch(() => ({ results: [] }))
     )
@@ -333,11 +361,10 @@ export const getSongRadioQueue = async (
     for (const res of responses) {
       if (res?.results && Array.isArray(res.results)) {
         for (const item of res.results) {
-          const norm = normalizeTitle(item.trackName || '')
-          // Exclude exact same title or variations of seed title
-          if (norm === seedNormTitle || (norm.length > 3 && seedNormTitle.includes(norm)) || (seedNormTitle.length > 3 && norm.includes(seedNormTitle))) {
-            continue
-          }
+          const title = item.trackName || ''
+          if (!title || isDuplicateOfSeed(title)) continue
+
+          const norm = normalizeTitle(title)
           const artistNorm = normalizeTitle(item.artistName || '')
           const key = `${norm}_${artistNorm}`
           if (!seenKeys.has(key)) {

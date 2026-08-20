@@ -18,12 +18,28 @@ export const sanitizeTitle = (title: string): string => {
 }
 
 /**
+ * Comprehensive YouTube Video ID extractor from any string, URL, or ID
+ */
+export const extractYoutubeVideoId = (input?: string | null): string => {
+  if (!input || typeof input !== 'string') return ''
+  const str = input.trim()
+  // Direct 11-char ID
+  if (/^[a-zA-Z0-9_-]{11}$/.test(str)) return str
+  // yt_ prefix
+  if (str.startsWith('yt_') && /^[a-zA-Z0-9_-]{11}$/.test(str.substring(3))) {
+    return str.substring(3)
+  }
+  // URL containing ?v= or &v= or ?id= or &id= or /embed/ or /watch?v= or youtu.be/
+  const match = str.match(/(?:[?&](?:v|id)=|\/embed\/|\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/i)
+  if (match && match[1]) return match[1]
+  return ''
+}
+
+/**
  * Check if string is a valid 11-char YouTube Video ID
  */
 export const isYoutubeVideoId = (id: string): boolean => {
-  if (!id || typeof id !== 'string') return false
-  const clean = id.replace('yt_', '').replace('/watch?v=', '').trim()
-  return /^[a-zA-Z0-9_-]{11}$/.test(clean)
+  return !!extractYoutubeVideoId(id)
 }
 
 /**
