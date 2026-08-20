@@ -627,7 +627,8 @@ useEffect(() => {
 
   const activeLineIndex = useMemo(() => {
     if (parsedLyrics.length === 0 || parsedLyrics[0].time === -1) return -1;
-    const leadTime = currentTime + lyricsOffset + 0.12; // 120ms vocal onset lead + calibrated offset
+    // 450ms compensation for YouTube player buffer delay + natural vocal onset anticipation + manual offset
+    const leadTime = currentTime + lyricsOffset + 0.45;
     const index = parsedLyrics.findIndex((line, i) => {
       const nextLine = parsedLyrics[i + 1];
       return line.time <= leadTime && (!nextLine || nextLine.time > leadTime);
@@ -676,6 +677,14 @@ useEffect(() => {
       }
     }
   }, [activeLineIndex, isDesktopFullScreen, desktopSidebarTab, isUserScrolledDesktop]);
+
+  const adjustLyricsOffset = (delta: number) => {
+    setLyricsOffset((prev) => {
+      const next = Math.round((prev + delta) * 10) / 10;
+      localStorage.setItem('sw_lyrics_offset', next.toString());
+      return next;
+    });
+  };
 
   // --- NAVIGATION LOGIC ---
   const currentIndex = queue.findIndex(s => s.id === currentSong?.id);
@@ -1172,9 +1181,17 @@ useEffect(() => {
    </div>
  )}
 
-  {/* TAB 2: LYRICS */}
+  {/* TAB 2: LYRICS (DESKTOP FULLSCREEN MODAL) */}
   {desktopSidebarTab === 'lyrics' && (
     <div className="absolute inset-0 w-full h-full flex flex-col relative">
+      <div className="flex items-center justify-between px-6 pt-4 pb-2 border-b border-white/10 shrink-0">
+        <span className={`text-xs font-bold uppercase tracking-wider ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Synced Lyrics</span>
+        <div className="flex items-center bg-white/10 rounded-full px-2.5 py-0.5 text-xs gap-1.5 border border-white/15">
+          <button onClick={() => adjustLyricsOffset(-0.1)} className="hover:text-white font-bold text-white/70 hover:scale-110 active:scale-95 transition-transform" title="Advance lyrics earlier (-0.1s)">-0.1s</button>
+          <span className="text-white/90 font-mono font-bold">{lyricsOffset >= 0 ? `+${lyricsOffset.toFixed(1)}s` : `${lyricsOffset.toFixed(1)}s`}</span>
+          <button onClick={() => adjustLyricsOffset(0.1)} className="hover:text-white font-bold text-white/70 hover:scale-110 active:scale-95 transition-transform" title="Delay lyrics later (+0.1s)">+0.1s</button>
+        </div>
+      </div>
       <div 
         ref={desktopModalLyricsContainerRef}
         onScroll={handleDesktopLyricsScroll}
@@ -1246,7 +1263,14 @@ useEffect(() => {
         `}
       >
         <div className={`py-3 px-6 mt-[70px] border-b flex items-center justify-between transition-colors ${lyricsSidebar}`}>
-          <h3 className={`text-xl font-bold tracking-tight ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Lyrics</h3>
+          <div className="flex items-center gap-3">
+            <h3 className={`text-xl font-bold tracking-tight ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Lyrics</h3>
+            <div className="flex items-center bg-white/10 rounded-full px-2 py-0.5 text-[11px] gap-1 border border-white/15">
+              <button onClick={() => adjustLyricsOffset(-0.1)} className="hover:text-white px-1 font-bold text-white/70 hover:scale-110 active:scale-95 transition-transform" title="Advance lyrics earlier (-0.1s)">-0.1s</button>
+              <span className="text-white/90 font-mono font-bold">{lyricsOffset >= 0 ? `+${lyricsOffset.toFixed(1)}s` : `${lyricsOffset.toFixed(1)}s`}</span>
+              <button onClick={() => adjustLyricsOffset(0.1)} className="hover:text-white px-1 font-bold text-white/70 hover:scale-110 active:scale-95 transition-transform" title="Delay lyrics later (+0.1s)">+0.1s</button>
+            </div>
+          </div>
           <button onClick={() => setIsDesktopLyricsOpen(false)} className={`${textMuted} hover:${textMain} transition-colors`}>
             <X size={20} />
           </button>
@@ -1290,21 +1314,6 @@ useEffect(() => {
               <Mic2 size={40} className="opacity-50" />
               <p className="text-sm font-medium" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Lyrics not available</p>
             </div>
-          )}
-          <div className="h-[15vh]"></div>
-
-          {isUserScrolledDesktop && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                resyncDesktopLyrics();
-              }}
-              className="sticky bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-indigo-600/90 to-purple-600/90 backdrop-blur-xl border border-white/30 text-white shadow-xl hover:scale-105 active:scale-95 transition-all text-xs font-bold uppercase tracking-wider"
-              style={{ fontFamily: 'Space Grotesk, sans-serif' }}
-            >
-              <RotateCcw size={13} />
-              <span>Re-sync Lyrics</span>
-            </button>
           )}
         </div>
       </div>
@@ -1481,6 +1490,12 @@ useEffect(() => {
             ) : showLyrics ? (
               // --- MOBILE LYRICS UI ---
               <div className="w-full h-full relative overflow-hidden flex flex-col">
+                {/* Real-time Sync Calibration Pill */}
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center bg-black/50 backdrop-blur-xl rounded-full px-3 py-1 text-xs gap-2 border border-white/20 shadow-xl">
+                  <button onClick={(e) => { e.stopPropagation(); triggerHaptic(); adjustLyricsOffset(-0.1); }} className="text-white/80 active:text-white px-1.5 font-extrabold text-xs active:scale-90 transition-transform" title="Advance lyrics earlier (-0.1s)">-0.1s</button>
+                  <span className="text-white font-mono font-bold text-[11px] tracking-wide">Sync: {lyricsOffset >= 0 ? `+${lyricsOffset.toFixed(1)}s` : `${lyricsOffset.toFixed(1)}s`}</span>
+                  <button onClick={(e) => { e.stopPropagation(); triggerHaptic(); adjustLyricsOffset(0.1); }} className="text-white/80 active:text-white px-1.5 font-extrabold text-xs active:scale-90 transition-transform" title="Delay lyrics later (+0.1s)">+0.1s</button>
+                </div>
                 <div 
                   ref={mobileLyricsContainerRef}
                   onScroll={handleMobileLyricsScroll}

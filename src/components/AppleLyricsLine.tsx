@@ -38,10 +38,10 @@ export const AppleLyricsLine: React.FC<AppleLyricsLineProps> = React.memo(({
   const lineProgress = useMemo(() => {
     if (!isActive) return isPast ? 1 : 0
     if (line.time === -1) return 1
-    const end = nextLineTime && nextLineTime > line.time ? nextLineTime : line.time + 4.0
-    const duration = Math.max(0.4, end - line.time)
-    const effectiveTime = currentTime + lyricsOffset
-    const elapsed = Math.max(0, effectiveTime - line.time + 0.1) // 100ms syllable onset lead
+    const end = nextLineTime && nextLineTime > line.time ? nextLineTime : line.time + 3.5
+    const duration = Math.max(0.3, end - line.time)
+    const effectiveTime = currentTime + lyricsOffset + 0.45 // 450ms compensation for YouTube player buffer & vocal onset
+    const elapsed = Math.max(0, effectiveTime - line.time)
     return Math.max(0, Math.min(1, elapsed / duration))
   }, [isActive, isPast, line.time, nextLineTime, currentTime, lyricsOffset])
 
