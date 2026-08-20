@@ -185,10 +185,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             audioRef.current.pause()
           }
 
-          // Mirror remote state metadata in UI
+          // Mirror remote state metadata & queue in UI
           isSyncingFromRemoteRef.current = true
           setIsPlaying(remoteState.isPlaying)
           setCurrentSong(remoteState.currentSong)
+          if (remoteState.queue && Array.isArray(remoteState.queue) && remoteState.queue.length > 0) {
+            setQueue(remoteState.queue)
+          }
           if (typeof remoteState.position === 'number') {
             setCurrentTime(remoteState.position)
           }
@@ -199,10 +202,21 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           return
         }
 
-        // 2. Playback was transferred TO THIS DEVICE
+        // 2. Playback is active on THIS DEVICE
         if (remoteState.activeDeviceId === currentDeviceId) {
           setActiveDeviceId(currentDeviceId)
           setActiveDeviceName(localDeviceInfo.name)
+
+          // Restore Queue, Repeat, Shuffle from cloud session
+          if (remoteState.queue && Array.isArray(remoteState.queue) && remoteState.queue.length > 0) {
+            setQueue(remoteState.queue)
+          }
+          if (remoteState.repeatMode) {
+            setRepeatMode(remoteState.repeatMode)
+          }
+          if (typeof remoteState.isShuffle === 'boolean') {
+            setIsShuffle(remoteState.isShuffle)
+          }
 
           const isSameSong = currentSong?.id === remoteState.currentSong.id
           const isLocalPlaying = isPlaying || (audioRef.current && !audioRef.current.paused)
@@ -211,18 +225,40 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           const elapsed = Math.max(0, Math.min(30, (Date.now() - (remoteState.updatedAt || Date.now())) / 1000))
           const targetPos = Math.min((remoteState.position || 0) + (remoteState.isPlaying ? elapsed : 0), remoteState.duration || 9999)
 
-          if (!isSameSong || !isLocalPlaying) {
-            isSyncingFromRemoteRef.current = true
-            await playSong(remoteState.currentSong, false, targetPos)
-            setTimeout(() => { isSyncingFromRemoteRef.current = false }, 500)
-          } else {
-            // Already playing same song: sync play/pause & seek if commanded from remote
-            if (remoteState.isPlaying !== isPlaying) {
-              if (remoteState.isPlaying) resumeSong()
-              else pauseSong()
+          // 🛑 CASE A: Remote requested PAUSE
+          if (!remoteState.isPlaying) {
+            if (isLocalPlaying) {
+              if (activeEngineRef.current === 'youtube') {
+                try { ytPlayerRef.current?.pauseVideo() } catch {}
+              } else if (audioRef.current) {
+                audioRef.current.pause()
+              }
+              setIsPlaying(false)
             }
-            if (Math.abs(currentTime - targetPos) > 3) {
-              setCurrentTimeHandler(targetPos)
+            if (!isSameSong) {
+              setCurrentSong(remoteState.currentSong)
+            }
+            if (typeof remoteState.position === 'number') {
+              setCurrentTime(remoteState.position)
+            }
+            return
+          }
+
+          // ▶️ CASE B: Remote requested PLAY
+          if (remoteState.isPlaying) {
+            if (!isSameSong || !isLocalPlaying) {
+              isSyncingFromRemoteRef.current = true
+              await playSong(remoteState.currentSong, false, targetPos)
+              setTimeout(() => { isSyncingFromRemoteRef.current = false }, 500)
+            } else {
+              if (Math.abs(currentTime - targetPos) > 3) {
+                if (activeEngineRef.current === 'youtube') {
+                  try { ytPlayerRef.current?.seekTo(targetPos, true) } catch {}
+                } else if (audioRef.current) {
+                  audioRef.current.currentTime = targetPos
+                }
+                setCurrentTime(targetPos)
+              }
             }
           }
         }
@@ -293,6 +329,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       } catch {}
     }
 
+    const effectiveQueue = (queue && queue.length > 0) ? queue : globalLibrary
+
     if (isTargetThisDevice) {
       setActiveDeviceId(currentDeviceId)
       setActiveDeviceName(localDeviceInfo.name)
@@ -306,7 +344,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isPlaying: true,
         position: currentSeekTime,
         duration,
-        queue,
+        queue: effectiveQueue,
         isShuffle,
         repeatMode,
         updatedAt: Date.now()
@@ -320,7 +358,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isPlaying: true,
         position: currentSeekTime,
         duration,
-        queue,
+        queue: effectiveQueue,
         isShuffle,
         repeatMode
       })
@@ -885,6 +923,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             setTimeout(() => {
               try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {}
             }, 300)
+            setTimeout(() => {
+              try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {}
+            }, 700)
+            setTimeout(() => {
+              try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {}
+            }, 1200)
           }
         } catch (e) {
           console.warn('YouTube Player load error:', e)
