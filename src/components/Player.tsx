@@ -2026,12 +2026,15 @@ useEffect(() => {
 
         <div
           className="w-full max-w-[1800px] mx-auto flex items-center justify-between px-4 md:px-6 gap-4 h-[76px] md:h-[80px]"
-          onClick={() => setIsDesktopFullScreen(!isDesktopFullScreen)}
         >
           {/* ── Song Info ── */}
           <div
             className="flex items-center gap-3 flex-1 md:flex-initial md:w-[30%] min-w-0 cursor-pointer md:cursor-default"
-            onClick={() => setIsFullScreen(true)}
+            onClick={() => {
+              if (window.innerWidth < 768) {
+                setIsFullScreen(true);
+              }
+            }}
           >
             {/* Artwork */}
             <div className="shrink-0 relative">
