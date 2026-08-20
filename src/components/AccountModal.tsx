@@ -151,13 +151,14 @@ const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose, user }) =>
   const [shakeEnabled, setShakeEnabled] = useState(localStorage.getItem('sw_shake_shuffle') !== 'false');
   const [duckingEnabled, setDuckingEnabled] = useState(localStorage.getItem('sw_ducking') !== 'false');
   const [keepAwakeEnabled, setKeepAwakeEnabled] = useState(localStorage.getItem('sw_keep_awake') === 'true');
-  const [soundieMobileEnabled, setSoundieMobileEnabled] = useState(localStorage.getItem('sw_soundie_enabled') !== 'false');
+  const [soundieEnabled, setSoundieEnabled] = useState(localStorage.getItem('sw_soundie_enabled') !== 'false');
   const [startupScreen, setStartupScreen] = useState(localStorage.getItem('sw_startup_screen') || 'home');
 
 // Update the theme listener effect
 useEffect(() => {
   const handleThemeUpdate = () => {
     setCurrentTheme(localStorage.getItem('soundwave_theme') || 'default');
+    setSoundieEnabled(localStorage.getItem('sw_soundie_enabled') !== 'false');
   };
   
   window.addEventListener('theme-change', handleThemeUpdate);
@@ -193,9 +194,8 @@ useEffect(() => {
   const [monoAudio, setMonoAudio] = useState(localStorage.getItem('sw_mono_audio') === 'true');
   const [lyricsFontSize, setLyricsFontSize] = useState(Number(localStorage.getItem('sw_lyrics_size') || 18));
   
-  const [enableSoundie, setEnableSoundie] = useState(localStorage.getItem('sw_soundie_enabled') === 'true');
-const [geminiKey, setGeminiKey] = useState(localStorage.getItem('sw_gemini_key') || '');
-const [unrealKey, setUnrealKey] = useState(localStorage.getItem('sw_unreal_key') || '');
+  const [geminiKey, setGeminiKey] = useState(localStorage.getItem('sw_gemini_key') || '');
+  const [unrealKey, setUnrealKey] = useState(localStorage.getItem('sw_unreal_key') || '');
   // --- APP ICON STATE (native only) ---
   const [currentAppIcon, setCurrentAppIcon] = useState(localStorage.getItem('sw_app_icon') || 'default');
   const [isChangingIcon, setIsChangingIcon] = useState(false);
@@ -1091,44 +1091,49 @@ const [unrealKey, setUnrealKey] = useState(localStorage.getItem('sw_unreal_key')
 
                     
 
-                    {/* ENBALE SOUNDIE AI ASSISTANT */}
+                    {/* ENABLE SOUNDIE AI ASSISTANT */}
                     {isNative ? (
                       <div className="flex items-center justify-between p-5 bg-black/20 rounded-2xl border border-white/5">
                         <div className="pr-4">
                           <h4 className="text-slate-200 text-sm font-bold flex items-center gap-1.5">
-                            <Mic size={16} className={activeThemeObj.highlight} /> Enable Soundie AI Assistant
+                            <Mic size={16} className={activeThemeObj.highlight} /> Soundie AI Voice Assistant
                           </h4>
-                          <p className="text-xs text-zinc-500 mt-1">Voice-controlled music AI</p>
+                          <p className="text-xs text-zinc-500 mt-1">Show Soundie on sidebar & mobile navigation</p>
                         </div>
                         <button
                           onClick={() => {
-                            const newVal = !enableSoundie;
-                            setEnableSoundie(newVal);
-                            localStorage.setItem('sw_soundie_enabled', newVal.toString());
+                            const next = !soundieEnabled;
+                            setSoundieEnabled(next);
+                            localStorage.setItem('sw_soundie_enabled', String(next));
+                            triggerHaptic();
                             window.dispatchEvent(new Event('sw-settings-updated'));
                           }}
-                          className={`w-12 h-6 rounded-full p-0.5 transition-colors border border-white/10 shrink-0 ${enableSoundie ? 'bg-emerald-400' : 'bg-black'}`}
+                          className={`w-12 h-6 rounded-full p-0.5 transition-colors border border-white/10 shrink-0 ${soundieEnabled ? 'bg-emerald-400' : 'bg-black'}`}
                         >
-                          <div className={`w-4 h-4 rounded-full transition-transform ${enableSoundie ? 'translate-x-6 bg-black' : 'translate-x-0 bg-zinc-500'}`} />
+                          <div className={`w-4 h-4 rounded-full transition-transform ${soundieEnabled ? 'translate-x-6 bg-black' : 'translate-x-0 bg-zinc-500'}`} />
                         </button>
                       </div>
                     ) : (
                       <div 
-                        className="flex items-center justify-between p-5 bg-black/20 rounded-2xl border border-white/5 opacity-40 cursor-pointer relative" 
+                        className="flex items-center justify-between p-5 bg-black/20 rounded-2xl border border-white/5 opacity-50 cursor-pointer relative" 
                         onClick={() => setShowDownloadModal(true)}
                       >
-                        <div className="absolute inset-0 z-10"></div>
                         <div className="pr-4">
-                          <h4 className="text-slate-200 text-sm font-bold flex items-center gap-1.5">
-                            <Mic size={16} className={activeThemeObj.highlight} /> Enable Soundie AI Assistant
-                          </h4>
-                          <p className="text-xs text-zinc-500 mt-1">Voice-controlled music AI</p>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-slate-200 text-sm font-bold flex items-center gap-1.5">
+                              <Mic size={16} className={activeThemeObj.highlight} /> Soundie AI Voice Assistant
+                            </h4>
+                            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                              App Only
+                            </span>
+                          </div>
+                          <p className="text-xs text-zinc-500 mt-1">Available exclusively on Android & iOS native app.</p>
                         </div>
                         <button
                           disabled
-                          className={`w-12 h-6 rounded-full p-0.5 transition-colors border border-white/10 shrink-0 pointer-events-none ${enableSoundie ? 'bg-white' : 'bg-black'}`}
+                          className="w-12 h-6 rounded-full p-0.5 transition-colors border border-white/10 shrink-0 bg-black pointer-events-none"
                         >
-                          <div className={`w-4 h-4 rounded-full transition-transform ${enableSoundie ? 'translate-x-6 bg-black' : 'translate-x-0 bg-zinc-500'}`} />
+                          <div className="w-4 h-4 rounded-full translate-x-0 bg-zinc-600" />
                         </button>
                       </div>
                     )}
@@ -1310,25 +1315,43 @@ const [unrealKey, setUnrealKey] = useState(localStorage.getItem('sw_unreal_key')
                   {/* 5. Soundie AI on Mobile */}
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-white/5 pb-6">
                     <div className="pr-4">
-                      <h4 className="text-slate-200 font-bold text-base flex items-center gap-2">
-                        <Sparkles size={18} className={activeThemeObj.highlight} /> Soundie AI Voice Assistant
-                      </h4>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-slate-200 font-bold text-base flex items-center gap-2">
+                          <Sparkles size={18} className={activeThemeObj.highlight} /> Soundie AI Voice Assistant
+                        </h4>
+                        {!isNative && (
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                            App Only
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-zinc-500 mt-1 max-w-[420px]">
-                        Display the Soundie AI orb in mobile navigation and quick-access header.
+                        {isNative 
+                          ? 'Display Soundie AI on sidebar and mobile navigation.' 
+                          : 'Soundie AI voice assistant is exclusive to the mobile app.'}
                       </p>
                     </div>
-                    <button
-                      onClick={() => {
-                        const next = !soundieMobileEnabled;
-                        setSoundieMobileEnabled(next);
-                        localStorage.setItem('sw_soundie_enabled', String(next));
-                        triggerHaptic();
-                        window.dispatchEvent(new Event('sw-settings-updated'));
-                      }}
-                      className={`w-12 h-6 rounded-full p-1 transition-colors border border-white/10 shrink-0 ${soundieMobileEnabled ? activeThemeObj.activeToggle : 'bg-black'}`}
-                    >
-                      <div className={`w-4 h-4 rounded-full transition-transform ${soundieMobileEnabled ? 'translate-x-6 bg-black' : 'translate-x-0 bg-zinc-500'}`} />
-                    </button>
+                    {isNative ? (
+                      <button
+                        onClick={() => {
+                          const next = !soundieEnabled;
+                          setSoundieEnabled(next);
+                          localStorage.setItem('sw_soundie_enabled', String(next));
+                          triggerHaptic();
+                          window.dispatchEvent(new Event('sw-settings-updated'));
+                        }}
+                        className={`w-12 h-6 rounded-full p-1 transition-colors border border-white/10 shrink-0 ${soundieEnabled ? activeThemeObj.activeToggle : 'bg-black'}`}
+                      >
+                        <div className={`w-4 h-4 rounded-full transition-transform ${soundieEnabled ? 'translate-x-6 bg-black' : 'translate-x-0 bg-zinc-500'}`} />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setShowDownloadModal(true)}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/15 text-white transition-all shrink-0 border border-white/10"
+                      >
+                        Get App
+                      </button>
+                    )}
                   </div>
 
                   {/* 6. Default Startup Screen */}

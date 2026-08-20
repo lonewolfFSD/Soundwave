@@ -554,16 +554,6 @@ const Header: React.FC<HeaderProps> = ({ user, onSelectPlaylist }) => {
                 <span className="w-2 h-2 rounded-full bg-violet-400 absolute top-1 right-1 animate-pulse" />
               </button>
 
-              <button
-                className="p-1.5 text-white/90 hover:text-white hover:bg-white/10 rounded-full transition-all relative flex items-center justify-center"
-                onClick={() => window.dispatchEvent(new Event('open-soundie'))}
-                title="Soundie AI Assistant"
-              >
-                <div className="relative w-6 h-6 rounded-full overflow-hidden soundie-nav-orb shadow-[0_0_10px_rgba(139,92,246,0.6)]">
-                  <div className="absolute inset-0 elevenlabs-mesh-nav" />
-                </div>
-              </button>
-
               <button 
                 className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"
                 onClick={() => setShowMobileSearch(true)}

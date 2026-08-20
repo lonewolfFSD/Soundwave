@@ -14,6 +14,7 @@ const MobileSettings: React.FC<MobileSettingsProps> = ({ isOpen, onClose }) => {
   const [shakeEnabled, setShakeEnabled] = useState(localStorage.getItem('sw_shake_shuffle') !== 'false');
   const [hapticsEnabled, setHapticsEnabled] = useState(localStorage.getItem('sw_haptics') !== 'false');
   const [duckingEnabled, setDuckingEnabled] = useState(localStorage.getItem('sw_ducking') !== 'false');
+  const [soundieEnabled, setSoundieEnabled] = useState(localStorage.getItem('sw_soundie_enabled') !== 'false');
 
   // --- MODAL & DRAG STATE ---
   const [dragY, setDragY] = useState(0);
@@ -108,11 +109,13 @@ const MobileSettings: React.FC<MobileSettingsProps> = ({ isOpen, onClose }) => {
     localStorage.setItem('sw_shake_shuffle', shakeEnabled.toString());
     localStorage.setItem('sw_haptics', hapticsEnabled.toString());
     localStorage.setItem('sw_ducking', duckingEnabled.toString());
+    localStorage.setItem('sw_soundie_enabled', soundieEnabled.toString());
     localStorage.setItem('sw_voice_cmds', 'false'); // Force voice assistant off
 
     // 2. SAVE NATIVELY FOR ANDROID STUDIO 
     await Preferences.set({ key: 'sw_shake_shuffle', value: shakeEnabled.toString() });
     await Preferences.set({ key: 'sw_ducking', value: duckingEnabled.toString() });
+    await Preferences.set({ key: 'sw_soundie_enabled', value: soundieEnabled.toString() });
     await Preferences.set({ key: 'sw_voice_cmds', value: 'false' }); // Force voice assistant off
 
     // 3. Update Android Bridge
@@ -130,6 +133,7 @@ const MobileSettings: React.FC<MobileSettingsProps> = ({ isOpen, onClose }) => {
     }
     
     window.dispatchEvent(new Event('sw-native-settings-updated'));
+    window.dispatchEvent(new Event('sw-settings-updated'));
     handleClose();
   };
 
@@ -205,12 +209,28 @@ const MobileSettings: React.FC<MobileSettingsProps> = ({ isOpen, onClose }) => {
               <div className="flex justify-between items-center">
                 <div>
                   <h4 className="text-slate-200 text-sm font-bold flex items-center gap-1.5"> Audio Ducking</h4>
-                  <p className="text-[12px] text-zinc-500 mt-1 max-w-[170px]">Temporarily lower volume for notifications and navigation.</p>
+                  <p className="text-[12px] text-zinc-500 mt-1 max-w-[200px]">Temporarily lower music volume on incoming calls and notifications.</p>
                 </div>
                 <button onClick={() => handleToggle(setDuckingEnabled, duckingEnabled)} className={`w-10 h-5 rounded-full p-0.5 transition-colors border border-white/10 ${duckingEnabled ? activeThemeObj.activeToggle : 'bg-black'}`}>
                   <div className={`w-3.5 h-3.5 rounded-full transition-transform ${duckingEnabled ? 'translate-x-5 bg-black' : 'translate-x-0 bg-zinc-500'}`}></div>
                 </button>
               </div>
+
+              {/* Toggle: Soundie AI Assistant (Native Only) */}
+              {Capacitor.isNativePlatform() && (
+                <>
+                  <div className="h-px bg-white/5 w-full"></div>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h4 className="text-slate-200 text-sm font-bold flex items-center gap-1.5"> Soundie AI Assistant</h4>
+                      <p className="text-[12px] text-zinc-500 mt-1 max-w-[200px]">Show Soundie AI on navigation & sidebar.</p>
+                    </div>
+                    <button onClick={() => handleToggle(setSoundieEnabled, soundieEnabled)} className={`w-10 h-5 rounded-full p-0.5 transition-colors border border-white/10 ${soundieEnabled ? activeThemeObj.activeToggle : 'bg-black'}`}>
+                      <div className={`w-3.5 h-3.5 rounded-full transition-transform ${soundieEnabled ? 'translate-x-5 bg-black' : 'translate-x-0 bg-zinc-500'}`}></div>
+                    </button>
+                  </div>
+                </>
+              )}
 
             </div>
           </div>

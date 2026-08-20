@@ -146,7 +146,7 @@ function AppInner() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/download" element={<DownloadPage />} />
-        <Route path="/soundie" element={<SoundieExplorer />} />
+        <Route path="/soundie" element={Capacitor.isNativePlatform() ? <SoundieExplorer /> : <Navigate to="/" replace />} />
         <Route path="/admin" element={<AdminDashboard />} />
         <Route
           path="/dashboard"

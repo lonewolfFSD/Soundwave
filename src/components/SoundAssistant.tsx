@@ -78,12 +78,30 @@ const SoundieAssistant = ({ isOpen, onClose: onCloseExternal }: { isOpen?: boole
 
   const colors = themeConfig[theme] || themeConfig['default'];
   const UNREAL_KEY = localStorage.getItem('sw_unreal_key') || 'jHkES2MDPMQxTiRCYcytOFiZa4xltB1NWwwUIelHHz0EeLBKPXG8xy';
+  const [soundieEnabled, setSoundieEnabled] = useState(() =>
+    localStorage.getItem('sw_soundie_enabled') !== 'false'
+  );
+
+  const resetState = () => {
+    setTranscript('');
+    setAiResponse('');
+    setAwaitingPlaylistName(false);
+    setIsThinking(false);
+    setPendingSongConfirmation(null);
+    setPendingPlaylistDeletion(null);
+  };
 
   useEffect(() => {
-    const handle = () => setTheme(Capacitor.isNativePlatform() ? (localStorage.getItem('soundwave_theme') || 'default') : 'default');
+    const handle = () => {
+      setTheme(Capacitor.isNativePlatform() ? (localStorage.getItem('soundwave_theme') || 'default') : 'default');
+      setSoundieEnabled(localStorage.getItem('sw_soundie_enabled') !== 'false');
+    };
     window.addEventListener('theme-change', handle);
     window.addEventListener('sw-settings-updated', handle);
-    return () => window.removeEventListener('theme-change', handle) && window.removeEventListener('sw-settings-updated', handle);
+    return () => {
+      window.removeEventListener('theme-change', handle);
+      window.removeEventListener('sw-settings-updated', handle);
+    };
   }, []);
 
   const pluginsReadyRef = useRef(false);
@@ -98,11 +116,13 @@ const SoundieAssistant = ({ isOpen, onClose: onCloseExternal }: { isOpen?: boole
   }, []);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && Capacitor.isNativePlatform() && soundieEnabled) {
       resetState();
-      setTimeout(startListening, 350);
+      setTimeout(() => {
+        startListening();
+      }, 350);
     }
-  }, [isOpen]);
+  }, [isOpen, soundieEnabled]);
 
   // Track whether Soundie was open when the user left the app
   const wasOpenOnBackgroundRef = useRef(false);
@@ -145,15 +165,6 @@ const SoundieAssistant = ({ isOpen, onClose: onCloseExternal }: { isOpen?: boole
       } catch (e) { console.error('[Soundie] Firestore error:', e); }
     })();
   }, [user?.id, globalLibrary.length]);
-
-  if (localStorage.getItem('sw_soundie_enabled') !== 'true') return null;
-
-  const resetState = () => {
-    setTranscript('');
-    setAiResponse('');
-    setAwaitingPlaylistName(false);
-    setIsThinking(false);
-  };
 
    // ── Add song to playlist (FIXED: Now uses the Subcollection to match UI) ──
   const addSongToPlaylist = async (song: Song, playlistName: string): Promise<boolean> => {
@@ -1121,6 +1132,8 @@ const SoundieAssistant = ({ isOpen, onClose: onCloseExternal }: { isOpen?: boole
   const glowHex = Math.round(blobGlow * 90).toString(16).padStart(2, '0');
   const glowBlur = 18 + blobWave * 0.22;
   const ringScale = 1 + (blobScale - 1) * 1.9;
+
+  if (!Capacitor.isNativePlatform() || !soundieEnabled) return null;
 
   return (
     <>

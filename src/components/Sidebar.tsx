@@ -68,12 +68,15 @@ const Sidebar: React.FC<SidebarProps> = ({
   // Soundie enabled — default true so Soundie is enabled out of the box
   const [soundieEnabled, setSoundieEnabled] = useState(localStorage.getItem('sw_soundie_enabled') !== 'false');
 
+  const isNative = Capacitor.isNativePlatform();
+  const showSoundie = isNative && soundieEnabled;
+  const totalNavTabs = showSoundie ? 6 : 5;
+
   // --- APPLE-STYLE DRAG & DROP NAV STATE ---
   const mobileNavRef = useRef<HTMLDivElement>(null);
   const [isDraggingNav, setIsDraggingNav] = useState(false);
   const [dragHoverTab, setDragHoverTab] = useState<number | null>(null);
   const lastHoverTabRef = useRef<number>(0);
-  const totalNavTabs = 6;
 
   const triggerNavHaptic = async (style: ImpactStyle = ImpactStyle.Light) => {
     const isHapticEnabled = localStorage.getItem('sw_haptics') !== 'false';
@@ -307,7 +310,9 @@ const themeConfig: Record<string, any> = {
   const isInitialMount = useRef(true);
   
   useEffect(() => {
-    if (showUploadModal) {
+    if (showMobileSettings) {
+      setActiveTab(4);
+    } else if (showUploadModal) {
       setActiveTab(3);
     } else if (showNewPlaylistModal) {
       setActiveTab(2);
@@ -318,9 +323,11 @@ const themeConfig: Record<string, any> = {
         const startupScreen = localStorage.getItem('sw_startup_screen');
         setActiveTab(startupScreen === 'library' ? 1 : 0);
         isInitialMount.current = false;
+      } else {
+        setActiveTab(0);
       }
     }
-  }, [location.pathname, showUploadModal, showNewPlaylistModal, selectedPlaylist]);
+  }, [location.pathname, showMobileSettings, showUploadModal, showNewPlaylistModal, selectedPlaylist]);
 
   const handleMobileNav = async (index: number) => {
   const isHapticEnabled = localStorage.getItem('sw_haptics') !== 'false';
@@ -328,14 +335,17 @@ const themeConfig: Record<string, any> = {
 
   if (isHapticEnabled && isNative) {
     try {
-      const style = (index === 2 || index === 3) ? ImpactStyle.Medium : ImpactStyle.Light;
+      const style = (index === 2 || index === 3 || index === 4) ? ImpactStyle.Medium : ImpactStyle.Light;
       await Haptics.impact({ style });
     } catch (e) {}
   }
 
-  // Handle Settings (Index 4)
+  // Handle Settings (Index 4: Native Mobile Settings)
   if (index === 4) {
-    window.dispatchEvent(new CustomEvent('soundwave-open-settings'));
+    setShowUploadModal(false);
+    setShowNewPlaylistModal(false);
+    setShowMobileSettings(true);
+    setActiveTab(4);
     return; 
   }
 
@@ -343,6 +353,7 @@ const themeConfig: Record<string, any> = {
   if (index === 5) {
     setShowUploadModal(false);
     setShowNewPlaylistModal(false);
+    setShowMobileSettings(false);
 
     // Show terms modal first if not yet accepted
     if (!hasSoundieTermsAccepted()) {
@@ -356,6 +367,7 @@ const themeConfig: Record<string, any> = {
   }
 
   setActiveTab(index);
+  setShowMobileSettings(false);
 
   if (index === 0) {
     navigate('/', { replace: true });
@@ -510,35 +522,37 @@ const themeConfig: Record<string, any> = {
 
             <button 
               onClick={() => setShowUploadModal(true)}
-              className={`w-full flex items-center justify-left gap-2 py-3.5 px-5 mt-0.5 text-sm ${reduceMotion ? '' : 'transition-all duration-200'} animate-sidebar ${navBtnClass}`} 
+              className={`w-full flex items-center justify-left gap-2 py-3.5 px-5 mt-0.5 text-sm ${!showSoundie ? 'rounded-b-md' : ''} ${reduceMotion ? '' : 'transition-all duration-200'} animate-sidebar ${navBtnClass}`} 
               style={{ fontFamily: 'Space Grotesk, sans-serif', animationDelay: reduceMotion ? '0ms' : '200ms' }}
             >
               <Import size={22} /> <span className='text-[14px] mt-0.5 font-bold'>Import Music</span>
             </button>
 
-            <button 
-              onClick={() => {
-                if (!hasSoundieTermsAccepted()) {
-                  setShowSoundieTerms(true);
-                  return;
-                }
-                if (onOpenSoundie) onOpenSoundie();
-                window.dispatchEvent(new Event('open-soundie'));
-                if (onClose) onClose();
-              }}
-              className={`w-full flex items-center justify-left gap-2 py-3.5 px-5 mt-0.5 text-sm rounded-b-md ${reduceMotion ? '' : 'transition-all duration-200'} animate-sidebar ${navBtnClass}`} 
-              style={{ fontFamily: 'Space Grotesk, sans-serif', animationDelay: reduceMotion ? '0ms' : '220ms' }}
-            >
-              <div className="relative w-5 h-5 rounded-full overflow-hidden soundie-nav-orb shadow-[0_0_10px_rgba(139,92,246,0.6)] shrink-0">
-                <div className="absolute inset-0 elevenlabs-mesh-nav" />
-              </div>
-              <div className="flex items-center justify-between flex-1">
-                <span className='text-[14px] mt-0.5 font-bold'>Soundie AI</span>
-                <span className="text-[9px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1.5 py-0.5 rounded-full">
-                  AI
-                </span>
-              </div>
-            </button>
+            {showSoundie && (
+              <button 
+                onClick={() => {
+                  if (!hasSoundieTermsAccepted()) {
+                    setShowSoundieTerms(true);
+                    return;
+                  }
+                  if (onOpenSoundie) onOpenSoundie();
+                  window.dispatchEvent(new Event('open-soundie'));
+                  if (onClose) onClose();
+                }}
+                className={`w-full flex items-center justify-left gap-2 py-3.5 px-5 mt-0.5 text-sm rounded-b-md ${reduceMotion ? '' : 'transition-all duration-200'} animate-sidebar ${navBtnClass}`} 
+                style={{ fontFamily: 'Space Grotesk, sans-serif', animationDelay: reduceMotion ? '0ms' : '220ms' }}
+              >
+                <div className="relative w-5 h-5 rounded-full overflow-hidden soundie-nav-orb shadow-[0_0_10px_rgba(139,92,246,0.6)] shrink-0">
+                  <div className="absolute inset-0 elevenlabs-mesh-nav" />
+                </div>
+                <div className="flex items-center justify-between flex-1">
+                  <span className='text-[14px] mt-0.5 font-bold'>Soundie AI</span>
+                  <span className="text-[9px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1.5 py-0.5 rounded-full">
+                    AI
+                  </span>
+                </div>
+              </button>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto px-5 py-6 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
@@ -654,26 +668,28 @@ const themeConfig: Record<string, any> = {
               />
             </button>
 
-            {/* BUTTON 5: SOUNDIE AI ASSISTANT */}
-            <button
-              onClick={() => handleMobileNav(5)}
-              className="relative z-10 flex flex-col items-center justify-center flex-1 h-full gap-1 rounded-full bg-transparent"
-            >
-              <div className="absolute top-1.5 right-1.5 z-20">
-                <div className="bg-white px-1 h-[14px] rounded-md shadow-lg scale-[0.75] flex items-center justify-center">
-                  <span 
-                    className="text-[8px] font-black text-black leading-none uppercase" 
-                    style={{ fontFamily: 'Syne, sans-serif' }}
-                  >
-                    AI
-                  </span>
+            {/* BUTTON 5: SOUNDIE AI ASSISTANT (Native & Enabled Only) */}
+            {showSoundie && (
+              <button
+                onClick={() => handleMobileNav(5)}
+                className="relative z-10 flex flex-col items-center justify-center flex-1 h-full gap-1 rounded-full bg-transparent"
+              >
+                <div className="absolute top-1.5 right-1.5 z-20">
+                  <div className="bg-white px-1 h-[14px] rounded-md shadow-lg scale-[0.75] flex items-center justify-center">
+                    <span 
+                      className="text-[8px] font-black text-black leading-none uppercase" 
+                      style={{ fontFamily: 'Syne, sans-serif' }}
+                    >
+                      AI
+                    </span>
+                  </div>
                 </div>
-              </div>
 
-              <div className="relative w-6 h-6 rounded-full overflow-hidden soundie-nav-orb shadow-[0_0_12px_rgba(139,92,246,0.5)]">
-                <div className="absolute inset-0 elevenlabs-mesh-nav" />
-              </div>
-            </button>
+                <div className="relative w-6 h-6 rounded-full overflow-hidden soundie-nav-orb shadow-[0_0_12px_rgba(139,92,246,0.5)]">
+                  <div className="absolute inset-0 elevenlabs-mesh-nav" />
+                </div>
+              </button>
+            )}
 
           </div>
         </div>

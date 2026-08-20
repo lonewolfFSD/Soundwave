@@ -88,7 +88,9 @@ const Dashboard = () => {
       setSelectedPlaylist(null)
     }
     const handleOpenSoundie = () => {
-      setSoundieOpen(true)
+      if (Capacitor.isNativePlatform() && localStorage.getItem('sw_soundie_enabled') !== 'false') {
+        setSoundieOpen(true)
+      }
     }
     window.addEventListener('soundwave-open-artist', handleOpenArtist)
     window.addEventListener('soundwave-open-settings', handleOpenSettings)
