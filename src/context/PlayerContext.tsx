@@ -1,7 +1,6 @@
-import React, { createContext, useContext, useState, useRef, useEffect } from 'react'
+import React, { createContext, useContext, useState, useRef, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@capgo/capacitor-media-session';
-import { nativePlayer, isNativeAudioSupported } from '../utils/nativePlayer';
 import { resolveFullLengthSong, isYoutubeVideoId, findYouTubeVideoId, extractYoutubeVideoId } from '../utils/ytMusic';
 import { fetchLyrics } from '../utils/lyrics';
 import { getMoodCoherentQueue, getSongRadioQueue } from '../utils/aiRecommender';
@@ -979,33 +978,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, []);
 
-  // ── ATTACH STANDALONE ANDROID MEDIA3 / EXOPLAYER EVENT LISTENERS ──
-  useEffect(() => {
-    if (!isNativeAudioSupported()) return;
-
-    const unTrackEnd = nativePlayer.onTrackEnd(() => {
-      nextSong();
-    });
-
-    const unStateChange = nativePlayer.onPlaybackStateChange((playing) => {
-      setIsPlaying(playing);
-    });
-
-    const unPosUpdate = nativePlayer.onPositionUpdate((pos, dur) => {
-      if (!isDragging) {
-        setCurrentTime(pos);
-      }
-      if (dur > 0) {
-        setDuration(dur);
-      }
-    });
-
-    return () => {
-      unTrackEnd?.then(h => h.remove());
-      unStateChange?.then(h => h.remove());
-      unPosUpdate?.then(h => h.remove());
-    };
-  }, [queue, currentSong, repeatMode, isShuffle, isDragging]);
 
   const playSong = async (song: Song, addToHistory = true, startPosition = 0) => {
     if (!song) return
@@ -1102,34 +1074,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       (window as any).AndroidSettings.requestIgnoreBatteryOptimizations();
     }
 
-    // 🌟 Standalone Android Media3 / ExoPlayer Native Playback for Direct Audio Streams
-    if (isNativeAudioSupported() && isUploadedSong && song.url) {
-      activeEngineRef.current = 'html5';
-      try { audioRef.current?.pause(); } catch {}
-      try { ytPlayerRef.current?.pauseVideo(); } catch {}
-
-      nativePlayer.play({
-        url: song.url,
-        title: song.title,
-        artist: song.artist,
-        album: (song as any).album || 'SoundWave',
-        artwork: song.coverArtBase64 || '',
-        position: startPosition
-      }).then((success) => {
-        if (success) {
-          setIsPlaying(true);
-        }
-      });
-
-      fetchLyrics(song.title, song.artist, song.duration, (song as any).youtubeId).then((lyrics) => {
-        if (lyrics) {
-          setCurrentSong(prev => prev && (prev.id === song.id || prev.title === song.title) ? { ...prev, lyrics } : prev);
-        }
-      }).catch(() => {});
-
-      return;
-    }
-
     if (isUploadedSong) {
       activeEngineRef.current = 'html5'
       try { ytPlayerRef.current?.pauseVideo() } catch {}
@@ -1198,10 +1142,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }
 
   const pauseSong = () => {
-    if (isNativeAudioSupported()) {
-      nativePlayer.pause();
-    }
-
     if (isRemotePlayback) {
       // Remote Mode: send command to active host without touching local audio hardware
       setIsPlaying(false)
@@ -1243,12 +1183,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }
 
   const resumeSong = () => {
-    if (isNativeAudioSupported()) {
-      nativePlayer.resume();
-      setIsPlaying(true);
-      return;
-    }
-
     if (isRemotePlayback) {
       // Remote Mode: send resume to active host without local sound output
       setIsPlaying(true)
@@ -1438,10 +1372,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         })
       }
       return
-    }
-
-    if (isNativeAudioSupported()) {
-      nativePlayer.seek(time);
     }
 
     if (activeEngineRef.current === 'youtube') {
