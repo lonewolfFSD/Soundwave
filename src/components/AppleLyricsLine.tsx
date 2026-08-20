@@ -56,12 +56,12 @@ export const AppleLyricsLine: React.FC<AppleLyricsLineProps> = React.memo(({
         if (line.time !== -1) onClick(line.time)
       }}
       style={{
-        fontSize: isActive ? `${fontSize + 5}px` : `${fontSize}px`,
+        fontSize: isActive ? `${fontSize + 6}px` : `${fontSize}px`,
         fontFamily: "'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-        lineHeight: 1.3
+        lineHeight: 1.4
       }}
       className={`
-        transition-all duration-300 ease-out cursor-pointer select-none py-1 px-2 rounded-xl will-change-transform
+        transition-all duration-300 ease-out cursor-pointer select-none py-1.5 px-2 rounded-xl will-change-transform
         ${align === 'left' ? 'text-left' : 'text-center'}
         ${
           isActive
