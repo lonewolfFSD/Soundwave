@@ -73,64 +73,85 @@ function youtubeMusicPlugin() {
       })
 
       server.middlewares.use('/api/yt-search', async (req: any, res: any) => {
+        res.setHeader('Content-Type', 'application/json')
         try {
           const urlObj = new URL(req.url, 'http://localhost:5173')
-          const query = urlObj.searchParams.get('q') || ''
+          const query = (urlObj.searchParams.get('q') || '').trim()
           if (!query) {
-            res.setHeader('Content-Type', 'application/json')
             res.end(JSON.stringify([]))
             return
           }
 
           const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query + ' audio')}&sp=EgIQAQ%253D%253D`
-          const response = await fetch(ytUrl, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-              'Accept-Language': 'en-US,en;q=0.9'
+          let html = ''
+          try {
+            const response = await fetch(ytUrl, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9'
+              }
+            })
+            if (response.ok) {
+              html = await response.text()
             }
-          })
-          const html = await response.text()
-          const jsonMatch = html.match(/var ytInitialData\s*=\s*({.+?});<\/script>/s) ||
-                            html.match(/ytInitialData\s*=\s*({.+?});/s)
-          
-          let songs: any[] = []
-          if (jsonMatch && jsonMatch[1]) {
-            try {
-              const data = JSON.parse(jsonMatch[1])
-              const contents = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents
-              if (Array.isArray(contents)) {
-                for (const item of contents) {
-                  const v = item.videoRenderer
-                  if (v && v.videoId && v.title?.runs?.[0]?.text) {
-                    const videoId = v.videoId
-                    const title = v.title.runs[0].text
-                    const artist = v.ownerText?.runs?.[0]?.text || v.shortBylineText?.runs?.[0]?.text || 'YouTube Music'
-                    const durationText = v.lengthText?.simpleText || '3:30'
-                    const parts = durationText.split(':').map((p: string) => parseInt(p, 10))
-                    const durationSecs = parts.length === 3 ? parts[0]*3600 + parts[1]*60 + parts[2] : (parts.length === 2 ? parts[0]*60 + parts[1] : 210)
-                    const thumbnail = v.thumbnail?.thumbnails?.[v.thumbnail.thumbnails.length - 1]?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+          } catch {}
 
-                    songs.push({
-                      id: `yt_${videoId}`,
-                      title,
-                      artist,
-                      duration: durationSecs,
-                      url: `/api/yt-stream?id=${videoId}`,
-                      playlistId: 'online_search',
-                      coverArtBase64: thumbnail,
-                      youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`
-                    })
-                  }
+          if (!html) {
+            try {
+              const fallbackUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`
+              const response = await fetch(fallbackUrl, {
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                  'Accept-Language': 'en-US,en;q=0.9'
                 }
+              })
+              if (response.ok) {
+                html = await response.text()
               }
             } catch {}
           }
 
-          res.setHeader('Content-Type', 'application/json')
+          let songs: any[] = []
+          if (html) {
+            const jsonMatch = html.match(/var ytInitialData\s*=\s*({.+?});<\/script>/s) ||
+                              html.match(/ytInitialData\s*=\s*({.+?});/s)
+            
+            if (jsonMatch && jsonMatch[1]) {
+              try {
+                const data = JSON.parse(jsonMatch[1])
+                const contents = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents?.[0]?.itemSectionRenderer?.contents
+                if (Array.isArray(contents)) {
+                  for (const item of contents) {
+                    const v = item.videoRenderer
+                    if (v && v.videoId && v.title?.runs?.[0]?.text) {
+                      const videoId = v.videoId
+                      const title = v.title.runs[0].text
+                      const artist = v.ownerText?.runs?.[0]?.text || v.shortBylineText?.runs?.[0]?.text || 'YouTube Music'
+                      const durationText = v.lengthText?.simpleText || '3:30'
+                      const parts = durationText.split(':').map((p: string) => parseInt(p, 10))
+                      const durationSecs = parts.length === 3 ? parts[0]*3600 + parts[1]*60 + parts[2] : (parts.length === 2 ? parts[0]*60 + parts[1] : 210)
+                      const thumbnail = v.thumbnail?.thumbnails?.[v.thumbnail.thumbnails.length - 1]?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+
+                      songs.push({
+                        id: `yt_${videoId}`,
+                        title,
+                        artist,
+                        duration: durationSecs,
+                        url: `https://www.youtube.com/watch?v=${videoId}`,
+                        playlistId: 'online_search',
+                        coverArtBase64: thumbnail,
+                        youtubeUrl: `https://www.youtube.com/watch?v=${videoId}`
+                      })
+                    }
+                  }
+                }
+              } catch {}
+            }
+          }
+
           res.end(JSON.stringify(songs.slice(0, 25)))
-        } catch (e: any) {
-          res.statusCode = 500
-          res.end(JSON.stringify({ error: e.message }))
+        } catch {
+          res.end(JSON.stringify([]))
         }
       })
 
