@@ -6,6 +6,7 @@ import { getMoodCoherentQueue, getSongRadioQueue } from '../utils/aiRecommender'
 import { getLocalLikedSongs, saveLocalLikedSongs, fetchRemoteLikedSongs } from '../utils/likedSongs';
 import { getLocalListenHistory, recordSongPlay } from '../utils/listenHistory';
 import { auth } from '../utils/firebase';
+import { getOfflineSongById } from '../utils/offlineStorage';
 
 declare global {
   interface Window {
@@ -483,6 +484,14 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setPlayedHistory(prev => [...prev, currentSong])
     }
 
+    // Check if track is cached offline
+    try {
+      const offlineSong = await getOfflineSongById(song.id);
+      if (offlineSong) {
+        song = offlineSong;
+      }
+    } catch {}
+
     setCurrentSong(song)
     setCurrentTime(0)
     setDuration(song.duration || 210)
@@ -521,6 +530,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const isUploadedSong = song.url?.startsWith('blob:') ||
       song.url?.startsWith('data:') ||
       song.playlistId === 'global' ||
+      song.playlistId === 'offline' ||
+      song.isOffline === true ||
       song.url?.includes('cloudinary') ||
       song.url?.includes('firebasestorage')
 

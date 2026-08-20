@@ -69,10 +69,10 @@ export const downloadSongForOffline = async (
 ): Promise<Song> => {
   let downloadUrl = song.url
 
-  // If this is a YouTube placeholder stream, resolve the actual stream URL first
-  if (downloadUrl.startsWith('yt_stream://') || song.id.startsWith('yt_')) {
+  // If this is a YouTube song or lacks direct playable URL, resolve stream URL
+  if (!downloadUrl || downloadUrl.startsWith('yt_stream://') || song.id.startsWith('yt_') || !downloadUrl.startsWith('http')) {
     const videoId = song.id.replace('yt_', '')
-    downloadUrl = await getAudioStreamUrl(videoId)
+    downloadUrl = await getAudioStreamUrl(videoId, song.title, song.artist)
   }
 
   if (!downloadUrl) {
@@ -234,4 +234,45 @@ export const clearAllOfflineSongs = async (): Promise<void> => {
     console.error('Error clearing offline songs:', e)
   }
 }
+
+/**
+ * Get a specific offline song by its ID (returns cached Blob URL)
+ */
+export const getOfflineSongById = async (songId: string): Promise<Song | null> => {
+  try {
+    const db = await openDB()
+    const rec: OfflineSongRecord | undefined = await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly')
+      const store = tx.objectStore(STORE_NAME)
+      const req = store.get(songId)
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    })
+
+    if (!rec || !rec.audioBlob) return null
+
+    let url = activeBlobUrls.get(rec.id)
+    if (!url) {
+      url = URL.createObjectURL(rec.audioBlob)
+      activeBlobUrls.set(rec.id, url)
+    }
+
+    return {
+      id: rec.id,
+      title: rec.title,
+      artist: rec.artist,
+      duration: rec.duration,
+      coverArtBase64: rec.coverArtBase64,
+      lyrics: rec.lyrics,
+      url,
+      playlistId: 'offline',
+      isOffline: true,
+      sizeBytes: rec.sizeBytes,
+      downloadedAt: rec.downloadedAt
+    } as Song
+  } catch (e) {
+    return null
+  }
+}
+
 

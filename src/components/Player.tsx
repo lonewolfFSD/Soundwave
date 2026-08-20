@@ -1039,10 +1039,10 @@ useEffect(() => {
               // ── SPOTIFY-STYLE FULL-CANVAS LYRICS ──
               <div className="w-full max-w-[850px] h-full flex flex-col justify-center px-10 relative">
                 {/* Top Sync Calibration Pill */}
-                <div className="absolute top-6 left-1/2 -translate-x-1/2 z-20 flex items-center bg-black/50 backdrop-blur-xl rounded-full px-3.5 py-1 text-xs gap-2.5 border border-white/15 shadow-xl">
-                  <button onClick={() => adjustLyricsOffset(-0.1)} className="text-white/80 hover:text-white px-1.5 font-bold hover:scale-110 active:scale-95 transition-transform" title="Advance lyrics earlier (-0.1s)">-0.1s</button>
-                  <span className="text-white font-mono font-bold text-xs tracking-wide">Sync: {lyricsOffset >= 0 ? `+${lyricsOffset.toFixed(1)}s` : `${lyricsOffset.toFixed(1)}s`}</span>
-                  <button onClick={() => adjustLyricsOffset(0.1)} className="text-white/80 hover:text-white px-1.5 font-bold hover:scale-110 active:scale-95 transition-transform" title="Delay lyrics later (+0.1s)">+0.1s</button>
+                <div className={`absolute top-6 left-1/2 -translate-x-1/2 z-20 flex items-center flex-nowrap whitespace-nowrap ${barBg} backdrop-blur-xl rounded-full px-3.5 py-1 text-xs gap-2.5 border border-white/15 shadow-xl`}>
+                  <button onClick={() => adjustLyricsOffset(-0.1)} className={`${textMuted} hover:${textMain} px-1.5 font-bold hover:scale-110 active:scale-95 transition-all shrink-0 whitespace-nowrap`} title="Advance lyrics earlier (-0.1s)">-0.1s</button>
+                  <span className={`${textMain} font-mono font-bold text-xs tracking-wide shrink-0 whitespace-nowrap`}>Sync: {lyricsOffset >= 0 ? `+${lyricsOffset.toFixed(1)}s` : `${lyricsOffset.toFixed(1)}s`}</span>
+                  <button onClick={() => adjustLyricsOffset(0.1)} className={`${textMuted} hover:${textMain} px-1.5 font-bold hover:scale-110 active:scale-95 transition-all shrink-0 whitespace-nowrap`} title="Delay lyrics later (+0.1s)">+0.1s</button>
                 </div>
 
                 <div 
@@ -1092,10 +1092,10 @@ useEffect(() => {
                       e.stopPropagation();
                       resyncDesktopLyrics();
                     }}
-                    className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-indigo-600/90 to-purple-600/90 backdrop-blur-xl border border-white/30 text-white shadow-2xl hover:scale-105 active:scale-95 transition-all text-xs font-black uppercase tracking-wider animate-bounce"
+                    className={`absolute bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-4 py-2 rounded-full ${barBg} backdrop-blur-xl border border-white/20 ${textMain} shadow-2xl hover:scale-105 active:scale-95 transition-all text-xs font-bold whitespace-nowrap animate-bounce`}
                     style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                   >
-                    <RotateCcw size={14} />
+                    <RotateCcw size={13} className={activeColor} />
                     <span>Re-sync Lyrics</span>
                   </button>
                 )}
@@ -1284,10 +1284,10 @@ useEffect(() => {
         <div className={`py-3 px-6 mt-[70px] border-b flex items-center justify-between transition-colors ${lyricsSidebar}`}>
           <div className="flex items-center gap-3">
             <h3 className={`text-xl font-bold tracking-tight ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Lyrics</h3>
-            <div className="flex items-center bg-white/10 rounded-full px-2 py-0.5 text-[11px] gap-1 border border-white/15">
-              <button onClick={() => adjustLyricsOffset(-0.1)} className="hover:text-white px-1 font-bold text-white/70 hover:scale-110 active:scale-95 transition-transform" title="Advance lyrics earlier (-0.1s)">-0.1s</button>
-              <span className="text-white/90 font-mono font-bold">{lyricsOffset >= 0 ? `+${lyricsOffset.toFixed(1)}s` : `${lyricsOffset.toFixed(1)}s`}</span>
-              <button onClick={() => adjustLyricsOffset(0.1)} className="hover:text-white px-1 font-bold text-white/70 hover:scale-110 active:scale-95 transition-transform" title="Delay lyrics later (+0.1s)">+0.1s</button>
+            <div className={`flex items-center flex-nowrap whitespace-nowrap bg-white/10 rounded-full px-2.5 py-0.5 text-[11px] gap-1.5 border border-white/15`}>
+              <button onClick={() => adjustLyricsOffset(-0.1)} className={`hover:${textMain} px-1 font-bold ${textMuted} hover:scale-110 active:scale-95 transition-all shrink-0 whitespace-nowrap`} title="Advance lyrics earlier (-0.1s)">-0.1s</button>
+              <span className={`${textMain} font-mono font-bold shrink-0 whitespace-nowrap`}>{lyricsOffset >= 0 ? `+${lyricsOffset.toFixed(1)}s` : `${lyricsOffset.toFixed(1)}s`}</span>
+              <button onClick={() => adjustLyricsOffset(0.1)} className={`hover:${textMain} px-1 font-bold ${textMuted} hover:scale-110 active:scale-95 transition-all shrink-0 whitespace-nowrap`} title="Delay lyrics later (+0.1s)">+0.1s</button>
             </div>
           </div>
           <button onClick={() => setIsDesktopLyricsOpen(false)} className={`${textMuted} hover:${textMain} transition-colors`}>
@@ -1467,10 +1467,10 @@ useEffect(() => {
               // --- MOBILE LYRICS UI ---
               <div className="w-full h-full relative overflow-hidden flex flex-col">
                 {/* Real-time Sync Calibration Pill */}
-                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center bg-black/50 backdrop-blur-xl rounded-full px-3 py-1 text-xs gap-2 border border-white/20 shadow-xl">
-                  <button onClick={(e) => { e.stopPropagation(); triggerHaptic(); adjustLyricsOffset(-0.1); }} className="text-white/80 active:text-white px-1.5 font-extrabold text-xs active:scale-90 transition-transform" title="Advance lyrics earlier (-0.1s)">-0.1s</button>
-                  <span className="text-white font-mono font-bold text-[11px] tracking-wide">Sync: {lyricsOffset >= 0 ? `+${lyricsOffset.toFixed(1)}s` : `${lyricsOffset.toFixed(1)}s`}</span>
-                  <button onClick={(e) => { e.stopPropagation(); triggerHaptic(); adjustLyricsOffset(0.1); }} className="text-white/80 active:text-white px-1.5 font-extrabold text-xs active:scale-90 transition-transform" title="Delay lyrics later (+0.1s)">+0.1s</button>
+                <div className={`absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center flex-nowrap whitespace-nowrap ${barBg} backdrop-blur-xl rounded-full px-3 py-1 text-xs gap-2 border border-white/15 shadow-xl`}>
+                  <button onClick={(e) => { e.stopPropagation(); triggerHaptic(); adjustLyricsOffset(-0.1); }} className={`${textMuted} active:${textMain} px-1.5 font-bold text-xs active:scale-90 transition-all shrink-0 whitespace-nowrap`} title="Advance lyrics earlier (-0.1s)">-0.1s</button>
+                  <span className={`${textMain} font-mono font-bold text-[11px] tracking-wide shrink-0 whitespace-nowrap`}>Sync: {lyricsOffset >= 0 ? `+${lyricsOffset.toFixed(1)}s` : `${lyricsOffset.toFixed(1)}s`}</span>
+                  <button onClick={(e) => { e.stopPropagation(); triggerHaptic(); adjustLyricsOffset(0.1); }} className={`${textMuted} active:${textMain} px-1.5 font-bold text-xs active:scale-90 transition-all shrink-0 whitespace-nowrap`} title="Delay lyrics later (+0.1s)">+0.1s</button>
                 </div>
                 <div 
                   ref={mobileLyricsContainerRef}
@@ -1512,10 +1512,10 @@ useEffect(() => {
                       triggerHaptic();
                       resyncMobileLyrics();
                     }}
-                    className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-indigo-600/90 to-purple-600/90 backdrop-blur-xl border border-white/30 text-white shadow-[0_8px_32px_rgba(0,0,0,0.6)] active:scale-95 transition-all text-xs font-black uppercase tracking-wider animate-bounce"
+                    className={`absolute bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-4 py-2 rounded-full ${barBg} backdrop-blur-xl border border-white/20 ${textMain} shadow-2xl active:scale-95 transition-all text-xs font-bold whitespace-nowrap animate-bounce`}
                     style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                   >
-                    <RotateCcw size={14} />
+                    <RotateCcw size={13} className={activeColor} />
                     <span>Re-sync Lyrics</span>
                   </button>
                 )}
