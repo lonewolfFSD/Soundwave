@@ -63,10 +63,10 @@ public class MainActivity extends BridgeActivity {
     private float acceleration = 0.00f;
     private float currentAcceleration = SensorManager.GRAVITY_EARTH;
     private float lastAcceleration = SensorManager.GRAVITY_EARTH;
-    private static final int SHAKE_THRESHOLD = 22;
+    private static final int SHAKE_THRESHOLD = 13;
     private int shakeCount = 0;
     private long shakeTimestamp = 0;
-    private static final int MIN_SHAKE_COUNT = 6;
+    private static final int MIN_SHAKE_COUNT = 5;
     private static final int SHAKE_WINDOW_MS = 1000;
     private long lastShakeTime = 0;
     private long lastBackPressTime = 0;
@@ -395,9 +395,9 @@ public class MainActivity extends BridgeActivity {
 
     private void setupSettingsReceiver() {
         SharedPreferences prefs = getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE);
-        isShakeEnabled = getBooleanPref(prefs, "sw_shake_shuffle", false);
-        isHapticEnabled = getBooleanPref(prefs, "sw_haptics", false);
-        isShuffleToastEnabled = false;
+        isShakeEnabled = getBooleanPref(prefs, "sw_shake_shuffle", true);
+        isHapticEnabled = getBooleanPref(prefs, "sw_haptics", true);
+        isShuffleToastEnabled = true;
 
         settingsReceiver = new BroadcastReceiver() {
             @Override

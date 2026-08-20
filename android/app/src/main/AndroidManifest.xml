@@ -27,7 +27,17 @@
         android:usesCleartextTraffic="true"
         android:theme="@style/AppTheme">
 
-
+        <service
+            android:name="com.capgo.mediasession.MediaSessionService"
+            android:enabled="true"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="mediaPlayback"
+            tools:replace="android:exported,android:stopWithTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </service>
 
 
         <activity

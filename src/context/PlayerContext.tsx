@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useRef, useEffect } from 'react';
+import React, { createContext, useContext, useState, useRef, useEffect } from 'react'
 import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@capgo/capacitor-media-session';
 import { resolveFullLengthSong, isYoutubeVideoId, findYouTubeVideoId, extractYoutubeVideoId } from '../utils/ytMusic';
@@ -134,11 +134,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   })
 
   const [isDragging, setIsDragging] = useState(false)
-  const isDraggingRef = useRef(false)
-
-  useEffect(() => {
-    isDraggingRef.current = isDragging
-  }, [isDragging])
 
   // ── CROSS-DEVICE & SPOTIFY CONNECT SYNC STATES ──
   const [currentDeviceId] = useState<string>(() => getOrCreateDeviceId())
@@ -508,12 +503,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [])
 
-  // Sync timeline ticker when playing via YouTube (smooth live tracking)
+  // Sync timeline ticker when playing via YouTube (50ms ultra-smooth live tracking)
   useEffect(() => {
     let timer: any = null
     if (isPlaying) {
       timer = setInterval(() => {
-        if (!isDraggingRef.current && activeEngineRef.current === 'youtube' && ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function') {
+        if (activeEngineRef.current === 'youtube' && ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function') {
           try {
             const cur = ytPlayerRef.current.getCurrentTime()
             const dur = ytPlayerRef.current.getDuration()
@@ -525,7 +520,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             }
           } catch {}
         }
-      }, 250)
+      }, 50)
     }
     return () => {
       if (timer) clearInterval(timer)
@@ -982,7 +977,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       window.removeEventListener('focus', handleVisibilityChange);
     };
   }, []);
-
 
   const playSong = async (song: Song, addToHistory = true, startPosition = 0) => {
     if (!song) return

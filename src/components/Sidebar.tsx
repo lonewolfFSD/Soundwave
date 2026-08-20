@@ -613,9 +613,9 @@ const themeConfig: Record<string, any> = {
         onTouchMove={handleNavTouchMove}
         onTouchEnd={handleNavTouchEnd}
         className={`
-          md:hidden fixed bottom-6 left-4 right-4 z-[85] max-w-sm m-auto
+          md:hidden fixed bottom-6 left-4 right-4 z-[20] max-w-sm m-auto
           backdrop-blur-md border border-white/20 rounded-full shadow-2xl 
-          transition-all ${reduceMotion ? 'duration-0' : 'duration-500'} ease-[cubic-bezier(0.23,1,0.32,1)] select-none touch-manipulation
+          transition-all ${reduceMotion ? 'duration-0' : 'duration-500'} ease-[cubic-bezier(0.23,1,0.32,1)] select-none touch-none
           ${mobileNavBg || 'bg-black/80'}
           ${currentSong ? '-translate-y-[80px]' : 'translate-y-0'} 
           ${isDraggingNav ? 'scale-[1.02] border-white/40 shadow-[0_0_30px_rgba(255,255,255,0.15)]' : ''}

@@ -1363,7 +1363,7 @@ useEffect(() => {
 
       {/* MOBILE FULL SCREEN PLAYER */}
       <div className={`
-        fixed inset-0 z-[120] flex flex-col
+        fixed inset-0 z-[60] flex flex-col
         transition-all duration-500 ease-in-out md:hidden ${mobileFullBg}
         ${isFullScreen ? 'translate-y-0' : 'translate-y-full'}
       `}>
@@ -1629,24 +1629,15 @@ useEffect(() => {
                 type="range" min="0" max={duration || 0} step="any"
                 value={isDragging ? sliderValue : currentTime}
                 disabled={isInJam}
-                onPointerDown={() => {
-                  if (!isInJam) {
-                    setIsDragging(true);
-                    setSliderValue(currentTime);
-                  }
-                }}
                 onChange={(e) => {
                   if (isInJam) return;
                   const newTime = parseFloat(e.target.value);
                   setSliderValue(newTime);
+                  setCurrentTime(newTime);
+                  if (audioRef.current) audioRef.current.currentTime = newTime;
                 }}
-                onPointerUp={(e) => {
-                  if (!isInJam) {
-                    const newTime = parseFloat((e.target as HTMLInputElement).value);
-                    setCurrentTime(newTime);
-                    setIsDragging(false);
-                  }
-                }}
+                onPointerDown={() => !isInJam && setIsDragging(true)}
+                onPointerUp={() => setIsDragging(false)}
                 onPointerCancel={() => setIsDragging(false)}
                 className={`absolute inset-0 w-full h-full opacity-0 ${isInJam ? 'cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
               />
@@ -1714,7 +1705,7 @@ useEffect(() => {
 
         {/* MOBILE 3-DOTS OPTIONS BOTTOM SHEET */}
         <div 
-          className={`fixed inset-0 z-[130] transition-opacity duration-300 ${
+          className={`fixed inset-0 z-[100] transition-opacity duration-300 ${
             showMobileOptionsMenu ? 'opacity-100 pointer-events-auto bg-black/80 backdrop-blur-md' : 'opacity-0 pointer-events-none'
           }`}
           onClick={() => setShowMobileOptionsMenu(false)}
@@ -1941,7 +1932,7 @@ useEffect(() => {
         {/* SONG DETAILS MODAL */}
         {showSongDetailsModal && currentSong && (
           <div 
-            className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
+            className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
             onClick={() => setShowSongDetailsModal(false)}
           >
             <div 
@@ -2171,30 +2162,17 @@ useEffect(() => {
                   type="range" min="0" max={duration || 0} step="any"
                   value={isDragging ? sliderValue : currentTime}
                   disabled={isInJam}
-                  onPointerDown={() => {
-                    if (!isInJam) {
-                      setIsDragging(true);
-                      setSliderValue(currentTime);
-                    }
-                  }}
+                  onPointerDown={() => !isInJam && setIsDragging(true)}
                   onChange={(e) => {
                     if (isInJam) return;
                     const newTime = parseFloat(e.target.value);
                     setSliderValue(newTime);
+                    setCurrentTime(newTime);
+                    if (audioRef.current) audioRef.current.currentTime = newTime;
                   }}
-                  onPointerUp={(e) => {
-                    if (!isInJam) {
-                      const newTime = parseFloat((e.target as HTMLInputElement).value);
-                      setCurrentTime(newTime);
-                      setIsDragging(false);
-                    }
-                  }}
+                  onPointerUp={() => setIsDragging(false)}
                   onPointerCancel={() => setIsDragging(false)}
-                  onMouseLeave={() => {
-                    if (isDragging) {
-                      setIsDragging(false);
-                    }
-                  }}
+                  onMouseLeave={() => setIsDragging(false)}
                   className={`absolute w-full h-full opacity-0 z-20 ${isInJam ? 'cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
                 />
                 {/* Track */}
