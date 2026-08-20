@@ -457,12 +457,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                   if (dur && dur > 0) setDuration(dur)
                 } catch {}
               } else if (event.data === 2) {
-                // Paused: Ignore unintended background auto-pause if user did not manually pause
-                if (isPlayingRef.current && (document.hidden || !document.hasFocus())) {
-                  try { event.target.playVideo() } catch {}
-                } else {
-                  setIsPlaying(false)
-                }
+                // Paused
+                setIsPlaying(false)
               }
             },
             onError: (err: any) => {
