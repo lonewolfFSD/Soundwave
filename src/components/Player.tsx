@@ -813,21 +813,19 @@ const Player: React.FC = () => {
   const hasPrev = playedHistory.length > 0 || currentIndex > 0 || currentTime > 3;
 
   const handleNext = () => {
-    fadeTransition(() => {
-      nextSong();
-    });
+    triggerHaptic();
+    nextSong();
   };
 
   const handlePrev = () => {
+    triggerHaptic();
     if (currentTime > 3) {
       setCurrentTime(0);
       if (audioRef.current) audioRef.current.currentTime = 0;
       if (!isPlaying) resumeSong();
       return;
     }
-    fadeTransition(() => {
-      previousSong();
-    });
+    previousSong();
   };
 
   // --- BROWSER TITLE & MEDIA SESSION ---

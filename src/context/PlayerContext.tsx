@@ -102,6 +102,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const audioRef = useRef<HTMLAudioElement>(null)
   const ytPlayerRef = useRef<any>(null)
   const activeEngineRef = useRef<'html5' | 'youtube'>('html5')
+  const isAdvancingRef = useRef(false)
 
   const [activeJamRoom, setActiveJamRoom] = useState<any | null>(null)
   const isInJam = !!activeJamRoom
@@ -424,7 +425,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             onStateChange: (event: any) => {
               if (event.data === 0) {
                 // Video Ended -> Next Song
-                nextSong()
+                if (!isAdvancingRef.current) {
+                  isAdvancingRef.current = true;
+                  setTimeout(() => { isAdvancingRef.current = false; }, 1500);
+                  if (repeatMode === 'one') {
+                    try {
+                      event.target.seekTo(0, true);
+                      event.target.playVideo();
+                    } catch {}
+                  } else {
+                    nextSong();
+                  }
+                }
               } else if (event.data === 1) {
                 // Playing
                 setIsPlaying(true)
@@ -1390,6 +1402,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       setCurrentTime(audio.currentTime)
 
+      // Seamless track transition when audio reaches the end
+      if (audio.duration && !isNaN(audio.duration) && audio.duration > 2) {
+        if (audio.currentTime >= audio.duration - 0.4 && !isAdvancingRef.current) {
+          handleEnded()
+        }
+      }
+
       const crossfadeSec = Number(localStorage.getItem('sw_crossfade_duration') || 0)
       if (crossfadeSec > 0 && audio.duration && !isNaN(audio.duration) && gainNodeRef.current && audioCtxRef.current) {
         const timeLeft = audio.duration - audio.currentTime
@@ -1406,10 +1425,15 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     const handleEnded = () => {
-      if (activeEngineRef.current !== 'html5') return
+      if (isAdvancingRef.current) return
+      isAdvancingRef.current = true
+      setTimeout(() => { isAdvancingRef.current = false }, 1500)
+
       if (repeatMode === 'one') {
-        audio.currentTime = 0
-        audio.play().catch(() => {})
+        if (audioRef.current) {
+          audioRef.current.currentTime = 0
+          audioRef.current.play().catch(() => {})
+        }
       } else {
         nextSong()
       }
