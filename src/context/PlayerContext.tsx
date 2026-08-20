@@ -922,6 +922,28 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => clearInterval(timer);
   }, [currentSong?.id, isPlaying, currentTime, duration]);
 
+  // Keep AudioContext and HTML5 Audio alive across app minimization & screen lock
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (audioCtxRef.current && audioCtxRef.current.state === 'suspended' && isPlayingRef.current) {
+        audioCtxRef.current.resume().catch(() => {});
+      }
+      if (activeEngineRef.current === 'html5' && audioRef.current && isPlayingRef.current && audioRef.current.paused) {
+        audioRef.current.play().catch(() => {});
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+    };
+  }, []);
+
   const playSong = async (song: Song, addToHistory = true, startPosition = 0) => {
     if (!song) return
 

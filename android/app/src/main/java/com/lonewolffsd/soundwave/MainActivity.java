@@ -643,6 +643,17 @@ public class MainActivity extends BridgeActivity {
     public void onPause() {
         super.onPause();
         if (sensorManager != null) sensorManager.unregisterListener(sensorListener);
+        if (getBridge() != null && getBridge().getWebView() != null) {
+            getBridge().getWebView().resumeTimers();
+        }
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        if (getBridge() != null && getBridge().getWebView() != null) {
+            getBridge().getWebView().resumeTimers();
+        }
     }
 
     @Override
