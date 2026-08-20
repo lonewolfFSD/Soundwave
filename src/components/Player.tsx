@@ -31,7 +31,12 @@ import {
   Sparkles,
   RotateCcw,
   Heart,
-  Radio
+  Radio,
+  MoreVertical,
+  Sliders,
+  Moon,
+  Trash2,
+  Zap
 } from 'lucide-react'
 import { MediaSession } from '@capgo/capacitor-media-session';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
@@ -104,7 +109,9 @@ const Player: React.FC = () => {
     isSongLiked,
     toggleLikeSong,
     isInJam,
-    activeJamRoom
+    activeJamRoom,
+    is8DMode,
+    setIs8DMode
   } = usePlayer()
 
   const handlePlayPause = async () => {
@@ -235,8 +242,32 @@ const Player: React.FC = () => {
     }
   };
 
-  // --- 8D AUDIO STATE & REFS ---
-  const [is8DMode, setIs8DMode] = useState(false);
+  // --- AUDIO SETTINGS & REFS ---
+  const [showMobileOptionsMenu, setShowMobileOptionsMenu] = useState(false);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [touchOffsetY, setTouchOffsetY] = useState(0);
+
+  const handleSheetTouchStart = (e: React.TouchEvent) => {
+    setTouchStartY(e.touches[0].clientY);
+  };
+
+  const handleSheetTouchMove = (e: React.TouchEvent) => {
+    if (touchStartY === null) return;
+    const diff = e.touches[0].clientY - touchStartY;
+    if (diff > 0) {
+      setTouchOffsetY(diff);
+    }
+  };
+
+  const handleSheetTouchEnd = () => {
+    if (touchOffsetY > 70) {
+      triggerHaptic();
+      setShowMobileOptionsMenu(false);
+    }
+    setTouchOffsetY(0);
+    setTouchStartY(null);
+  };
+
   const [monoAudio, setMonoAudio] = useState(localStorage.getItem('sw_mono_audio') === 'true');
   const [lyricsFontSize, setLyricsFontSize] = useState(Number(localStorage.getItem('sw_lyrics_size') || 18));
   const [lyricsOffset, setLyricsOffset] = useState<number>(() => Number(localStorage.getItem('sw_lyrics_offset') || 0));
@@ -1326,82 +1357,39 @@ useEffect(() => {
           {/* ── Header ── */}
           <div className="flex justify-between items-center mb-6 shrink-0">
             <button
-              onClick={() => setIsFullScreen(false)}
+              onClick={() => { triggerHaptic(); setIsFullScreen(false); }}
               className={`${textMain} p-2 -ml-2 rounded-xl hover:bg-white/5 transition-colors`}
+              title="Collapse player"
             >
               <ChevronDown size={28} />
             </button>
 
             <div className="flex items-center gap-1.5">
-              <button
-                onClick={(e) => { triggerHaptic(); handleToggleOffline(e); }}
-                disabled={isDownloadingOffline}
-                className={`p-2 rounded-xl transition-colors ${
-                  isOfflineDownloaded
-                    ? 'text-emerald-400 bg-emerald-500/20'
-                    : `${textMuted} hover:bg-white/5`
-                }`}
-              >
-                {isDownloadingOffline ? (
-                  <Loader2 size={20} className="animate-spin text-indigo-400" />
-                ) : isOfflineDownloaded ? (
-                  <CheckCircle2 size={20} />
-                ) : (
-                  <DownloadCloud size={20} />
-                )}
-              </button>
-
-              <button
-                onClick={() => { triggerHaptic(); setAudioQuality(audioQuality === 'best' ? 'standard' : 'best'); }}
-                className={`px-2 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider border transition-all ${
-                  audioQuality === 'best'
-                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                    : 'bg-white/5 text-white/50 border-white/10'
-                }`}
-                style={{ fontFamily: 'Space Grotesk, sans-serif' }}
-                title={audioQuality === 'best' ? 'Audio Quality: Best (320kbps HD)' : 'Audio Quality: Standard (128kbps)'}
-              >
-                {audioQuality === 'best' ? 'HQ' : 'STD'}
-              </button>
-
-              <button
-                onClick={() => { triggerHaptic(); setShowAddToPlaylist(true); }}
-                className={`p-2 rounded-xl transition-colors ${textMuted} hover:bg-white/5`}
-              >
-                <ListPlus size={20} />
-              </button>
-
-              <button
-                onClick={() => { triggerHaptic(); setShowMobileQueue(!showMobileQueue); setShowLyrics(false); }}
-                className={`p-2 rounded-xl transition-colors ${showMobileQueue ? `${activeColor} bg-white/10` : `${textMuted} hover:bg-white/5`}`}
-              >
-                <ListMusic size={20} />
-              </button>
+              {/* 8D SPATIAL AUDIO BUTTON */}
               <button
                 onClick={() => { triggerHaptic(); setIs8DMode(!is8DMode); }}
                 className={`p-2 rounded-xl transition-colors ${is8DMode ? `${activeColor} bg-white/10 animate-pulse` : `${textMuted} hover:bg-white/5`}`}
+                title={is8DMode ? "8D Audio: Active" : "8D Audio: Disabled"}
               >
                 <Headphones size={20} fill={is8DMode ? 'currentColor' : 'none'} />
               </button>
-              <button
-                onClick={() => {
-                  triggerHaptic();
-                  setIsVideoMode(!isVideoMode);
-                  if (!isVideoMode) {
-                    setShowLyrics(false);
-                    setShowMobileQueue(false);
-                  }
-                }}
-                className={`p-2 rounded-xl transition-colors ${isVideoMode ? `${activeColor} bg-white/10` : `${textMuted} hover:bg-white/5`}`}
-                title="Toggle Video Player"
-              >
-                <Video size={20} />
-              </button>
+
+              {/* LYRICS BUTTON */}
               <button
                 onClick={() => { triggerHaptic(); setShowLyrics(!showLyrics); setShowMobileQueue(false); }}
                 className={`p-2 rounded-xl transition-colors ${showLyrics ? `${activeColor} bg-white/10` : `${textMuted} hover:bg-white/5`}`}
+                title="Lyrics"
               >
                 <Mic2 size={20} fill={showLyrics ? 'currentColor' : 'none'} />
+              </button>
+
+              {/* THREE DOTS MORE MENU BUTTON */}
+              <button
+                onClick={() => { triggerHaptic(); setShowMobileOptionsMenu(true); }}
+                className={`p-2 rounded-xl transition-colors ${textMuted} hover:bg-white/5`}
+                title="More options"
+              >
+                <MoreVertical size={20} />
               </button>
             </div>
           </div>
@@ -1531,17 +1519,6 @@ useEffect(() => {
                     <span>Re-sync Lyrics</span>
                   </button>
                 )}
-              </div>
-            ) : isVideoMode && youtubeId ? (
-              <div className="w-full aspect-video max-w-[360px] rounded-2xl overflow-hidden shadow-2xl border border-white/15 bg-black flex items-center justify-center relative animate-in fade-in zoom-in duration-300">
-                <SyncedVideoPlayer
-                  videoId={youtubeId}
-                  isPlaying={isPlaying}
-                  currentTime={currentTime}
-                  coverArt={currentSong.coverArtBase64}
-                  title={currentSong.title}
-                  onTogglePlay={() => (isPlaying ? pauseSong() : resumeSong())}
-                />
               </div>
             ) : (
               <div
@@ -1687,6 +1664,141 @@ useEffect(() => {
                 <span className="absolute -top-0.5 -right-0.5 text-[8px] font-black bg-white text-black rounded-full w-3.5 h-3.5 flex items-center justify-center">1</span>
               )}
             </button>
+          </div>
+        </div>
+
+        {/* MOBILE 3-DOTS OPTIONS BOTTOM SHEET */}
+        <div 
+          className={`fixed inset-0 z-[100] transition-opacity duration-300 ${
+            showMobileOptionsMenu ? 'opacity-100 pointer-events-auto bg-black/60 backdrop-blur-sm' : 'opacity-0 pointer-events-none'
+          }`}
+          onClick={() => setShowMobileOptionsMenu(false)}
+        >
+          <div 
+            onTouchStart={handleSheetTouchStart}
+            onTouchMove={handleSheetTouchMove}
+            onTouchEnd={handleSheetTouchEnd}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              transform: showMobileOptionsMenu
+                ? `translateY(${touchOffsetY}px)`
+                : 'translateY(100%)',
+              transition: touchOffsetY > 0 ? 'none' : 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+              fontFamily: 'Space Grotesk, sans-serif'
+            }}
+            className={`absolute bottom-0 left-0 right-0 rounded-t-2xl p-5 pb-8 flex flex-col ${barBg} border-t shadow-2xl`}
+          >
+            {/* Grab handle */}
+            <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-3" />
+
+            {/* Song Track Header */}
+            <div className="flex items-center gap-3 pb-3 mb-1 border-b border-white/10">
+              <div className={`w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-white/10 flex items-center justify-center ${emptyIcon}`}>
+                {currentSong?.coverArtBase64 ? (
+                  <img src={currentSong.coverArtBase64} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <Music size={18} className={textMuted} />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={`font-bold text-[14px] truncate ${textMain}`}>{currentSong?.title}</p>
+                <p className={`text-[12px] truncate ${textMuted}`}>{currentSong?.artist || 'Unknown Artist'}</p>
+              </div>
+              <button 
+                onClick={() => setShowMobileOptionsMenu(false)} 
+                className={`p-1.5 ${textMuted} hover:${textMain} transition-colors`}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Stack of Clean 1-Line Options */}
+            <div className="flex flex-col divide-y divide-white/5">
+              {/* Line 1: Audio Quality */}
+              <div className="flex items-center justify-between py-3 px-1">
+                <div className="flex items-center gap-3">
+                  <Sparkles size={18} className={textMuted} />
+                  <span className={`text-[14px] font-medium ${textMain}`}>Audio Quality</span>
+                </div>
+                <button
+                  onClick={() => {
+                    triggerHaptic();
+                    setAudioQuality(audioQuality === 'best' ? 'standard' : 'best');
+                  }}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider border transition-all ${
+                    audioQuality === 'best'
+                      ? 'bg-white/10 text-white border-white/20'
+                      : 'bg-white/5 text-white/50 border-white/10'
+                  }`}
+                >
+                  {audioQuality === 'best' ? 'HD (320k)' : 'SD (128k)'}
+                </button>
+              </div>
+
+              {/* Line 2: Offline Download */}
+              <div 
+                onClick={(e) => {
+                  triggerHaptic();
+                  handleToggleOffline(e);
+                }}
+                className="flex items-center justify-between py-3 px-1 cursor-pointer active:opacity-70 transition-opacity"
+              >
+                <div className="flex items-center gap-3">
+                  {isDownloadingOffline ? (
+                    <Loader2 size={18} className={`animate-spin ${activeColor}`} />
+                  ) : isOfflineDownloaded ? (
+                    <CheckCircle2 size={18} className="text-emerald-400" />
+                  ) : (
+                    <DownloadCloud size={18} className={textMuted} />
+                  )}
+                  <span className={`text-[14px] font-medium ${textMain}`}>
+                    {isDownloadingOffline
+                      ? `Downloading (${offlineDownloadProgress}%)`
+                      : isOfflineDownloaded
+                      ? 'Downloaded for Offline'
+                      : 'Download for Offline'}
+                  </span>
+                </div>
+                <span className={`text-[12px] font-bold ${isOfflineDownloaded ? 'text-rose-400' : textMuted}`}>
+                  {isOfflineDownloaded ? 'Delete' : 'Download'}
+                </span>
+              </div>
+
+              {/* Line 3: Add to Playlist */}
+              <div 
+                onClick={() => {
+                  triggerHaptic();
+                  setShowMobileOptionsMenu(false);
+                  setShowAddToPlaylist(true);
+                }}
+                className="flex items-center justify-between py-3 px-1 cursor-pointer active:opacity-70 transition-opacity"
+              >
+                <div className="flex items-center gap-3">
+                  <ListPlus size={18} className={textMuted} />
+                  <span className={`text-[14px] font-medium ${textMain}`}>Add to Playlist</span>
+                </div>
+                <Plus size={16} className={textMuted} />
+              </div>
+
+              {/* Line 4: Queue List */}
+              <div 
+                onClick={() => {
+                  triggerHaptic();
+                  setShowMobileOptionsMenu(false);
+                  setShowMobileQueue(true);
+                  setShowLyrics(false);
+                }}
+                className="flex items-center justify-between py-3 px-1 cursor-pointer active:opacity-70 transition-opacity"
+              >
+                <div className="flex items-center gap-3">
+                  <ListMusic size={18} className={textMuted} />
+                  <span className={`text-[14px] font-medium ${textMain}`}>Queue List</span>
+                </div>
+                <span className={`text-[12px] ${textMuted}`}>
+                  {(upNextQueue?.length || 0) + queue.length} tracks
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

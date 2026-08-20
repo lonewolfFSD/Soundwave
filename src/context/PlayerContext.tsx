@@ -349,7 +349,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // 8D Audio Rotation Loop
   useEffect(() => {
-    if (!is8DMode || !pannerNodeRef.current || !isPlaying) {
+    if (!is8DMode) {
       if (panAnimFrameRef.current) {
         cancelAnimationFrame(panAnimFrameRef.current)
         panAnimFrameRef.current = null
@@ -360,17 +360,32 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return
     }
 
+    // Ensure audio graph is initialized
+    initAudioGraph()
+
+    if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume().catch(() => {})
+    }
+
     let angle = 0
-    const rotate = () => {
+    let lastTime = performance.now()
+    const rotate = (nowTime: number) => {
       if (!pannerNodeRef.current) return
-      angle += 0.015
-      pannerNodeRef.current.pan.value = Math.sin(angle)
+      const dt = (nowTime - lastTime) / 1000
+      lastTime = nowTime
+      // Rotate ~360 degrees every 6.5 seconds for distinct 8D spatial feeling
+      angle += dt * (Math.PI * 2 / 6.5)
+      const panValue = Math.sin(angle)
+      pannerNodeRef.current.pan.value = Math.max(-1, Math.min(1, panValue))
       panAnimFrameRef.current = requestAnimationFrame(rotate)
     }
     panAnimFrameRef.current = requestAnimationFrame(rotate)
 
     return () => {
-      if (panAnimFrameRef.current) cancelAnimationFrame(panAnimFrameRef.current)
+      if (panAnimFrameRef.current) {
+        cancelAnimationFrame(panAnimFrameRef.current)
+        panAnimFrameRef.current = null
+      }
     }
   }, [is8DMode, isPlaying])
 
