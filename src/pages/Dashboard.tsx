@@ -186,8 +186,8 @@ const Dashboard = () => {
 
   const animClass = reduceMotion ? '' : 'sw-animate-enter';
   const getDelay = (delayStr: string) => reduceMotion ? '0ms' : delayStr;
-  const cardWidth = compactMode ? 'w-36 md:w-40' : 'w-44 md:w-48';
-  const gridGap = compactMode ? 'gap-3' : 'gap-4';
+  const cardWidth = compactMode ? 'w-32 sm:w-36 md:w-40' : 'w-36 sm:w-40 md:w-48';
+  const gridGap = compactMode ? 'gap-2.5 sm:gap-3' : 'gap-3 sm:gap-4';
 
   // --- THEME ENGINE ---
   const themeConfig: Record<string, any> = {
@@ -1167,12 +1167,12 @@ const Dashboard = () => {
                     {/* ── LISTEN AGAIN (Spotify / YouTube Music History) ── */}
                     {selectedCategory === 'all' && listenAgain.length > 0 && (
                       <section className={`${animClass}`} style={{ animationDelay: getDelay('100ms') }}>
-                        <div className={`flex items-center justify-between ${compactMode ? 'mb-3' : 'mb-5'}`}>
-                          <div>
-                            <h2 className={`text-[22px] font-bold sw-font-display ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Listen Again</h2>
-                            <p className={`text-[13px] mt-0.5 sw-font-body ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Jump back into your recent tracks</p>
+                        <div className={`flex items-center justify-between gap-3 ${compactMode ? 'mb-3' : 'mb-4 md:mb-5'}`}>
+                          <div className="min-w-0 flex-1">
+                            <h2 className={`text-lg sm:text-xl md:text-[22px] font-bold sw-font-display truncate ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Listen Again</h2>
+                            <p className={`text-[12px] sm:text-[13px] mt-0.5 sw-font-body truncate ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Jump back into your recent tracks</p>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="hidden sm:flex items-center gap-1.5 shrink-0">
                             {[
                               { dir: 'left' as const, show: showListenArrows.left, ref: listenAgainRef },
                               { dir: 'right' as const, show: showListenArrows.right, ref: listenAgainRef },
@@ -1244,12 +1244,12 @@ const Dashboard = () => {
                     {/* ── QUICK PICKS ── */}
                     {selectedCategory === 'all' && quickPicks.length > 0 && (
                       <section className={`${animClass}`} style={{ animationDelay: getDelay('140ms') }}>
-                        <div className={`flex items-center justify-between ${compactMode ? 'mb-3' : 'mb-5'}`}>
-                          <div>
-                            <h2 className={`text-[22px] font-bold sw-font-display ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Quick Picks</h2>
-                            <p className={`text-[13px] mt-1 sw-font-body ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Curated mix of your tracks</p>
+                        <div className={`flex items-center justify-between gap-3 ${compactMode ? 'mb-3' : 'mb-4 md:mb-5'}`}>
+                          <div className="min-w-0 flex-1">
+                            <h2 className={`text-lg sm:text-xl md:text-[22px] font-bold sw-font-display truncate ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Quick Picks</h2>
+                            <p className={`text-[12px] sm:text-[13px] mt-1 sw-font-body truncate ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Curated mix of your tracks</p>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="hidden sm:flex items-center gap-1.5 shrink-0">
                             {[
                               { dir: 'left' as const, show: showQPArrows.left, ref: quickPicksRef },
                               { dir: 'right' as const, show: showQPArrows.right, ref: quickPicksRef },
@@ -1321,7 +1321,7 @@ const Dashboard = () => {
                                     <div className="w-11 h-11 rounded-xl bg-black/40 flex items-center justify-center backdrop-blur-sm border border-white/20 hover:scale-110 transition-transform">
                                       {isActive && isPlaying ? <Pause className="w-6 h-6 text-white fill-white" /> : <Play className="w-6 h-6 text-white fill-white ml-0.5" />}
                                     </div>
-                                    <div className="flex items-center gap-1.5">
+                                    <div className="hidden md:flex items-center gap-1.5">
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
@@ -1369,22 +1369,22 @@ const Dashboard = () => {
                     {/* ── SONGS YOU LOVE (Liked Songs Carousel) ── */}
                     {selectedCategory === 'all' && likedSongs.length > 0 && (
                       <section className={`${animClass}`} style={{ animationDelay: getDelay('170ms') }}>
-                        <div className={`flex items-center justify-between ${compactMode ? 'mb-3' : 'mb-5'}`}>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <Heart size={18} className={`${accentColor} fill-current`} />
-                              <h2 className={`text-[22px] font-bold sw-font-display ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                        <div className={`flex items-center justify-between gap-3 ${compactMode ? 'mb-3' : 'mb-4 md:mb-5'}`}>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center flex-wrap gap-x-2 gap-y-1">
+                              <Heart size={18} className={`${accentColor} fill-current shrink-0`} />
+                              <h2 className={`text-lg sm:text-xl md:text-[22px] font-bold sw-font-display truncate max-w-[calc(100vw-120px)] sm:max-w-none ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                                 Songs You Love
                               </h2>
-                              <span className="px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider bg-white/10 text-white/90 border border-white/15">
+                              <span className="shrink-0 px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider bg-white/10 text-white/90 border border-white/15">
                                 {likedSongs.length} Liked
                               </span>
                             </div>
-                            <p className={`text-[13px] mt-0.5 sw-font-body ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                            <p className={`text-[12px] sm:text-[13px] mt-0.5 sw-font-body truncate ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                               Your favorite saved tracks and heart picks
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="hidden sm:flex items-center gap-1.5 shrink-0">
                             <button
                               onClick={() => scrollContainer(likedSongsScrollRef, 'left')}
                               className={`w-8 h-8 rounded-lg flex items-center justify-center sw-glass sw-btn-hover ${btnNav} cursor-pointer hover:scale-105 active:scale-95 transition-transform`}
@@ -1433,7 +1433,7 @@ const Dashboard = () => {
                                     <div className="w-11 h-11 rounded-xl bg-black/40 flex items-center justify-center backdrop-blur-sm border border-white/20 hover:scale-110 transition-transform">
                                       {isActive && isPlaying ? <Pause className="w-6 h-6 text-white fill-white" /> : <Play className="w-6 h-6 text-white fill-white ml-0.5" />}
                                     </div>
-                                    <div className="flex items-center gap-1.5">
+                                    <div className="hidden md:flex items-center gap-1.5">
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
@@ -1484,16 +1484,16 @@ const Dashboard = () => {
                     {/* ── FEATURED FOR YOU (ML Curated Mixes) ── */}
                     {selectedCategory === 'all' && featuredMixes.length > 0 && (
                       <section className={`${animClass}`} style={{ animationDelay: getDelay('180ms') }}>
-                        <div className={`flex items-center justify-between ${compactMode ? 'mb-3' : 'mb-5'}`}>
-                          <div>
-                            <h2 className={`text-[22px] font-bold sw-font-display ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                        <div className={`flex items-center justify-between gap-3 ${compactMode ? 'mb-3' : 'mb-4 md:mb-5'}`}>
+                          <div className="min-w-0 flex-1">
+                            <h2 className={`text-lg sm:text-xl md:text-[22px] font-bold sw-font-display truncate ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                               Featured For You
                             </h2>
-                            <p className={`text-[13px] mt-0.5 sw-font-body ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                            <p className={`text-[12px] sm:text-[13px] mt-0.5 sw-font-body truncate ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                               Personalized mixes tailored to your listening taste
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="hidden sm:flex items-center gap-1.5 shrink-0">
                             <button
                               onClick={() => scrollContainer(featuredMixesRef, 'left')}
                               className={`w-8 h-8 rounded-lg flex items-center justify-center sw-glass sw-btn-hover ${btnNav} cursor-pointer hover:scale-105 active:scale-95 transition-transform`}
@@ -1579,11 +1579,11 @@ const Dashboard = () => {
                     {/* ── SIMILAR TO TOP ARTIST ── */}
                     {selectedCategory === 'all' && tasteProfile.topArtist && similarArtistTracks.length > 0 && (
                       <section className={`${animClass}`} style={{ animationDelay: getDelay('220ms') }}>
-                        <div className={`flex items-center justify-between ${compactMode ? 'mb-3' : 'mb-5'}`}>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <Music2 size={18} className="text-indigo-400" />
-                              <h2 className={`text-[22px] font-bold sw-font-display ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                        <div className={`flex items-center justify-between gap-3 ${compactMode ? 'mb-3' : 'mb-4 md:mb-5'}`}>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center flex-wrap gap-x-2 gap-y-1">
+                              <Music2 size={18} className="text-indigo-400 shrink-0" />
+                              <h2 className={`text-lg sm:text-xl md:text-[22px] font-bold sw-font-display truncate max-w-[calc(100vw-120px)] sm:max-w-none ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                                 Similar to{' '}
                                 <span
                                   onClick={() => openArtistProfile(tasteProfile.topArtist)}
@@ -1592,15 +1592,15 @@ const Dashboard = () => {
                                   {tasteProfile.topArtist}
                                 </span>
                               </h2>
-                              <span className="px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                              <span className="shrink-0 px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                                 ML Match
                               </span>
                             </div>
-                            <p className={`text-[13px] mt-0.5 sw-font-body ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                            <p className={`text-[12px] sm:text-[13px] mt-0.5 sw-font-body truncate ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                               Artists and tracks matching your interest in {tasteProfile.topArtist}
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="hidden sm:flex items-center gap-1.5 shrink-0">
                             <button
                               onClick={() => scrollContainer(similarArtistRef, 'left')}
                               className={`w-8 h-8 rounded-lg flex items-center justify-center sw-glass sw-btn-hover ${btnNav} cursor-pointer hover:scale-105 active:scale-95 transition-transform`}
@@ -1689,22 +1689,22 @@ const Dashboard = () => {
                     {/* ── SIMILAR TO TOP TRACK ── */}
                     {selectedCategory === 'all' && tasteProfile.topTrack && similarTrackSongs.length > 0 && (
                       <section className={`${animClass}`} style={{ animationDelay: getDelay('240ms') }}>
-                        <div className={`flex items-center justify-between ${compactMode ? 'mb-3' : 'mb-5'}`}>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <Radio size={18} className="text-purple-400" />
-                              <h2 className={`text-[22px] font-bold sw-font-display ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                        <div className={`flex items-center justify-between gap-3 ${compactMode ? 'mb-3' : 'mb-4 md:mb-5'}`}>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center flex-wrap gap-x-2 gap-y-1">
+                              <Radio size={18} className="text-purple-400 shrink-0" />
+                              <h2 className={`text-lg sm:text-xl md:text-[22px] font-bold sw-font-display truncate max-w-[calc(100vw-120px)] sm:max-w-none ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                                 Similar to {tasteProfile.topTrack.title}
                               </h2>
-                              <span className="px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                              <span className="shrink-0 px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/30">
                                 Acoustic Vector
                               </span>
                             </div>
-                            <p className={`text-[13px] mt-0.5 sw-font-body ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                            <p className={`text-[12px] sm:text-[13px] mt-0.5 sw-font-body truncate ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                               Mood and tempo continuations from your top played song
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="hidden sm:flex items-center gap-1.5 shrink-0">
                             <button
                               onClick={() => scrollContainer(similarTrackRef, 'left')}
                               className={`w-8 h-8 rounded-lg flex items-center justify-center sw-glass sw-btn-hover ${btnNav} cursor-pointer hover:scale-105 active:scale-95 transition-transform`}
@@ -1793,12 +1793,12 @@ const Dashboard = () => {
                     {/* ── PLAYLISTS ── */}
                     {selectedCategory === 'all' && (
                       <section className={`${animClass}`} style={{ animationDelay: getDelay('200ms') }}>
-                        <div className={`flex items-center justify-between ${compactMode ? 'mb-3' : 'mb-5'}`}>
-                          <div>
-                            <h2 className={`text-[22px] font-bold sw-font-display ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Your Playlists</h2>
-                            <p className={`text-[13px] mt-0.5 sw-font-body ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{playlistsPreview.length} collection{playlistsPreview.length !== 1 ? 's' : ''}</p>
+                        <div className={`flex items-center justify-between gap-3 ${compactMode ? 'mb-3' : 'mb-4 md:mb-5'}`}>
+                          <div className="min-w-0 flex-1">
+                            <h2 className={`text-lg sm:text-xl md:text-[22px] font-bold sw-font-display truncate ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Your Playlists</h2>
+                            <p className={`text-[12px] sm:text-[13px] mt-0.5 sw-font-body truncate ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{playlistsPreview.length} collection{playlistsPreview.length !== 1 ? 's' : ''}</p>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="hidden sm:flex items-center gap-1.5 shrink-0">
                             {[
                               { dir: 'left' as const, show: showPLArrows.left },
                               { dir: 'right' as const, show: showPLArrows.right },
@@ -1966,19 +1966,19 @@ const Dashboard = () => {
                           if (!cat || tracks.length === 0) return null;
                           return (
                             <section key={catId} className={`${animClass}`} style={{ animationDelay: getDelay(`${260 + catIdx * 40}ms`) }}>
-                              <div className={`flex items-center justify-between ${compactMode ? 'mb-3' : 'mb-5'}`}>
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <CategoryIcon name={cat.iconName} size={18} className="text-indigo-400" />
-                                    <h2 className={`text-[22px] font-bold sw-font-display ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                              <div className={`flex items-center justify-between gap-3 ${compactMode ? 'mb-3' : 'mb-4 md:mb-5'}`}>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center flex-wrap gap-x-2 gap-y-1">
+                                    <CategoryIcon name={cat.iconName} size={18} className="text-indigo-400 shrink-0" />
+                                    <h2 className={`text-lg sm:text-xl md:text-[22px] font-bold sw-font-display truncate max-w-[calc(100vw-120px)] sm:max-w-none ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                                       {cat.title}
                                     </h2>
                                   </div>
-                                  <p className={`text-[13px] mt-0.5 sw-font-body ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                                  <p className={`text-[12px] sm:text-[13px] mt-0.5 sw-font-body truncate ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                                     {cat.subtitle}
                                   </p>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="hidden sm:flex items-center gap-1.5 shrink-0">
                                   <button
                                     onClick={() => scrollCategory(catId, 'left')}
                                     title="Previous"
