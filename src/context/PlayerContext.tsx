@@ -178,19 +178,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           setActiveDeviceId(remoteState.activeDeviceId)
           setActiveDeviceName(remoteState.activeDeviceName || 'Remote Device')
 
-          // Stop local audio output immediately so only the remote device plays
+          // Stop local audio output immediately so only the remote device plays sound
           if (activeEngineRef.current === 'youtube') {
             try { ytPlayerRef.current?.pauseVideo() } catch {}
-          } else {
-            audioRef.current?.pause()
+          } else if (audioRef.current && !audioRef.current.paused) {
+            audioRef.current.pause()
           }
-          setIsPlaying(remoteState.isPlaying)
 
           // Mirror remote state metadata in UI
           isSyncingFromRemoteRef.current = true
+          setIsPlaying(remoteState.isPlaying)
           setCurrentSong(remoteState.currentSong)
-          setCurrentTime(remoteState.position || 0)
-          setDuration(remoteState.duration || 210)
+          if (typeof remoteState.position === 'number') {
+            setCurrentTime(remoteState.position)
+          }
+          if (typeof remoteState.duration === 'number' && remoteState.duration > 0) {
+            setDuration(remoteState.duration)
+          }
           setTimeout(() => { isSyncingFromRemoteRef.current = false }, 150)
           return
         }
@@ -201,18 +205,25 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           setActiveDeviceName(localDeviceInfo.name)
 
           const isSameSong = currentSong?.id === remoteState.currentSong.id
-          if (!isSameSong || !isPlaying) {
-            // Latency compensation
-            const elapsed = Math.max(0, Math.min(30, (Date.now() - (remoteState.updatedAt || Date.now())) / 1000))
-            const targetPos = Math.min((remoteState.position || 0) + (remoteState.isPlaying ? elapsed : 0), remoteState.duration || 9999)
+          const isLocalPlaying = isPlaying || (audioRef.current && !audioRef.current.paused)
 
+          // Latency compensation
+          const elapsed = Math.max(0, Math.min(30, (Date.now() - (remoteState.updatedAt || Date.now())) / 1000))
+          const targetPos = Math.min((remoteState.position || 0) + (remoteState.isPlaying ? elapsed : 0), remoteState.duration || 9999)
+
+          if (!isSameSong || !isLocalPlaying) {
             isSyncingFromRemoteRef.current = true
-            await playSong(remoteState.currentSong, false)
-            setCurrentTimeHandler(targetPos)
-            if (remoteState.isPlaying) {
-              resumeSong()
-            }
+            await playSong(remoteState.currentSong, false, targetPos)
             setTimeout(() => { isSyncingFromRemoteRef.current = false }, 500)
+          } else {
+            // Already playing same song: sync play/pause & seek if commanded from remote
+            if (remoteState.isPlaying !== isPlaying) {
+              if (remoteState.isPlaying) resumeSong()
+              else pauseSong()
+            }
+            if (Math.abs(currentTime - targetPos) > 3) {
+              setCurrentTimeHandler(targetPos)
+            }
           }
         }
       })
@@ -237,21 +248,20 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     isTransferringRef.current = true
     const isTargetThisDevice = targetDeviceId === currentDeviceId
+    const currentSeekTime = currentTime
 
     if (isTargetThisDevice) {
       setActiveDeviceId(currentDeviceId)
       setActiveDeviceName(localDeviceInfo.name)
       if (currentSong) {
-        await playSong(currentSong, false)
-        setCurrentTimeHandler(currentTime)
-        resumeSong()
+        await playSong(currentSong, false, currentSeekTime)
       }
       await syncPlaybackState(user.uid, {
         activeDeviceId: currentDeviceId,
         activeDeviceName: localDeviceInfo.name,
         currentSong,
         isPlaying: true,
-        position: currentTime,
+        position: currentSeekTime,
         duration,
         queue,
         isShuffle,
@@ -265,7 +275,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       await transferPlaybackToTarget(user.uid, targetDeviceId, targetDeviceName, {
         currentSong,
         isPlaying: true,
-        position: currentTime,
+        position: currentSeekTime,
         duration,
         queue,
         isShuffle,
@@ -673,7 +683,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     syncNativeMedia();
   }, [currentSong, isPlaying]);
 
-  const playSong = async (song: Song, addToHistory = true) => {
+  const playSong = async (song: Song, addToHistory = true, startPosition = 0) => {
     if (!song) return
 
     initAudioGraph()
@@ -699,7 +709,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } catch {}
 
     setCurrentSong(song)
-    setCurrentTime(0)
+    setCurrentTime(startPosition)
     setDuration(song.duration || 210)
 
     // Cross-Device Playback Sync
@@ -712,7 +722,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         activeDeviceName: localDeviceInfo.name,
         currentSong: song,
         isPlaying: true,
-        position: 0,
+        position: startPosition,
         duration: song.duration || 210,
         queue,
         isShuffle,
@@ -769,11 +779,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (audioRef.current && song.url) {
         audioRef.current.crossOrigin = 'anonymous'
         audioRef.current.src = song.url
-        audioRef.current.currentTime = 0
         audioRef.current.volume = volume
         audioRef.current.muted = false
+        if (startPosition > 0) {
+          audioRef.current.currentTime = startPosition
+        }
         audioRef.current.play()
-          .then(() => setIsPlaying(true))
+          .then(() => {
+            setIsPlaying(true)
+            if (startPosition > 0 && audioRef.current) {
+              audioRef.current.currentTime = startPosition
+            }
+          })
           .catch(e => console.error("Audio playback error:", e))
       }
     } else if (isLocalHost) {
@@ -786,11 +803,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (audioRef.current && activeSong.url) {
         audioRef.current.crossOrigin = 'anonymous'
         audioRef.current.src = activeSong.url
-        audioRef.current.currentTime = 0
         audioRef.current.volume = volume
         audioRef.current.muted = false
+        if (startPosition > 0) {
+          audioRef.current.currentTime = startPosition
+        }
         audioRef.current.play()
-          .then(() => setIsPlaying(true))
+          .then(() => {
+            setIsPlaying(true)
+            if (startPosition > 0 && audioRef.current) {
+              audioRef.current.currentTime = startPosition
+            }
+          })
           .catch(e => console.error("Audio playback error:", e))
       }
     } else {
@@ -809,18 +833,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         try { audioRef.current?.pause() } catch {}
 
         try {
-          ytPlayerRef.current.loadVideoById({ videoId, startSeconds: 0 })
+          ytPlayerRef.current.loadVideoById({ videoId, startSeconds: startPosition })
           ytPlayerRef.current.unMute()
           ytPlayerRef.current.setVolume(volume * 100)
           ytPlayerRef.current.playVideo()
           setIsPlaying(true)
+          if (startPosition > 0) {
+            setTimeout(() => {
+              try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {}
+            }, 300)
+          }
         } catch (e) {
           console.warn('YouTube Player load error:', e)
           if (song.previewUrl || song.url) {
             activeEngineRef.current = 'html5'
             if (audioRef.current) {
               audioRef.current.src = song.previewUrl || song.url
-              audioRef.current.currentTime = 0
+              audioRef.current.currentTime = startPosition
               audioRef.current.volume = volume
               audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {})
             }
@@ -831,7 +860,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         activeEngineRef.current = 'html5'
         if (audioRef.current) {
           audioRef.current.src = song.previewUrl || song.url
-          audioRef.current.currentTime = 0
+          audioRef.current.currentTime = startPosition
           audioRef.current.volume = volume
           audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {})
         }
