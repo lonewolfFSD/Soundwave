@@ -1363,7 +1363,7 @@ useEffect(() => {
 
       {/* MOBILE FULL SCREEN PLAYER */}
       <div className={`
-        fixed inset-0 z-[60] flex flex-col
+        fixed inset-0 z-[120] flex flex-col
         transition-all duration-500 ease-in-out md:hidden ${mobileFullBg}
         ${isFullScreen ? 'translate-y-0' : 'translate-y-full'}
       `}>
@@ -1705,7 +1705,7 @@ useEffect(() => {
 
         {/* MOBILE 3-DOTS OPTIONS BOTTOM SHEET */}
         <div 
-          className={`fixed inset-0 z-[100] transition-opacity duration-300 ${
+          className={`fixed inset-0 z-[130] transition-opacity duration-300 ${
             showMobileOptionsMenu ? 'opacity-100 pointer-events-auto bg-black/80 backdrop-blur-md' : 'opacity-0 pointer-events-none'
           }`}
           onClick={() => setShowMobileOptionsMenu(false)}
@@ -1932,7 +1932,7 @@ useEffect(() => {
         {/* SONG DETAILS MODAL */}
         {showSongDetailsModal && currentSong && (
           <div 
-            className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
+            className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
             onClick={() => setShowSongDetailsModal(false)}
           >
             <div 
