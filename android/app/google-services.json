@@ -14,6 +14,22 @@
       },
       "oauth_client": [
         {
+          "client_id": "928688843298-ll46cs2tqssohu1il8d1107ccnqb07mj.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.lonewolffsd.soundwave",
+            "certificate_hash": "b2f1d5e99e94201ed5a75448beca7788d445b9b8"
+          }
+        },
+        {
+          "client_id": "928688843298-rge3ciuk641dniu4lu4jvskhqd2bhbqa.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.lonewolffsd.soundwave",
+            "certificate_hash": "e999418044782b4595f2837061bed6ffe487b63d"
+          }
+        },
+        {
           "client_id": "928688843298-tuvkab8jhcphjuuf2ee36ogu0054t30d.apps.googleusercontent.com",
           "client_type": 3
         }

@@ -33,6 +33,8 @@ import android.widget.Toast;
 import android.content.SharedPreferences;
 import android.app.DownloadManager;
 import android.os.Environment;
+import android.os.PowerManager;
+import android.provider.Settings;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
@@ -88,7 +90,7 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void handleOnBackPressed() {
                 if (lastBackPressTime + BACK_PRESS_INTERVAL > System.currentTimeMillis()) {
-                    finish();
+                    moveTaskToBack(true);
                 } else {
                     Toast.makeText(getBaseContext(), "Press back again to exit", Toast.LENGTH_SHORT).show();
                     lastBackPressTime = System.currentTimeMillis();
@@ -119,6 +121,7 @@ public class MainActivity extends BridgeActivity {
 
         setFullScreen();
         setupEdgeToEdge();
+        requestIgnoreBatteryOptimizations();
 
         // 🔥 WEBVIEW SETUP
         WebView webView = this.bridge.getWebView();
@@ -148,6 +151,20 @@ public class MainActivity extends BridgeActivity {
                 editor.putString("_cap_sw_shake_shuffle", String.valueOf(shake));
                 editor.putString("_cap_sw_haptics", String.valueOf(haptic));
                 editor.apply();
+            }
+
+            @android.webkit.JavascriptInterface
+            public void requestIgnoreBatteryOptimizations() {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    Intent intent = new Intent();
+                    String packageName = getPackageName();
+                    PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+                    if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                        intent.setAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                        intent.setData(Uri.parse("package:" + packageName));
+                        startActivity(intent);
+                    }
+                }
             }
 
             @android.webkit.JavascriptInterface
@@ -614,12 +631,20 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    public void onDestroy() {
-        super.onDestroy();
-        if (widgetReceiver != null) unregisterReceiver(widgetReceiver);
-        if (audioReceiver != null) unregisterReceiver(audioReceiver);
-        if (settingsReceiver != null) unregisterReceiver(settingsReceiver);
-        if (downloadReceiver != null) unregisterReceiver(downloadReceiver);
+    public void onPause() {
+        super.onPause();
+        if (sensorManager != null) sensorManager.unregisterListener(sensorListener);
+        if (getBridge() != null && getBridge().getWebView() != null) {
+            getBridge().getWebView().resumeTimers();
+        }
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        if (getBridge() != null && getBridge().getWebView() != null) {
+            getBridge().getWebView().resumeTimers();
+        }
     }
 
     @Override
@@ -640,20 +665,14 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    public void onPause() {
-        super.onPause();
-        if (sensorManager != null) sensorManager.unregisterListener(sensorListener);
-        if (getBridge() != null && getBridge().getWebView() != null) {
-            getBridge().getWebView().resumeTimers();
-        }
-    }
-
-    @Override
-    public void onStop() {
-        super.onStop();
-        if (getBridge() != null && getBridge().getWebView() != null) {
-            getBridge().getWebView().resumeTimers();
-        }
+    public void onDestroy() {
+        // If we are destroying because of a finish(), let it go.
+        // But we want to avoid destruction on swipe if possible.
+        super.onDestroy();
+        if (widgetReceiver != null) unregisterReceiver(widgetReceiver);
+        if (audioReceiver != null) unregisterReceiver(audioReceiver);
+        if (settingsReceiver != null) unregisterReceiver(settingsReceiver);
+        if (downloadReceiver != null) unregisterReceiver(downloadReceiver);
     }
 
     @Override
@@ -667,6 +686,15 @@ public class MainActivity extends BridgeActivity {
             String path = intent.getData().getLastPathSegment();
             if (path != null && getBridge() != null) {
                 runOnUiThread(() -> getBridge().triggerWindowJSEvent("onAppShortcut", "{ \"path\": \"" + path + "\" }"));
+            }
+        }
+    }
+
+    private void requestIgnoreBatteryOptimizations() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            if (!pm.isIgnoringBatteryOptimizations(getPackageName())) {
+                // Toast.makeText(this, "Please disable battery optimization for uninterrupted playback", Toast.LENGTH_LONG).show();
             }
         }
     }

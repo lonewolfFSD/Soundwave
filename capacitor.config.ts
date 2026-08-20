@@ -21,12 +21,19 @@ const config: CapacitorConfig = {
   },
 
   plugins: {
+    FirebaseAuthentication: {
+      providers: ['google.com'],
+      googleIdToken: '928688843298-tuvkab8jhcphjuuf2ee36ogu0054t30d.apps.googleusercontent.com',
+    },
     SplashScreen: {
       launchShowDuration: 2000,
       launchAutoHide: true,
       backgroundColor: "#000000",
       androidScaleType: "CENTER_CROP",
       showSpinner: false
+    },
+    MediaSession: {
+      foregroundService: "always"
     }
   }
 };

@@ -6,10 +6,12 @@ import {
   signInWithEmailAndPassword, 
   signInWithRedirect,
   signInWithPopup, 
-  GoogleAuthProvider, 
+  signInWithCredential,
+  GoogleAuthProvider,
   onAuthStateChanged,
   getRedirectResult
 } from 'firebase/auth';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../utils/firebase';
@@ -209,7 +211,11 @@ const Login = () => {
     setError('');
     try {
       if (Capacitor.isNativePlatform()) {
-        await signInWithRedirect(auth, googleProvider);
+        const result = await FirebaseAuthentication.signInWithGoogle();
+        const credential = GoogleAuthProvider.credential(result.credential?.idToken);
+        const userCredential = await signInWithCredential(auth, credential);
+        await ensureUserInFirestore(userCredential.user);
+        navigate('/dashboard');
       } else {
         const result = await signInWithPopup(auth, googleProvider);
         await ensureUserInFirestore(result.user);

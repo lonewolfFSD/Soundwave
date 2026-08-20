@@ -146,6 +146,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const isTransferringRef = useRef(false)
   const currentSongRef = useRef<Song | null>(null)
   const isPlayingRef = useRef<boolean>(false)
+  const currentTimeRef = useRef<number>(0)
+  const durationRef = useRef<number>(0)
   const isRemotePlayback = !!(activeDeviceId && activeDeviceId !== currentDeviceId)
 
   useEffect(() => {
@@ -155,6 +157,14 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     isPlayingRef.current = isPlaying
   }, [isPlaying])
+
+  useEffect(() => {
+    currentTimeRef.current = currentTime
+  }, [currentTime])
+
+  useEffect(() => {
+    durationRef.current = duration
+  }, [duration])
 
   // ── CROSS-DEVICE LIFECYCLE & PRESENCE ──
   useEffect(() => {
@@ -889,17 +899,22 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }).catch(() => {});
 
     MediaSession.setPlaybackState({
-      playbackState: isPlaying ? 'playing' : 'paused'
+      playbackState: isPlaying ? 'playing' : 'paused',
+      position: currentTime,
+      duration: duration || currentSong?.duration || 0,
+      playbackRate: 1.0
     }).catch(() => {});
-  }, [currentSong?.id, currentSong?.title, currentSong?.artist, isPlaying]);
+  }, [currentSong?.id, currentSong?.title, currentSong?.artist, isPlaying, currentTime, duration]);
 
   // Synchronize Timeline Scrubber on Notification Bar every second
   useEffect(() => {
     if (!currentSong) return;
 
     const syncNotificationTimeline = () => {
-      const dur = duration || currentSong.duration || (audioRef.current?.duration) || 0;
-      const pos = currentTime || (audioRef.current?.currentTime) || 0;
+      // Use latest values via refs to avoid stale closures in interval
+      const dur = durationRef.current || currentSongRef.current?.duration || 0;
+      const pos = currentTimeRef.current || 0;
+      const playing = isPlayingRef.current;
 
       if (dur > 0 && !isNaN(dur) && !isNaN(pos)) {
         // Web MediaSession position state
@@ -921,7 +936,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }).catch(() => {});
 
         MediaSession.setPlaybackState({
-          playbackState: isPlaying ? 'playing' : 'paused',
+          playbackState: playing ? 'playing' : 'paused',
           duration: dur,
           position: Math.min(dur, Math.max(0, pos)),
           playbackRate: 1.0
@@ -929,10 +944,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     };
 
+    // Run once on state changes that matter for the notification display
     syncNotificationTimeline();
+
+    // Also run periodically to keep seeker moving while app is in background
     const timer = setInterval(syncNotificationTimeline, 1000);
     return () => clearInterval(timer);
-  }, [currentSong?.id, isPlaying, currentTime, duration]);
+  }, [currentSong?.id, isPlaying]); // Remove currentTime and duration to avoid interval thrashing
 
   // Keep AudioContext and HTML5 Audio alive across app minimization & screen lock
   useEffect(() => {
@@ -1045,6 +1063,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       song.isOffline === true ||
       song.url?.includes('cloudinary') ||
       song.url?.includes('firebasestorage')
+
+    // Request Battery Optimization Ignore on Start if on Android
+    if (Capacitor.getPlatform() === 'android' && (window as any).AndroidSettings?.requestIgnoreBatteryOptimizations) {
+      (window as any).AndroidSettings.requestIgnoreBatteryOptimizations();
+    }
 
     if (isUploadedSong) {
       activeEngineRef.current = 'html5'
