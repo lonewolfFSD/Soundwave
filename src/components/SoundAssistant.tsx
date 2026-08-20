@@ -10,6 +10,8 @@ import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { Song } from '../context/PlayerContext';
 import { addDoc, serverTimestamp, updateDoc, doc, where, deleteDoc, setDoc } from 'firebase/firestore';
 import { App } from '@capacitor/app';
+import { searchYouTubeMusic, getTrendingYouTubeMusic } from '../utils/ytMusic';
+import { getSongRadioQueue } from '../utils/aiRecommender';
 
 let NativeAudio: any = null;
 let ScreenBrightness: any = null;
@@ -20,6 +22,7 @@ const SoundieAssistant = ({ isOpen, onClose: onCloseExternal }: { isOpen?: boole
   const {
     currentSong, pauseSong, resumeSong, nextSong, previousSong,
     playSong, addToQueue, queue, globalLibrary, setGlobalLibrary,
+    setQueue, playedHistory, toggleShuffle, toggleRepeat, toggleLikeSong
   } = usePlayer();
 
   const [internalOpen, setInternalOpen] = useState(false);
@@ -537,7 +540,22 @@ const SoundieAssistant = ({ isOpen, onClose: onCloseExternal }: { isOpen?: boole
     if (/\b(half volume|50%)\b/.test(t)) { setSystemVolume(0.5); return { handled: true, response: 'Volume at 50%.' }; }
     if (/\b(volume up|turn up|louder|increase volume|crank it)\b/.test(t)) { setSystemVolume(0.8); return { handled: true, response: 'Turning it up.' }; }
     if (/\b(volume down|turn down|quieter|lower volume|too loud)\b/.test(t)) { setSystemVolume(0.3); return { handled: true, response: 'Turning it down.' }; }
-    if (/\b(mute|silence)\b/.test(t)) { setSystemVolume(0); return { handled: true, response: 'Muted.' }; }
+    // 4.5 SHUFFLE / REPEAT / LIKE CONTROLS
+    if (/\b(shuffle|mix it up|randomize queue)\b/.test(t)) {
+      toggleShuffle();
+      return { handled: true, response: 'Shuffle mode toggled 🔀' };
+    }
+    if (/\b(repeat|loop|loop this)\b/.test(t)) {
+      toggleRepeat();
+      return { handled: true, response: 'Repeat mode updated 🔁' };
+    }
+    if (/\b(like|favorite|heart this|add to liked)\b/.test(t)) {
+      if (currentSong) {
+        toggleLikeSong(currentSong);
+        return { handled: true, response: `Added "${currentSong.title}" to your Liked Songs ❤️` };
+      }
+      return { handled: true, response: 'No song is currently playing.' };
+    }
 
     // 5. BRIGHTNESS
     const brightMatch = t.match(/\b(?:set\s+)?brightness\s+(?:to\s+)?(\d{1,3})\b/);
@@ -550,37 +568,9 @@ const SoundieAssistant = ({ isOpen, onClose: onCloseExternal }: { isOpen?: boole
     if (/\b(brighter|increase brightness|brightness up)\b/.test(t)) { setScreenBrightness(0.9); return { handled: true, response: 'Brightness increased.' }; }
     if (/\b(dimmer|dim|decrease brightness|brightness down|too bright)\b/.test(t)) { setScreenBrightness(0.3); return { handled: true, response: 'Screen dimmed.' }; }
 
-    // 6. PLAY SPECIFIC SONG
-    const playMatch = t.match(/\b(?:play|put on|start|hear|listen to)\s+(.+)/i);
-    if (playMatch && !/^(music|some music|a song|it|that|this)$/.test(playMatch[1].trim())) {
-      const songQuery = playMatch[1].trim();
-      const bestMatch = findBestSong(songQuery);
-      
-      if (bestMatch) {
-        if (bestMatch.score >= 300) {
-          // High confidence: Play immediately
-          playSong(bestMatch.song);
-          return { handled: true, response: `Playing "${bestMatch.song.title}" by ${bestMatch.song.artist}.` };
-        } else {
-          // Low confidence (Typo or loose match): Ask for confirmation
-          setPendingSongConfirmation(bestMatch.song);
-          return { handled: true, response: `I couldn't find an exact match. Did you mean "${bestMatch.song.title}" by ${bestMatch.song.artist}?` };
-        }
-      }
-      return { handled: true, response: `I couldn't find "${songQuery}" in your library.` };
-    }
-
-    // 7. ADD TO QUEUE
-    const queueMatch = t.match(/\b(?:add|queue|put)\s+(.+?)\s+(?:to\s+(?:the\s+)?queue|up next|next)\b/i) || t.match(/\b(?:queue up)\s+(.+)/i);
-    if (queueMatch) {
-      const songQuery = queueMatch[1].trim();
-      const bestMatch = findBestSong(songQuery);
-      if (bestMatch) {
-        // We assume queueing is safer, so we just add the best guess
-        addToQueue(bestMatch.song);
-        return { handled: true, response: `Added "${bestMatch.song.title}" to the queue.` };
-      }
-      return { handled: true, response: `Couldn't find "${songQuery}" to queue up.` };
+    // 6. PASS PLAY AND QUEUE REQUESTS TO SMART NLP ASYNC ENGINE
+    if (/\b(play|put on|start|hear|listen to|queue|drop|vibe)\b/i.test(t)) {
+      return { handled: false };
     }
 
     // 8. INFO / STATUS
@@ -817,21 +807,174 @@ const SoundieAssistant = ({ isOpen, onClose: onCloseExternal }: { isOpen?: boole
         return;
       }
 
-      // Matches "play something", "play anything", "play a random song", etc.
-      if (/\b(play|put on|start)\s+(something|anything|a song)\s*(random)?\b/.test(lower) || /\b(play|put on|start)\s+(a\s+)?random\s+(song|track|music)\b/.test(lower)) {
-        const lib = globalLibrary.length > 0 ? globalLibrary : queue;
-        
-        if (lib.length > 0) {
-          const randomTrack = lib[Math.floor(Math.random() * lib.length)];
-          playSong(randomTrack);
-          const resp = `Playing something random. Here is "${randomTrack.title}" by ${randomTrack.artist}.`;
+      // ─── 3. SMART NLP MUSIC & INTENT ENGINE ───────────────────────
+
+      // A. MOOD / VIBE INTENT DETECTION
+      // Matches: "play something sad", "play sad songs", "play some chill lofi", "play gym phonk", "play romantic music", "play party bangers", "hype me up", etc.
+      const moodPatterns = [
+        { regex: /\b(sad|heartbreak|depressing|crying|lonely|melanchol(y|ic)|broken|tear|cry)\b/i, query: 'sad songs acoustic emotional', label: 'sad & emotional', emoji: '🌧️' },
+        { regex: /\b(happy|upbeat|cheerful|feel\s*good|joyful|positive|sunny|energetic)\b/i, query: 'happy upbeat pop songs', label: 'upbeat & happy', emoji: '☀️' },
+        { regex: /\b(chill|relax(ing)?|peaceful|lo-?fi|study|studying|sleep|calm|mellow|zen|coffee)\b/i, query: 'chill lofi beats relaxing study', label: 'chill & relaxing lofi', emoji: '☕' },
+        { regex: /\b(phonk|gym|workout|hype|aggressive|energy|motivation|beast|hardstyle)\b/i, query: 'drift phonk gym workout songs', label: 'high-energy gym & phonk', emoji: '🔥' },
+        { regex: /\b(party|dance|club|festival|banger|edm|electronic)\b/i, query: 'party dance club hits', label: 'party bangers', emoji: '🪩' },
+        { regex: /\b(romantic|love|dating|slowed|reverb|night\s*drive|sunset|acoustic)\b/i, query: 'romantic love songs acoustic slowed', label: 'romantic & night drive', emoji: '🌹' },
+        { regex: /\b(rock|metal|punk|guitar|classic rock)\b/i, query: 'rock classic metal hits', label: 'rock & metal', emoji: '🎸' },
+        { regex: /\b(hip\s*hop|rap|trap)\b/i, query: 'hip hop rap popular songs', label: 'hip hop & rap', emoji: '🎤' },
+        { regex: /\b(pop|mainstream|billboard)\b/i, query: 'top pop hits billboard', label: 'pop hits', emoji: '✨' },
+        { regex: /\b(k-?pop|bts|blackpink)\b/i, query: 'k-pop top hits', label: 'K-Pop hits', emoji: '🇰🇷' },
+        { regex: /\b(punjabi|desi|bhangra|bollywood|hindi)\b/i, query: 'trending punjabi bollywood hits', label: 'Punjabi & Bollywood hits', emoji: '💃' },
+        { regex: /\b(jazz|blues|soul)\b/i, query: 'smooth jazz soul music', label: 'smooth jazz', emoji: '🎷' },
+        { regex: /\b(classical|piano|instrumental)\b/i, query: 'beautiful classical piano instrumental', label: 'classical piano', emoji: '🎹' }
+      ];
+
+      const matchedMood = moodPatterns.find(p => p.regex.test(lower));
+      const isMoodPlayIntent = matchedMood && /\b(play|put on|drop|listen|vibe|feel|need|give me)\b/i.test(lower);
+
+      if (isMoodPlayIntent && matchedMood) {
+        setAiResponse(`Fetching ${matchedMood.label} tracks for you...`);
+        const searchResults = await searchYouTubeMusic(matchedMood.query);
+        if (searchResults.length > 0) {
+          const topTrack = searchResults[0];
+          playSong(topTrack);
+          if (setQueue) setQueue(searchResults);
+          const resp = `Putting on some ${matchedMood.label} tracks for you ${matchedMood.emoji} Starting with "${topTrack.title}".`;
+          setAiResponse(resp);
+          await speakWithUnreal(resp);
+          return;
+        }
+      }
+
+      // B. ARTIST INTENT DETECTION
+      // Matches: "play something by The Weeknd", "play Drake", "play songs from Eminem", "play Taylor Swift tracks", "put on some Travis Scott"
+      const artistMatch = lower.match(/\b(?:play|put on|start|hear|listen to)\s+(?:something\s+|songs?\s+|tracks?\s+|hits?\s+)?(?:by|from|of)\s+([a-zA-Z0-9\s.'-]+)/i) ||
+                          lower.match(/\b(?:play|put on)\s+([a-zA-Z0-9\s.'-]+)\s+(?:songs?|tracks?|hits?|music)\b/i);
+
+      if (artistMatch) {
+        const rawArtist = artistMatch[1].replace(/\b(please|soundie|hey|right now)\b/gi, '').trim();
+        if (rawArtist && !/^(something|music|a song|it|that|this|random|anything)$/i.test(rawArtist)) {
+          setAiResponse(`Finding top songs by ${rawArtist}...`);
+          const searchResults = await searchYouTubeMusic(`${rawArtist} top hits`);
+          if (searchResults.length > 0) {
+            const topTrack = searchResults[0];
+            playSong(topTrack);
+            if (setQueue) setQueue(searchResults);
+            const resp = `Playing top hits by ${topTrack.artist || rawArtist} 🎵 Starting with "${topTrack.title}".`;
+            setAiResponse(resp);
+            await speakWithUnreal(resp);
+            return;
+          }
+        }
+      }
+
+      // C. RANDOM / TRENDING / GENERAL MUSIC INTENT
+      if (/\b(play|put on|start)\s+(something|anything|a song)\s*(random)?\b/.test(lower) ||
+          /\b(play|put on|start)\s+(a\s+)?random\s+(song|track|music)\b/.test(lower) ||
+          /\b(play|put on)\s+(trending|popular|top hits|charts|hot songs)\b/i.test(lower) ||
+          /^(play\s+music|put\s+on\s+music|play\s+some\s+tunes)$/i.test(lower)) {
+        setAiResponse("Picking out some top trending tracks for you...");
+        const trending = await getTrendingYouTubeMusic();
+        if (trending.length > 0) {
+          const topTrack = trending[0];
+          playSong(topTrack);
+          if (setQueue) setQueue(trending);
+          const resp = `Playing top trending hits 🚀 Starting with "${topTrack.title}" by ${topTrack.artist}.`;
           setAiResponse(resp);
           await speakWithUnreal(resp);
         } else {
-          const resp = `Your library is empty, so I don't have anything random to play!`;
+          const lib = globalLibrary.length > 0 ? globalLibrary : queue;
+          if (lib.length > 0) {
+            const randomTrack = lib[Math.floor(Math.random() * lib.length)];
+            playSong(randomTrack);
+            const resp = `Playing "${randomTrack.title}" by ${randomTrack.artist}.`;
+            setAiResponse(resp);
+            await speakWithUnreal(resp);
+          } else {
+            const resp = "I couldn't load tracks right now. Try searching for a specific song name.";
+            setAiResponse(resp);
+            await speakWithUnreal(resp);
+          }
+        }
+        return;
+      }
+
+      // D. GENERAL SONG / TRACK SEARCH & PLAY INTENT (YouTube Music + ML Vibe Radio)
+      // Matches: "play Starboy", "play Mockingbird", "play Blinding Lights", "listen to Shape of You"
+      const playSongMatch = lower.match(/\b(?:play|put on|start|hear|listen to)\s+(.+)/i);
+      if (playSongMatch && !/^(music|some music|a song|it|that|this)$/i.test(playSongMatch[1].trim())) {
+        const queryText = playSongMatch[1]
+          .replace(/\b(please|soundie|hey|right now|on youtube|from youtube)\b/gi, '')
+          .trim();
+
+        if (queryText) {
+          // 1. Check local uploaded library with high confidence
+          const bestMatch = findBestSong(queryText);
+          if (bestMatch && bestMatch.score >= 500) {
+            playSong(bestMatch.song);
+            const resp = `Playing "${bestMatch.song.title}" by ${bestMatch.song.artist} from your library.`;
+            setAiResponse(resp);
+            await speakWithUnreal(resp);
+            return;
+          }
+
+          // 2. Fetch from YouTube Music catalog online
+          setAiResponse(`Searching YouTube Music for "${queryText}"...`);
+          const searchResults = await searchYouTubeMusic(queryText);
+          if (searchResults.length > 0) {
+            const topTrack = searchResults[0];
+            playSong(topTrack);
+
+            // Generate rich ML vibe radio queue based on the song's vibe
+            try {
+              const radioQueue = await getSongRadioQueue(topTrack, [], playedHistory, 25);
+              if (setQueue) setQueue([topTrack, ...radioQueue]);
+            } catch {
+              if (setQueue) setQueue(searchResults);
+            }
+
+            const resp = `Playing "${topTrack.title}" by ${topTrack.artist} 🎶`;
+            setAiResponse(resp);
+            await speakWithUnreal(resp);
+            return;
+          } else if (bestMatch) {
+            playSong(bestMatch.song);
+            const resp = `Playing "${bestMatch.song.title}" by ${bestMatch.song.artist}.`;
+            setAiResponse(resp);
+            await speakWithUnreal(resp);
+            return;
+          } else {
+            const resp = `I couldn't find "${queryText}" on YouTube Music or in your library.`;
+            setAiResponse(resp);
+            await speakWithUnreal(resp);
+            return;
+          }
+        }
+      }
+
+      // E. QUEUE INTENT (Add to Queue)
+      const queueMatch = lower.match(/\b(?:add|queue|put)\s+(.+?)\s+(?:to\s+(?:the\s+)?queue|up next|next)\b/i) || lower.match(/\b(?:queue up)\s+(.+)/i);
+      if (queueMatch) {
+        const queryText = queueMatch[1].replace(/\b(please|soundie|hey|right now)\b/gi, '').trim();
+        const bestMatch = findBestSong(queryText);
+        if (bestMatch && bestMatch.score >= 400) {
+          addToQueue(bestMatch.song);
+          const resp = `Added "${bestMatch.song.title}" to the queue.`;
           setAiResponse(resp);
           await speakWithUnreal(resp);
+          return;
         }
+
+        const onlineResults = await searchYouTubeMusic(queryText);
+        if (onlineResults.length > 0) {
+          addToQueue(onlineResults[0]);
+          const resp = `Added "${onlineResults[0].title}" by ${onlineResults[0].artist} to your queue.`;
+          setAiResponse(resp);
+          await speakWithUnreal(resp);
+          return;
+        }
+
+        const resp = `Couldn't find "${queryText}" to queue up.`;
+        setAiResponse(resp);
+        await speakWithUnreal(resp);
         return;
       }
       
