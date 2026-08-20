@@ -43,59 +43,50 @@ export const isYoutubeVideoId = (id: string): boolean => {
 }
 
 /**
- * Search YouTube Video ID by title and artist
+ * Search YouTube Video ID by title and artist with lightning-fast caching
  */
 export const findYouTubeVideoId = async (title: string, artist: string): Promise<string> => {
-  const cleanQ = `${sanitizeTitle(title)} ${sanitizeTitle(artist)} official audio`.trim()
-  const cacheKey = cleanQ.toLowerCase()
+  if (!title && !artist) return ''
+  const cleanQ = `${sanitizeTitle(title)} ${sanitizeTitle(artist)}`.trim()
+  const cacheKey = `sw_yt_${cleanQ.toLowerCase().replace(/[^a-z0-9]/g, '_')}`
+
+  // 1. In-memory cache
   if (videoIdCache.has(cacheKey)) return videoIdCache.get(cacheKey)!
 
-  // 1. Check local/production /api/yt-search endpoint
-  const searchEndpoints = [
-    `/api/yt-search?q=${encodeURIComponent(cleanQ)}`,
-    `https://soundwave.lonewolffsd.in/api/yt-search?q=${encodeURIComponent(cleanQ)}`
+  // 2. Persistent LocalStorage cache (0ms instant lookup)
+  try {
+    const stored = localStorage.getItem(cacheKey)
+    if (stored && isYoutubeVideoId(stored)) {
+      videoIdCache.set(cacheKey, stored)
+      return stored
+    }
+  } catch {}
+
+  // 3. Query Fast YouTube Search API
+  const queries = [
+    cleanQ,
+    `${cleanQ} official audio`,
+    title
   ]
 
-  for (const endpoint of searchEndpoints) {
+  for (const q of queries) {
     try {
-      const res = await fetch(endpoint, { signal: AbortSignal.timeout(3500) })
+      const res = await fetch(`/api/yt-search?q=${encodeURIComponent(q)}`, { signal: AbortSignal.timeout(2500) })
       if (res.ok) {
         const items = await res.json()
-        if (Array.isArray(items) && items.length > 0 && items[0]?.id) {
-          const id = items[0].id.replace('yt_', '')
-          if (isYoutubeVideoId(id)) {
-            videoIdCache.set(cacheKey, id)
-            return id
+        if (Array.isArray(items) && items.length > 0) {
+          for (const item of items) {
+            const id = extractYoutubeVideoId(item?.id) || extractYoutubeVideoId(item?.youtubeUrl) || extractYoutubeVideoId(item?.url)
+            if (id && isYoutubeVideoId(id)) {
+              videoIdCache.set(cacheKey, id)
+              try { localStorage.setItem(cacheKey, id) } catch {}
+              return id
+            }
           }
         }
       }
     } catch {}
   }
-
-  // 2. Fallback: Search direct YouTube metadata endpoint
-  try {
-    const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(cleanQ)}&sp=EgIQAQ%253D%253D`
-    const res = await fetch(ytUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept-Language': 'en-US,en;q=0.9'
-      },
-      signal: AbortSignal.timeout(4000)
-    })
-    if (res.ok) {
-      const html = await res.text()
-      const matches = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/g)
-      if (matches && matches.length > 0) {
-        for (const m of matches) {
-          const id = m.replace('"videoId":"', '').replace('"', '')
-          if (isYoutubeVideoId(id)) {
-            videoIdCache.set(cacheKey, id)
-            return id
-          }
-        }
-      }
-    }
-  } catch {}
 
   return ''
 }
