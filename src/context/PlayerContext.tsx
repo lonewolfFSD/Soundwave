@@ -890,8 +890,32 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           })
           .catch(e => console.error("Audio playback error:", e))
       }
+    } else if (isLocalHost) {
+      // Local dev server with yt-dlp backend -> 100% full song in 200ms!
+      const activeSong = await resolveFullLengthSong(song, audioQuality)
+      setCurrentSong(activeSong)
+      activeEngineRef.current = 'html5'
+      try { ytPlayerRef.current?.pauseVideo() } catch {}
+
+      if (audioRef.current && activeSong.url) {
+        audioRef.current.crossOrigin = 'anonymous'
+        audioRef.current.src = activeSong.url
+        audioRef.current.volume = volume
+        audioRef.current.muted = false
+        if (startPosition > 0) {
+          audioRef.current.currentTime = startPosition
+        }
+        audioRef.current.play()
+          .then(() => {
+            setIsPlaying(true)
+            if (startPosition > 0 && audioRef.current) {
+              audioRef.current.currentTime = startPosition
+            }
+          })
+          .catch(e => console.error("Audio playback error:", e))
+      }
     } else {
-      // 🌟 Official YouTube Stream Player (100% Full Song, Lossless Full Length, 0 Previews)
+      // 🌟 Native App & Production: Official YouTube Stream Player (100% Full Song, Lossless Full Length, 0 Previews)
       let videoId = extractYoutubeVideoId(song.id) ||
                     extractYoutubeVideoId((song as any).youtubeId) ||
                     extractYoutubeVideoId(song.youtubeUrl) ||
