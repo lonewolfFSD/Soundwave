@@ -1102,8 +1102,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       (window as any).AndroidSettings.requestIgnoreBatteryOptimizations();
     }
 
-    // 🌟 Standalone Android Media3 / ExoPlayer Native Playback
-    if (isNativeAudioSupported() && song.url) {
+    // 🌟 Standalone Android Media3 / ExoPlayer Native Playback for Direct Audio Streams
+    if (isNativeAudioSupported() && isUploadedSong && song.url) {
       activeEngineRef.current = 'html5';
       try { audioRef.current?.pause(); } catch {}
       try { ytPlayerRef.current?.pauseVideo(); } catch {}
