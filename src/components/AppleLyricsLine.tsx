@@ -7,6 +7,7 @@ interface AppleLyricsLineProps {
   activeLineIndex: number
   currentTime: number
   nextLineTime?: number
+  lyricsOffset?: number
   fontSize: number
   onClick: (time: number) => void
   elementId: string
@@ -19,6 +20,7 @@ export const AppleLyricsLine: React.FC<AppleLyricsLineProps> = React.memo(({
   activeLineIndex,
   currentTime,
   nextLineTime,
+  lyricsOffset = 0,
   fontSize,
   onClick,
   elementId,
@@ -38,9 +40,10 @@ export const AppleLyricsLine: React.FC<AppleLyricsLineProps> = React.memo(({
     if (line.time === -1) return 1
     const end = nextLineTime && nextLineTime > line.time ? nextLineTime : line.time + 4.0
     const duration = Math.max(0.4, end - line.time)
-    const elapsed = Math.max(0, currentTime - line.time + 0.1) // 100ms syllable onset lead
+    const effectiveTime = currentTime + lyricsOffset
+    const elapsed = Math.max(0, effectiveTime - line.time + 0.1) // 100ms syllable onset lead
     return Math.max(0, Math.min(1, elapsed / duration))
-  }, [isActive, isPast, line.time, nextLineTime, currentTime])
+  }, [isActive, isPast, line.time, nextLineTime, currentTime, lyricsOffset])
 
   const nonSpaceWords = useMemo(() => words.filter(w => w.trim().length > 0), [words])
   const totalWords = Math.max(1, nonSpaceWords.length)

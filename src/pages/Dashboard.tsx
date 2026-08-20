@@ -1651,7 +1651,7 @@ const Dashboard = () => {
                                     <div className="w-11 h-11 rounded-xl bg-black/40 flex items-center justify-center backdrop-blur-sm border border-white/20 hover:scale-110 transition-transform">
                                       {isActive && isPlaying ? <Pause className="w-6 h-6 text-white fill-white" /> : <Play className="w-6 h-6 text-white fill-white ml-0.5" />}
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="hidden md:flex items-center gap-2">
                                       <button
                                         onClick={(e) => { e.stopPropagation(); setSelectedSongForPlaylist(song); }}
                                         title="Add to Playlist"
@@ -1755,7 +1755,7 @@ const Dashboard = () => {
                                     <div className="w-11 h-11 rounded-xl bg-black/40 flex items-center justify-center backdrop-blur-sm border border-white/20 hover:scale-110 transition-transform">
                                       {isActive && isPlaying ? <Pause className="w-6 h-6 text-white fill-white" /> : <Play className="w-6 h-6 text-white fill-white ml-0.5" />}
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="hidden md:flex items-center gap-2">
                                       <button
                                         onClick={(e) => { e.stopPropagation(); setSelectedSongForPlaylist(song); }}
                                         title="Add to Playlist"
@@ -2031,7 +2031,7 @@ const Dashboard = () => {
                                           <div className="w-11 h-11 rounded-xl bg-black/40 flex items-center justify-center backdrop-blur-sm border border-white/20 hover:scale-110 transition-transform">
                                             {isActive && isPlaying ? <Pause className="w-6 h-6 text-white fill-white" /> : <Play className="w-6 h-6 text-white fill-white ml-0.5" />}
                                           </div>
-                                          <div className="flex items-center gap-2">
+                                          <div className="hidden md:flex items-center gap-2">
                                             <button
                                               onClick={(e) => { e.stopPropagation(); setSelectedSongForPlaylist(song); }}
                                               title="Add to Playlist"

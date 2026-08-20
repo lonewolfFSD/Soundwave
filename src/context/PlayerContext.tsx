@@ -193,7 +193,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [])
 
-  // Sync timeline ticker when playing via YouTube
+  // Sync timeline ticker when playing via YouTube (50ms ultra-smooth live tracking)
   useEffect(() => {
     let timer: any = null
     if (isPlaying) {
@@ -210,7 +210,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             }
           } catch {}
         }
-      }, 250)
+      }, 50)
     }
     return () => {
       if (timer) clearInterval(timer)
@@ -575,7 +575,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     }
 
-    fetchLyrics(song.title, song.artist, song.duration).then((lyrics) => {
+    fetchLyrics(song.title, song.artist, song.duration, song.youtubeId).then((lyrics) => {
       if (lyrics) {
         setCurrentSong(prev => prev && (prev.id === song.id || prev.title === song.title) ? { ...prev, lyrics } : prev)
       }

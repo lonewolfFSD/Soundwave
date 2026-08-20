@@ -239,6 +239,7 @@ const Player: React.FC = () => {
   const [is8DMode, setIs8DMode] = useState(false);
   const [monoAudio, setMonoAudio] = useState(localStorage.getItem('sw_mono_audio') === 'true');
   const [lyricsFontSize, setLyricsFontSize] = useState(Number(localStorage.getItem('sw_lyrics_size') || 18));
+  const [lyricsOffset, setLyricsOffset] = useState<number>(() => Number(localStorage.getItem('sw_lyrics_offset') || 0));
   const [sleepTimer, setSleepTimer] = useState(Number(localStorage.getItem('sw_sleep_timer') || 0));
   const audioCtxRef = useRef<AudioContext | null>(null);
   const pannerRef = useRef<StereoPannerNode | null>(null);
@@ -626,13 +627,13 @@ useEffect(() => {
 
   const activeLineIndex = useMemo(() => {
     if (parsedLyrics.length === 0 || parsedLyrics[0].time === -1) return -1;
-    const leadTime = currentTime + 0.12; // 120ms vocal onset lead for accurate syllable sync
+    const leadTime = currentTime + lyricsOffset + 0.12; // 120ms vocal onset lead + calibrated offset
     const index = parsedLyrics.findIndex((line, i) => {
       const nextLine = parsedLyrics[i + 1];
       return line.time <= leadTime && (!nextLine || nextLine.time > leadTime);
     });
     return index;
-  }, [currentTime, parsedLyrics]);
+  }, [currentTime, parsedLyrics, lyricsOffset]);
 
   // Mobile Fullscreen Lyrics Auto-Scroll
   useEffect(() => {
@@ -1195,6 +1196,7 @@ useEffect(() => {
                   activeLineIndex={activeLineIndex}
                   currentTime={currentTime}
                   nextLineTime={parsedLyrics[i + 1]?.time}
+                  lyricsOffset={lyricsOffset}
                   fontSize={lyricsFontSize}
                   onClick={(t) => { if (t !== -1) setCurrentTime(t); }}
                   align="left"
@@ -1271,6 +1273,7 @@ useEffect(() => {
                     activeLineIndex={activeLineIndex}
                     currentTime={currentTime}
                     nextLineTime={parsedLyrics[i + 1]?.time}
+                    lyricsOffset={lyricsOffset}
                     fontSize={lyricsFontSize}
                     onClick={(t) => { if (t !== -1) setCurrentTime(t); }}
                     align="left"
@@ -1493,6 +1496,7 @@ useEffect(() => {
                         activeLineIndex={activeLineIndex}
                         currentTime={currentTime}
                         nextLineTime={parsedLyrics[index + 1]?.time}
+                        lyricsOffset={lyricsOffset}
                         fontSize={lyricsFontSize}
                         onClick={(t) => {
                           triggerHaptic();
