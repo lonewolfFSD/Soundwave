@@ -52,6 +52,7 @@ import {
 import { MediaSession } from '@capgo/capacitor-media-session';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Capacitor } from '@capacitor/core';
+import { Share } from '@capacitor/share';
 import { parseLrc } from '../utils/lyrics';
 import { downloadSongForOffline, isSongOffline, deleteOfflineSong } from '../utils/offlineStorage';
 import { findYouTubeVideoId, resolveFullLengthSong } from '../utils/ytMusic';
@@ -334,17 +335,35 @@ const Player: React.FC = () => {
     if (!currentSong) return;
     triggerHaptic();
     setShowMobileOptionsMenu(false);
-    const shareData = {
-      title: currentSong.title,
-      text: `Listening to "${currentSong.title}" by ${currentSong.artist || 'SoundWave'} on SoundWave!`,
-      url: window.location.origin
-    };
+    const shareText = `Listening to "${currentSong.title}" by ${currentSong.artist || 'SoundWave'} on SoundWave!`;
+    const shareUrl = window.location.origin;
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await Share.share({
+          title: currentSong.title,
+          text: shareText,
+          url: shareUrl,
+          dialogTitle: 'Share this Song'
+        });
+        return;
+      } catch (e) {
+        console.warn('Native share cancelled or failed:', e);
+        return;
+      }
+    }
+
     if (navigator.share) {
       try {
-        await navigator.share(shareData);
+        await navigator.share({
+          title: currentSong.title,
+          text: shareText,
+          url: shareUrl
+        });
+        return;
       } catch (err) {}
     } else if (navigator.clipboard) {
-      await navigator.clipboard.writeText(`${shareData.text}\n${shareData.url}`);
+      await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
     }
   };
 

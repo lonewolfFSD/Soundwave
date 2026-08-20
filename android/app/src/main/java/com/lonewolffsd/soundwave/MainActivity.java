@@ -125,6 +125,12 @@ public class MainActivity extends BridgeActivity {
         webView.setLayerType(android.view.View.LAYER_TYPE_NONE, null);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
 
+        WebSettings webSettings = webView.getSettings();
+        webSettings.setMediaPlaybackRequiresUserGesture(false);
+        webSettings.setJavaScriptEnabled(true);
+        webSettings.setDomStorageEnabled(true);
+        webSettings.setDatabaseEnabled(true);
+
         // Disable long press
         webView.setOnLongClickListener(v -> true);
         webView.setLongClickable(false);
@@ -540,7 +546,7 @@ public class MainActivity extends BridgeActivity {
             String type = switch (focusChange) {
                 case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> "duck";
                 case AudioManager.AUDIOFOCUS_GAIN -> "restore";
-                case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT, AudioManager.AUDIOFOCUS_LOSS -> "pause";
+                case AudioManager.AUDIOFOCUS_LOSS -> "pause";
                 default -> null;
             };
             if (type == null) return;
