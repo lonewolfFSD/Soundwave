@@ -1629,15 +1629,24 @@ useEffect(() => {
                 type="range" min="0" max={duration || 0} step="any"
                 value={isDragging ? sliderValue : currentTime}
                 disabled={isInJam}
+                onPointerDown={() => {
+                  if (!isInJam) {
+                    setIsDragging(true);
+                    setSliderValue(currentTime);
+                  }
+                }}
                 onChange={(e) => {
                   if (isInJam) return;
                   const newTime = parseFloat(e.target.value);
                   setSliderValue(newTime);
-                  setCurrentTime(newTime);
-                  if (audioRef.current) audioRef.current.currentTime = newTime;
                 }}
-                onPointerDown={() => !isInJam && setIsDragging(true)}
-                onPointerUp={() => setIsDragging(false)}
+                onPointerUp={(e) => {
+                  if (!isInJam) {
+                    const newTime = parseFloat((e.target as HTMLInputElement).value);
+                    setCurrentTime(newTime);
+                    setIsDragging(false);
+                  }
+                }}
                 onPointerCancel={() => setIsDragging(false)}
                 className={`absolute inset-0 w-full h-full opacity-0 ${isInJam ? 'cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
               />
@@ -2162,17 +2171,30 @@ useEffect(() => {
                   type="range" min="0" max={duration || 0} step="any"
                   value={isDragging ? sliderValue : currentTime}
                   disabled={isInJam}
-                  onPointerDown={() => !isInJam && setIsDragging(true)}
+                  onPointerDown={() => {
+                    if (!isInJam) {
+                      setIsDragging(true);
+                      setSliderValue(currentTime);
+                    }
+                  }}
                   onChange={(e) => {
                     if (isInJam) return;
                     const newTime = parseFloat(e.target.value);
                     setSliderValue(newTime);
-                    setCurrentTime(newTime);
-                    if (audioRef.current) audioRef.current.currentTime = newTime;
                   }}
-                  onPointerUp={() => setIsDragging(false)}
+                  onPointerUp={(e) => {
+                    if (!isInJam) {
+                      const newTime = parseFloat((e.target as HTMLInputElement).value);
+                      setCurrentTime(newTime);
+                      setIsDragging(false);
+                    }
+                  }}
                   onPointerCancel={() => setIsDragging(false)}
-                  onMouseLeave={() => setIsDragging(false)}
+                  onMouseLeave={() => {
+                    if (isDragging) {
+                      setIsDragging(false);
+                    }
+                  }}
                   className={`absolute w-full h-full opacity-0 z-20 ${isInJam ? 'cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
                 />
                 {/* Track */}
