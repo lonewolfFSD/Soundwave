@@ -71,7 +71,7 @@ export const findYouTubeVideoId = async (title: string, artist: string): Promise
 
   for (const q of queries) {
     try {
-      const res = await fetch(`/api/yt-search?q=${encodeURIComponent(q)}`, { signal: AbortSignal.timeout(2500) })
+      const res = await fetch(`/api/yt-search?q=${encodeURIComponent(q)}`, { signal: AbortSignal.timeout(6000) })
       if (res.ok) {
         const items = await res.json()
         if (Array.isArray(items) && items.length > 0) {
@@ -108,7 +108,7 @@ export const getAudioStreamUrl = async (
 }
 
 /**
- * Resolve Song to Full-Length Playable Stream
+ * Resolve Song to Full-Length Playable Stream (100% Lossless, 0 Previews)
  */
 export const resolveFullLengthSong = async (
   song: Song,
@@ -117,11 +117,10 @@ export const resolveFullLengthSong = async (
   if (!song) return song
   const updatedSong = { ...song }
 
-  if (updatedSong.url?.startsWith('blob:') || updatedSong.url?.startsWith('data:')) {
-    return updatedSong
-  }
-
+  // Custom user uploads
   if (
+    updatedSong.url?.startsWith('blob:') ||
+    updatedSong.url?.startsWith('data:') ||
     updatedSong.playlistId === 'global' ||
     updatedSong.url?.includes('cloudinary') ||
     updatedSong.url?.includes('firebasestorage')
@@ -129,9 +128,18 @@ export const resolveFullLengthSong = async (
     return updatedSong
   }
 
+  // Strip any legacy 30-second iTunes preview URLs
+  if (updatedSong.url?.includes('apple.com') || updatedSong.url?.includes('itunes')) {
+    updatedSong.url = ''
+    updatedSong.previewUrl = ''
+  }
+
   let videoId = ''
-  if (isYoutubeVideoId(updatedSong.id.replace('yt_', ''))) {
-    videoId = updatedSong.id.replace('yt_', '')
+  const extractedId = extractYoutubeVideoId(updatedSong.id) ||
+                      extractYoutubeVideoId((updatedSong as any).youtubeId) ||
+                      extractYoutubeVideoId(updatedSong.youtubeUrl)
+  if (extractedId) {
+    videoId = extractedId
   } else {
     videoId = await findYouTubeVideoId(updatedSong.title, updatedSong.artist)
   }
@@ -154,7 +162,7 @@ export const searchYouTubeMusic = async (query: string): Promise<Song[]> => {
 
   // 1. Primary: Search YouTube directly via /api/yt-search
   try {
-    const res = await fetch(`/api/yt-search?q=${encodeURIComponent(cleanQ)}`, { signal: AbortSignal.timeout(4000) })
+    const res = await fetch(`/api/yt-search?q=${encodeURIComponent(cleanQ)}`, { signal: AbortSignal.timeout(6000) })
     if (res.ok) {
       const items = await res.json()
       if (Array.isArray(items) && items.length > 0) {
@@ -165,7 +173,7 @@ export const searchYouTubeMusic = async (query: string): Promise<Song[]> => {
     console.warn('API yt-search error, attempting iTunes catalog fallback:', err)
   }
 
-  // 2. Fallback: Search iTunes catalog
+  // 2. Fallback: Search iTunes catalog (metadata only, full track resolved on play)
   try {
     const res = await fetch(
       `https://itunes.apple.com/search?term=${encodeURIComponent(cleanQ)}&media=music&entity=song&limit=25`
@@ -182,8 +190,8 @@ export const searchYouTubeMusic = async (query: string): Promise<Song[]> => {
             title: sanitizeTitle(item.trackName || 'Unknown Title'),
             artist: sanitizeTitle(item.artistName || 'Unknown Artist'),
             duration: Math.floor((item.trackTimeMillis || 0) / 1000) || 210,
-            url: item.previewUrl || '',
-            previewUrl: item.previewUrl || '',
+            url: '',
+            previewUrl: '',
             playlistId: 'online_search',
             coverArtBase64: highResCover,
             youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent((item.trackName || '') + ' ' + (item.artistName || ''))}`
@@ -204,7 +212,7 @@ export const searchYouTubeMusic = async (query: string): Promise<Song[]> => {
 export const getTrendingYouTubeMusic = async (): Promise<Song[]> => {
   // 1. Try YouTube Search for top hits
   try {
-    const res = await fetch(`/api/yt-search?q=${encodeURIComponent('Top Hits 2024 Popular Songs')}`, { signal: AbortSignal.timeout(3500) })
+    const res = await fetch(`/api/yt-search?q=${encodeURIComponent('Top Hits 2024 Popular Songs')}`, { signal: AbortSignal.timeout(6000) })
     if (res.ok) {
       const items = await res.json()
       if (Array.isArray(items) && items.length > 0) {
@@ -213,7 +221,7 @@ export const getTrendingYouTubeMusic = async (): Promise<Song[]> => {
     }
   } catch {}
 
-  // 2. Fallback to iTunes Top Charts
+  // 2. Fallback to iTunes Top Charts (metadata only, full track resolved on play)
   try {
     const res = await fetch('https://itunes.apple.com/us/rss/topsongs/limit=50/json')
     if (res.ok) {
@@ -225,15 +233,14 @@ export const getTrendingYouTubeMusic = async (): Promise<Song[]> => {
         const rawCover = entry['im:image']?.[2]?.label || entry['im:image']?.[0]?.label
         const cover = rawCover ? rawCover.replace(/170x170bb/g, '600x600bb') : ''
         const trackId = entry.id?.attributes?.['im:id'] || Math.random().toString(36).slice(2, 9)
-        const preview = entry?.link?.[1]?.attributes?.href || ''
 
         return {
           id: `top_${trackId}`,
           title: sanitizeTitle(title),
           artist: sanitizeTitle(artist),
           duration: 210,
-          url: preview || '',
-          previewUrl: preview || '',
+          url: '',
+          previewUrl: '',
           playlistId: 'trending',
           coverArtBase64: cover,
           youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + ' ' + artist)}`
@@ -256,7 +263,7 @@ export const getSearchSuggestions = async (query: string): Promise<string[]> => 
   const cleanQ = query.trim()
 
   try {
-    const res = await fetch(`/api/yt-suggest?q=${encodeURIComponent(cleanQ)}`, { signal: AbortSignal.timeout(2000) })
+    const res = await fetch(`/api/yt-suggest?q=${encodeURIComponent(cleanQ)}`, { signal: AbortSignal.timeout(2500) })
     if (res.ok) {
       const suggestions = await res.json()
       if (Array.isArray(suggestions) && suggestions.length > 0) {
@@ -285,7 +292,7 @@ export const getSearchSuggestions = async (query: string): Promise<string[]> => 
 export const getCategoryTracks = async (searchQuery: string, limit = 20): Promise<Song[]> => {
   // 1. Try YouTube Search
   try {
-    const res = await fetch(`/api/yt-search?q=${encodeURIComponent(searchQuery + ' audio')}`, { signal: AbortSignal.timeout(3500) })
+    const res = await fetch(`/api/yt-search?q=${encodeURIComponent(searchQuery + ' audio')}`, { signal: AbortSignal.timeout(6000) })
     if (res.ok) {
       const items = await res.json()
       if (Array.isArray(items) && items.length > 0) {
@@ -311,18 +318,19 @@ export const getCategoryTracks = async (searchQuery: string, limit = 20): Promis
             title: sanitizeTitle(item.trackName || 'Unknown Title'),
             artist: sanitizeTitle(item.artistName || 'Unknown Artist'),
             duration: Math.floor((item.trackTimeMillis || 0) / 1000) || 210,
-            url: item.previewUrl || '',
-            previewUrl: item.previewUrl || '',
+            url: '',
+            previewUrl: '',
             playlistId: 'category',
             coverArtBase64: highResCover,
             youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent((item.trackName || '') + ' ' + (item.artistName || ''))}`
           }
         })
-        return [...songs].sort(() => 0.5 - Math.random())
+        return songs
       }
     }
   } catch (err) {
     console.error("Category fetch error:", err)
   }
+
   return []
 }

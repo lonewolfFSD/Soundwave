@@ -894,25 +894,41 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Local dev server with yt-dlp backend -> 100% full song in 200ms!
       const activeSong = await resolveFullLengthSong(song, audioQuality)
       setCurrentSong(activeSong)
-      activeEngineRef.current = 'html5'
-      try { ytPlayerRef.current?.pauseVideo() } catch {}
 
-      if (audioRef.current && activeSong.url) {
-        audioRef.current.crossOrigin = 'anonymous'
-        audioRef.current.src = activeSong.url
-        audioRef.current.volume = volume
-        audioRef.current.muted = false
-        if (startPosition > 0) {
-          audioRef.current.currentTime = startPosition
+      if (activeSong.url && (activeSong.url.startsWith('/api/yt-stream') || activeSong.url.startsWith('http'))) {
+        activeEngineRef.current = 'html5'
+        try { ytPlayerRef.current?.pauseVideo() } catch {}
+
+        if (audioRef.current) {
+          audioRef.current.crossOrigin = 'anonymous'
+          audioRef.current.src = activeSong.url
+          audioRef.current.volume = volume
+          audioRef.current.muted = false
+          if (startPosition > 0) {
+            audioRef.current.currentTime = startPosition
+          }
+          audioRef.current.play()
+            .then(() => {
+              setIsPlaying(true)
+              if (startPosition > 0 && audioRef.current) {
+                audioRef.current.currentTime = startPosition
+              }
+            })
+            .catch(e => console.error("Audio playback error:", e))
         }
-        audioRef.current.play()
-          .then(() => {
-            setIsPlaying(true)
-            if (startPosition > 0 && audioRef.current) {
-              audioRef.current.currentTime = startPosition
-            }
-          })
-          .catch(e => console.error("Audio playback error:", e))
+      } else {
+        const videoId = extractYoutubeVideoId(activeSong.id) ||
+                        extractYoutubeVideoId((activeSong as any).youtubeId) ||
+                        extractYoutubeVideoId(activeSong.youtubeUrl)
+        if (videoId && ytPlayerRef.current && typeof ytPlayerRef.current.loadVideoById === 'function') {
+          activeEngineRef.current = 'youtube'
+          try { audioRef.current?.pause() } catch {}
+          ytPlayerRef.current.loadVideoById({ videoId, startSeconds: startPosition })
+          ytPlayerRef.current.unMute()
+          ytPlayerRef.current.setVolume(volume * 100)
+          ytPlayerRef.current.playVideo()
+          setIsPlaying(true)
+        }
       }
     } else {
       // 🌟 Native App & Production: Official YouTube Stream Player (100% Full Song, Lossless Full Length, 0 Previews)
