@@ -809,40 +809,12 @@ const Player: React.FC = () => {
 
   // --- NAVIGATION LOGIC ---
   const currentIndex = queue.findIndex(s => s.id === currentSong?.id);
-  const hasNext = isShuffle || currentIndex < queue.length - 1 || repeatMode === 'all';
+  const hasNext = isShuffle || currentIndex < queue.length - 1 || repeatMode === 'all' || (upNextQueue && upNextQueue.length > 0);
   const hasPrev = playedHistory.length > 0 || currentIndex > 0 || currentTime > 3;
 
   const handleNext = () => {
-    if (queue.length === 0 || !currentSong) return;
-    setPlayedHistory(prev => [...prev, currentSong]);
-
     fadeTransition(() => {
-      // 1. PRIORITY: Play from the custom Up Next queue first
-      if (upNextQueue && upNextQueue.length > 0) {
-        const nextSong = upNextQueue[0];
-        removeFromQueue(0); // Remove it from the queue since it's playing
-        playSong(nextSong);
-        return;
-      }
-
-      // 2. FALLBACK: Standard Shuffle or Sequential Logic
-      if (isShuffle) {
-        let randomIndex = Math.floor(Math.random() * queue.length);
-        if (queue.length > 1 && queue[randomIndex].id === currentSong.id) {
-           randomIndex = (randomIndex + 1) % queue.length;
-        }
-        playSong(queue[randomIndex]);
-      } else {
-        const nextIndex = currentIndex + 1;
-        if (nextIndex < queue.length) {
-          playSong(queue[nextIndex]);
-        } else if (repeatMode === 'all') {
-          playSong(queue[0]); 
-        } else {
-          pauseSong();
-          setCurrentTime(0);
-        }
-      }
+      nextSong();
     });
   };
 
@@ -853,30 +825,9 @@ const Player: React.FC = () => {
       if (!isPlaying) resumeSong();
       return;
     }
-    
-    // If there is history, go back to the literal last song played
-    if (playedHistory.length > 0) {
-      const previous = playedHistory[playedHistory.length - 1];
-      const newHistory = playedHistory.slice(0, -1);
-      setPlayedHistory(newHistory);
-      
-      fadeTransition(() => {
-        playSong(previous);
-      });
-      return;
-    } 
-    
-    // If no history but we aren't at the start of the queue, go to previous sequential track
-    if (currentIndex > 0) {
-       fadeTransition(() => {
-         playSong(queue[currentIndex - 1]);
-       });
-       return;
-    }
-    
-    // Fallback
-    setCurrentTime(0);
-    if (audioRef.current) audioRef.current.currentTime = 0;
+    fadeTransition(() => {
+      previousSong();
+    });
   };
 
   // --- BROWSER TITLE & MEDIA SESSION ---
@@ -984,21 +935,6 @@ useEffect(() => {
       window.removeEventListener('onAudioFocusChange', handleAudioFocus);
     };
   }, [toggleShuffle, handleNext, pauseSong, resumeSong, setVolume, isShuffle]);
-
-  // --- AUTO ADVANCE ON END ---
-  useEffect(() => {
-    if (currentTime >= duration - 1 && duration > 0) {
-      if (repeatMode === 'one') {
-        setCurrentTime(0);
-        if (audioRef.current) {
-          audioRef.current.currentTime = 0;
-          resumeSong();
-        }
-      } else {
-        handleNext();
-      }
-    }
-  }, [currentTime, duration, repeatMode]);
 
   // --- PiP Logic ---
   const updateCanvas = async () => {
