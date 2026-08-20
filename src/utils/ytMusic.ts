@@ -35,19 +35,26 @@ export const findYouTubeVideoId = async (title: string, artist: string): Promise
   if (videoIdCache.has(cacheKey)) return videoIdCache.get(cacheKey)!
 
   // 1. Check local/production /api/yt-search endpoint
-  try {
-    const res = await fetch(`/api/yt-search?q=${encodeURIComponent(cleanQ)}`, { signal: AbortSignal.timeout(4000) })
-    if (res.ok) {
-      const items = await res.json()
-      if (Array.isArray(items) && items.length > 0 && items[0]?.id) {
-        const id = items[0].id.replace('yt_', '')
-        if (isYoutubeVideoId(id)) {
-          videoIdCache.set(cacheKey, id)
-          return id
+  const searchEndpoints = [
+    `/api/yt-search?q=${encodeURIComponent(cleanQ)}`,
+    `https://soundwave.lonewolffsd.in/api/yt-search?q=${encodeURIComponent(cleanQ)}`
+  ]
+
+  for (const endpoint of searchEndpoints) {
+    try {
+      const res = await fetch(endpoint, { signal: AbortSignal.timeout(3500) })
+      if (res.ok) {
+        const items = await res.json()
+        if (Array.isArray(items) && items.length > 0 && items[0]?.id) {
+          const id = items[0].id.replace('yt_', '')
+          if (isYoutubeVideoId(id)) {
+            videoIdCache.set(cacheKey, id)
+            return id
+          }
         }
       }
-    }
-  } catch {}
+    } catch {}
+  }
 
   // 2. Fallback: Search direct YouTube metadata endpoint
   try {

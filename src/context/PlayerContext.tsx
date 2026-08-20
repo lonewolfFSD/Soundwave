@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useRef, useEffect } from 'react'
+import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@capgo/capacitor-media-session';
 import { resolveFullLengthSong, isYoutubeVideoId, findYouTubeVideoId } from '../utils/ytMusic';
 import { fetchLyrics } from '../utils/lyrics';
@@ -114,23 +115,34 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // ── INITIALIZE GLOBAL OFFICIAL YOUTUBE PLAYER ──
   useEffect(() => {
+    const isNative = Capacitor.isNativePlatform()
+
     const initYt = () => {
       if (!window.YT || !window.YT.Player || ytPlayerRef.current) return
       try {
         const mountEl = document.getElementById('soundwave-global-yt-player')
         if (!mountEl) return
+
+        const playerVars: any = {
+          autoplay: 1,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          rel: 0,
+          playsinline: 1,
+          enablejsapi: 1,
+          iv_load_policy: 3
+        }
+
+        // Avoid passing invalid capacitor:// origin on native
+        if (!isNative && window.location.origin && window.location.origin.startsWith('http')) {
+          playerVars.origin = window.location.origin
+        }
+
         ytPlayerRef.current = new window.YT.Player('soundwave-global-yt-player', {
-          height: '200',
-          width: '200',
-          playerVars: {
-            autoplay: 1,
-            controls: 0,
-            disablekb: 1,
-            fs: 0,
-            rel: 0,
-            playsinline: 1,
-            origin: window.location.origin
-          },
+          height: '100%',
+          width: '100%',
+          playerVars,
           events: {
             onReady: (event: any) => {
               try {
@@ -521,7 +533,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       } catch {}
     }
 
-    const isLocalHost = typeof window !== 'undefined' && (
+    const isNative = Capacitor.isNativePlatform();
+
+    const isLocalHost = !isNative && typeof window !== 'undefined' && (
       window.location.hostname === 'localhost' ||
       window.location.hostname === '127.0.0.1' ||
       window.location.hostname.includes('192.168.')
@@ -567,33 +581,44 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           .catch(e => console.error("Audio playback error:", e))
       }
     } else {
-      // 🌟 Production: Official YouTube Stream Player (100% Full Song, 0 Errors)
+      // 🌟 Native App & Production: Official YouTube Stream Player (100% Full Song, 0 Errors)
       let videoId = ''
       const cleanId = (song.id || '').replace('yt_', '').trim()
       if (isYoutubeVideoId(cleanId)) {
         videoId = cleanId
+      } else if (song.youtubeUrl && isYoutubeVideoId(song.youtubeUrl)) {
+        videoId = song.youtubeUrl.replace('yt_', '').replace('/watch?v=', '').trim()
       } else {
         videoId = await findYouTubeVideoId(song.title, song.artist)
       }
 
-      if (videoId) {
+      if (videoId && ytPlayerRef.current && typeof ytPlayerRef.current.loadVideoById === 'function') {
         activeEngineRef.current = 'youtube'
         try { audioRef.current?.pause() } catch {}
 
         try {
-          ytPlayerRef.current?.loadVideoById({ videoId, startSeconds: 0 })
-          ytPlayerRef.current?.unMute()
-          ytPlayerRef.current?.setVolume(volume * 100)
-          ytPlayerRef.current?.playVideo()
+          ytPlayerRef.current.loadVideoById({ videoId, startSeconds: 0 })
+          ytPlayerRef.current.unMute()
+          ytPlayerRef.current.setVolume(volume * 100)
+          ytPlayerRef.current.playVideo()
+          setIsPlaying(true)
         } catch (e) {
           console.warn('YouTube Player load error:', e)
+          if (song.previewUrl || song.url) {
+            activeEngineRef.current = 'html5'
+            if (audioRef.current) {
+              audioRef.current.src = song.previewUrl || song.url
+              audioRef.current.currentTime = 0
+              audioRef.current.volume = volume
+              audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {})
+            }
+          }
         }
-        setIsPlaying(true)
-      } else if (song.previewUrl) {
-        // Fallback
+      } else if (song.previewUrl || (song.url && song.url.startsWith('http'))) {
+        // Fallback to HTML5 audio preview
         activeEngineRef.current = 'html5'
         if (audioRef.current) {
-          audioRef.current.src = song.previewUrl
+          audioRef.current.src = song.previewUrl || song.url
           audioRef.current.currentTime = 0
           audioRef.current.volume = volume
           audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {})
@@ -886,11 +911,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           position: 'fixed',
           bottom: 0,
           right: 0,
-          width: 200,
-          height: 200,
-          opacity: 0.01,
+          width: 2,
+          height: 2,
+          opacity: 1,
           pointerEvents: 'none',
-          zIndex: -10
+          zIndex: 1,
+          overflow: 'hidden'
         }}
       >
         <div id="soundwave-global-yt-player" />
