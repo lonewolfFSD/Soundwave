@@ -38,14 +38,24 @@ import {
   Moon,
   Trash2,
   Zap,
-  Cast
+  Cast,
+  Share2,
+  Bell,
+  Bookmark,
+  Info,
+  Users,
+  User,
+  RefreshCw,
+  Layers,
+  FolderPlus
 } from 'lucide-react'
 import { MediaSession } from '@capgo/capacitor-media-session';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Capacitor } from '@capacitor/core';
 import { parseLrc } from '../utils/lyrics';
 import { downloadSongForOffline, isSongOffline, deleteOfflineSong } from '../utils/offlineStorage';
-import { findYouTubeVideoId } from '../utils/ytMusic';
+import { findYouTubeVideoId, resolveFullLengthSong } from '../utils/ytMusic';
+import { getSongRadioQueue } from '../utils/aiRecommender';
 import { updateJamPlayback } from '../utils/jamRoomService';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import { DevicePickerModal } from './DevicePickerModal';
@@ -284,8 +294,118 @@ const Player: React.FC = () => {
 
   // --- AUDIO SETTINGS & REFS ---
   const [showMobileOptionsMenu, setShowMobileOptionsMenu] = useState(false);
+  const [showSongDetailsModal, setShowSongDetailsModal] = useState(false);
+  const [isRefetching, setIsRefetching] = useState(false);
+  const [isStartingRadio, setIsStartingRadio] = useState(false);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [touchOffsetY, setTouchOffsetY] = useState(0);
+
+  const handleStartRadio = async () => {
+    if (!currentSong) return;
+    triggerHaptic(ImpactStyle.Medium);
+    setShowMobileOptionsMenu(false);
+    setIsStartingRadio(true);
+    try {
+      const radioQueue = await getSongRadioQueue(currentSong, [], playedHistory, 25);
+      if (radioQueue && radioQueue.length > 0) {
+        setQueue(radioQueue);
+        playSong(radioQueue[0], false);
+      }
+    } catch (e) {
+      console.error("Failed to start song radio", e);
+    } finally {
+      setIsStartingRadio(false);
+    }
+  };
+
+  const handleOpenAddToPlaylist = () => {
+    triggerHaptic();
+    setShowMobileOptionsMenu(false);
+    setShowAddToPlaylist(true);
+  };
+
+  const handleCast = () => {
+    triggerHaptic();
+    setShowMobileOptionsMenu(false);
+    setShowDevicePicker(true);
+  };
+
+  const handleShareSong = async () => {
+    if (!currentSong) return;
+    triggerHaptic();
+    setShowMobileOptionsMenu(false);
+    const shareData = {
+      title: currentSong.title,
+      text: `Listening to "${currentSong.title}" by ${currentSong.artist || 'SoundWave'} on SoundWave!`,
+      url: window.location.origin
+    };
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (err) {}
+    } else if (navigator.clipboard) {
+      await navigator.clipboard.writeText(`${shareData.text}\n${shareData.url}`);
+    }
+  };
+
+  const handleRefetchStream = async () => {
+    if (!currentSong) return;
+    triggerHaptic(ImpactStyle.Medium);
+    setIsRefetching(true);
+    try {
+      const fresh = await resolveFullLengthSong({ ...currentSong, url: '' }, true);
+      playSong(fresh, false);
+    } catch (err) {
+      console.error('Refetch failed', err);
+    } finally {
+      setIsRefetching(false);
+      setShowMobileOptionsMenu(false);
+    }
+  };
+
+  const handleViewArtistProfile = () => {
+    if (!currentSong?.artist || currentSong.artist === 'Unknown Artist') return;
+    triggerHaptic();
+    setShowMobileOptionsMenu(false);
+    setIsFullScreen(false);
+    window.dispatchEvent(new CustomEvent('soundwave-open-artist', { detail: currentSong.artist }));
+  };
+
+  const handleAddTrackToLibrary = async () => {
+    if (!currentSong) return;
+    triggerHaptic(ImpactStyle.Medium);
+    setShowMobileOptionsMenu(false);
+    const isLiked = isSongLiked(currentSong);
+    if (!isLiked) {
+      await toggleLikeSong(currentSong);
+    }
+  };
+
+  const handleSetTrackAsRingtone = async () => {
+    if (!currentSong) return;
+    triggerHaptic(ImpactStyle.Medium);
+    setShowMobileOptionsMenu(false);
+    if (currentSong.url) {
+      const link = document.createElement('a');
+      link.href = currentSong.url;
+      link.download = `${currentSong.title} - Ringtone.mp3`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      const videoId = extractYouTubeId(currentSong) || (currentSong.id || '').replace('yt_', '');
+      if (videoId && videoId.length === 11) {
+        window.open(`https://www.y2mate.com/youtube/${videoId}`, '_blank');
+      }
+    }
+  };
+
+  const handleOpenListenTogether = () => {
+    triggerHaptic();
+    setShowMobileOptionsMenu(false);
+    setIsFullScreen(false);
+    window.dispatchEvent(new Event('soundwave-open-listen-together'));
+  };
 
   const handleSheetTouchStart = (e: React.TouchEvent) => {
     setTouchStartY(e.touches[0].clientY);
@@ -401,111 +521,6 @@ const Player: React.FC = () => {
   firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
 }, []);
 
-const updateMetadata = async () => {
-  if (currentSong) {
-    await MediaSession.setMetadata({
-      title: currentSong.title,
-      artist: currentSong.artist || 'Unknown Artist',
-      album: 'SoundWave',
-      // Ensure this is a valid Base64 string or URL
-      artwork: currentSong.coverArtBase64 ? [{ src: currentSong.coverArtBase64 }] : []
-    });
-
-    await MediaSession.setPlaybackState({
-      playbackState: isPlaying ? 'playing' : 'paused'
-    });
-  }
-};
-
-const syncTimeline = async () => {
-  if (currentSong && audioRef.current) {
-    const duration = audioRef.current.duration;
-    const position = audioRef.current.currentTime;
-
-    if (!isNaN(duration) && duration > 0) {
-      // 🟢 Most reliable way: Send EVERYTHING in one object
-      await MediaSession.setPlaybackState({
-        playbackState: isPlaying ? 'playing' : 'paused',
-        duration: duration, // 👈 Required for the right-side timestamp
-        position: position, // 👈 Required for the left-side timestamp
-        playbackRate: 1.0
-      });
-      
-      // Some versions specifically need this for the "drag" to stick
-      await MediaSession.setPositionState({
-        duration: duration,
-        position: position,
-        playbackRate: 1.0
-      });
-    }
-  }
-};
-
-
-
-// Sync every 1 second while playing
-useEffect(() => {
-  let interval: any;
-  if (isPlaying) {
-    interval = setInterval(syncTimeline, 1000);
-  }
-  syncTimeline(); // Run once immediately
-  return () => clearInterval(interval);
-}, [currentSong, isPlaying]);
-
-useEffect(() => {
-  const syncMetadata = async () => {
-    if (currentSong) {
-      // 🟢 This sends the Title and Artist to the Android Notification
-      await MediaSession.setMetadata({
-        title: currentSong.title,
-        artist: currentSong.artist || 'Unknown Artist',
-        album: 'SoundWave',
-        artwork: currentSong.coverArtBase64 ? [{ src: currentSong.coverArtBase64 }] : []
-      });
-
-      // 🟢 This tells Android if the button should show "Play" or "Pause"
-      await MediaSession.setPlaybackState({
-        playbackState: isPlaying ? 'playing' : 'paused'
-      });
-    }
-  };
-
-  syncMetadata(); // 👈 CALLING IT HERE makes it work!
-}, [currentSong, isPlaying]);
-
-useEffect(() => {
-  // 🟢 You MUST set these handlers or the buttons won't appear
-  MediaSession.setActionHandler({ action: 'play' }, () => {
-    resumeSong(); // Call your play function
-  });
-
-  MediaSession.setActionHandler({ action: 'pause' }, () => {
-    pauseSong(); // Call your pause function
-  });
-
-  MediaSession.setActionHandler({ action: 'nexttrack' }, () => {
-    handleNext(); // Call your skip function
-  });
-
-  return () => {
-    // Clean up if needed
-    MediaSession.removeAllListeners();
-  };
-}, []);
-
-useEffect(() => {
-  MediaSession.setActionHandler({ action: 'seekto' }, (data: any) => {
-    // 🟢 The payload usually comes as 'position' in the Capgo plugin
-    const newTime = data.position || data.seekTime;
-    
-    if (newTime !== undefined && audioRef.current) {
-      audioRef.current.currentTime = newTime;
-      // Force a sync so the numbers update immediately on the notification
-      syncTimeline();
-    }
-  });
-}, []);
 
   const themeConfig: Record<string, any> = {
     default: {
@@ -1738,7 +1753,7 @@ useEffect(() => {
         {/* MOBILE 3-DOTS OPTIONS BOTTOM SHEET */}
         <div 
           className={`fixed inset-0 z-[100] transition-opacity duration-300 ${
-            showMobileOptionsMenu ? 'opacity-100 pointer-events-auto bg-black/60 backdrop-blur-sm' : 'opacity-0 pointer-events-none'
+            showMobileOptionsMenu ? 'opacity-100 pointer-events-auto bg-black/80 backdrop-blur-md' : 'opacity-0 pointer-events-none'
           }`}
           onClick={() => setShowMobileOptionsMenu(false)}
         >
@@ -1754,121 +1769,279 @@ useEffect(() => {
               transition: touchOffsetY > 0 ? 'none' : 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
               fontFamily: 'Space Grotesk, sans-serif'
             }}
-            className={`absolute bottom-0 left-0 right-0 rounded-t-2xl p-5 pb-8 flex flex-col ${barBg} border-t shadow-2xl`}
+            className={`absolute bottom-0 left-0 right-0 rounded-t-3xl p-5 pb-9 flex flex-col ${barBg || 'bg-[#121413]'} border-t shadow-2xl max-h-[85vh]`}
           >
             {/* Grab handle */}
-            <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-3" />
+            <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-4 shrink-0" />
 
-            {/* Song Track Header */}
-            <div className="flex items-center gap-3 pb-3 mb-1 border-b border-white/10">
-              <div className={`w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-white/10 flex items-center justify-center ${emptyIcon}`}>
-                {currentSong?.coverArtBase64 ? (
-                  <img src={currentSong.coverArtBase64} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <Music size={18} className={textMuted} />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className={`font-bold text-[14px] truncate ${textMain}`}>{currentSong?.title}</p>
-                <p className={`text-[12px] truncate ${textMuted}`}>{currentSong?.artist || 'Unknown Artist'}</p>
-              </div>
-              <button 
-                onClick={() => setShowMobileOptionsMenu(false)} 
-                className={`p-1.5 ${textMuted} hover:${textMain} transition-colors`}
+            {/* TOP 3 QUICK ACTIONS: Radio | Add | Share */}
+            <div className="grid grid-cols-3 gap-2.5 mb-3 shrink-0">
+              <button
+                onClick={handleStartRadio}
+                disabled={isStartingRadio}
+                className={`flex items-center justify-center gap-2 py-3 px-3 rounded-2xl bg-white/[0.06] hover:bg-white/10 active:scale-95 border border-white/5 ${textMain} transition-all`}
               >
-                <X size={18} />
+                {isStartingRadio ? (
+                  <Loader2 size={18} className={`animate-spin ${activeColor}`} />
+                ) : (
+                  <Radio size={18} className={activeColor} />
+                )}
+                <span className="text-[13px] font-bold">Radio</span>
+              </button>
+
+              <button
+                onClick={handleOpenAddToPlaylist}
+                className={`flex items-center justify-center gap-2 py-3 px-3 rounded-2xl bg-white/[0.06] hover:bg-white/10 active:scale-95 border border-white/5 ${textMain} transition-all`}
+              >
+                <ListPlus size={18} className={textMuted} />
+                <span className="text-[13px] font-bold">Add</span>
+              </button>
+
+              <button
+                onClick={handleShareSong}
+                className={`flex items-center justify-center gap-2 py-3 px-3 rounded-2xl bg-white/[0.06] hover:bg-white/10 active:scale-95 border border-white/5 ${textMain} transition-all`}
+              >
+                <Share2 size={18} className={textMuted} />
+                <span className="text-[13px] font-bold">Share</span>
               </button>
             </div>
 
-            {/* Stack of Clean 1-Line Options */}
-            <div className="flex flex-col divide-y divide-white/5">
-              {/* Line 1: Audio Quality */}
-              <div className="flex items-center justify-between py-3 px-1">
-                <div className="flex items-center gap-3">
-                  <Sparkles size={18} className={textMuted} />
-                  <span className={`text-[14px] font-medium ${textMain}`}>Audio Quality</span>
-                </div>
-                <button
-                  onClick={() => {
-                    triggerHaptic();
-                    setAudioQuality(audioQuality === 'best' ? 'standard' : 'best');
-                  }}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider border transition-all ${
-                    audioQuality === 'best'
-                      ? 'bg-white/10 text-white border-white/20'
-                      : 'bg-white/5 text-white/50 border-white/10'
-                  }`}
-                >
-                  {audioQuality === 'best' ? 'HD (320k)' : 'SD (128k)'}
-                </button>
-              </div>
+            {/* SCROLLABLE PILL ITEMS LIST */}
+            <div className="flex-1 overflow-y-auto sw-scroll space-y-1.5 pr-0.5">
+              
+              {/* 1. Cast to... */}
+              <button
+                onClick={handleCast}
+                className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.99] border border-white/[0.04] ${textMain} transition-all text-left`}
+              >
+                <Cast size={20} className={`${textMuted} shrink-0`} />
+                <span className="text-[14.5px] font-medium flex-1">Cast to...</span>
+              </button>
 
-              {/* Line 2: Offline Download */}
-              <div 
+              {/* 2. Ambient Mode */}
+              <button
+                onClick={() => {
+                  triggerHaptic();
+                  setIsVideoMode(!isVideoMode);
+                  setShowMobileOptionsMenu(false);
+                }}
+                className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.99] border border-white/[0.04] ${textMain} transition-all text-left`}
+              >
+                <Layers size={20} className={isVideoMode ? `${activeColor} shrink-0` : `${textMuted} shrink-0`} />
+                <span className="text-[14.5px] font-medium flex-1">Ambient Mode</span>
+                {isVideoMode && <span className={`text-[11px] font-bold ${activeColor} uppercase tracking-wider`}>Active</span>}
+              </button>
+
+              {/* 3. Shuffle */}
+              <button
+                onClick={() => {
+                  triggerHaptic();
+                  toggleShuffle();
+                }}
+                className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.99] border border-white/[0.04] ${textMain} transition-all text-left`}
+              >
+                <Shuffle size={20} className={isShuffle ? `${activeColor} shrink-0` : `${textMuted} shrink-0`} />
+                <span className="text-[14.5px] font-medium flex-1">Shuffle</span>
+                <span className={`text-[12px] ${textMuted}`}>{isShuffle ? 'On' : 'Off'}</span>
+              </button>
+
+              {/* 4. Download */}
+              <button
                 onClick={(e) => {
                   triggerHaptic();
                   handleToggleOffline(e);
                 }}
-                className="flex items-center justify-between py-3 px-1 cursor-pointer active:opacity-70 transition-opacity"
+                className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.99] border border-white/[0.04] ${textMain} transition-all text-left`}
               >
-                <div className="flex items-center gap-3">
-                  {isDownloadingOffline ? (
-                    <Loader2 size={18} className={`animate-spin ${activeColor}`} />
-                  ) : isOfflineDownloaded ? (
-                    <CheckCircle2 size={18} className="text-emerald-400" />
-                  ) : (
-                    <DownloadCloud size={18} className={textMuted} />
-                  )}
-                  <span className={`text-[14px] font-medium ${textMain}`}>
-                    {isDownloadingOffline
-                      ? `Downloading (${offlineDownloadProgress}%)`
-                      : isOfflineDownloaded
-                      ? 'Downloaded for Offline'
-                      : 'Download for Offline'}
-                  </span>
-                </div>
-                <span className={`text-[12px] font-bold ${isOfflineDownloaded ? 'text-rose-400' : textMuted}`}>
-                  {isOfflineDownloaded ? 'Delete' : 'Download'}
+                {isDownloadingOffline ? (
+                  <Loader2 size={20} className={`animate-spin ${activeColor} shrink-0`} />
+                ) : isOfflineDownloaded ? (
+                  <CheckCircle2 size={20} className="text-emerald-400 shrink-0" />
+                ) : (
+                  <Download size={20} className={`${textMuted} shrink-0`} />
+                )}
+                <span className="text-[14.5px] font-medium flex-1">
+                  {isDownloadingOffline
+                    ? `Downloading (${offlineDownloadProgress}%)`
+                    : isOfflineDownloaded
+                    ? 'Downloaded for Offline'
+                    : 'Download'}
                 </span>
-              </div>
+                {isOfflineDownloaded && (
+                  <span className="text-[11px] font-bold text-rose-400">Remove</span>
+                )}
+              </button>
 
-              {/* Line 3: Add to Playlist */}
-              <div 
+              {/* 5. Like */}
+              <button
+                onClick={() => {
+                  triggerHaptic();
+                  if (currentSong) {
+                    toggleLikeSong(currentSong);
+                  }
+                }}
+                className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.99] border border-white/[0.04] ${textMain} transition-all text-left`}
+              >
+                <Heart
+                  size={20}
+                  fill={currentSong && isSongLiked(currentSong) ? 'currentColor' : 'none'}
+                  className={currentSong && isSongLiked(currentSong) ? 'text-rose-500 shrink-0' : `${textMuted} shrink-0`}
+                />
+                <span className="text-[14.5px] font-medium flex-1">Like</span>
+                {currentSong && isSongLiked(currentSong) && (
+                  <span className="text-[11px] font-bold text-rose-400">Liked</span>
+                )}
+              </button>
+
+              {/* 6. Repeat */}
+              <button
+                onClick={() => {
+                  triggerHaptic();
+                  toggleRepeat();
+                }}
+                className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.99] border border-white/[0.04] ${textMain} transition-all text-left`}
+              >
+                <Repeat size={20} className={repeatMode !== 'none' ? `${activeColor} shrink-0` : `${textMuted} shrink-0`} />
+                <span className="text-[14.5px] font-medium flex-1">Repeat</span>
+                <span className={`text-[12px] ${textMuted} uppercase font-mono`}>{repeatMode}</span>
+              </button>
+
+              {/* 7. Refetch */}
+              <button
+                onClick={handleRefetchStream}
+                disabled={isRefetching}
+                className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.99] border border-white/[0.04] ${textMain} transition-all text-left`}
+              >
+                <RefreshCw size={20} className={isRefetching ? `animate-spin ${activeColor} shrink-0` : `${textMuted} shrink-0`} />
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="text-[14.5px] font-medium">Refetch</span>
+                  <span className={`text-[11.5px] ${textMuted} truncate`}>Refetching the stream from YouTube Music</span>
+                </div>
+              </button>
+
+              {/* 8. View artist */}
+              <button
+                onClick={handleViewArtistProfile}
+                className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.99] border border-white/[0.04] ${textMain} transition-all text-left`}
+              >
+                <User size={20} className={`${textMuted} shrink-0`} />
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="text-[14.5px] font-medium">View artist</span>
+                  <span className={`text-[11.5px] ${textMuted} truncate`}>{currentSong?.artist || 'Unknown Artist'}</span>
+                </div>
+              </button>
+
+              {/* 9. Add to library */}
+              <button
+                onClick={handleAddTrackToLibrary}
+                className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.99] border border-white/[0.04] ${textMain} transition-all text-left`}
+              >
+                <Bookmark size={20} className={`${textMuted} shrink-0`} />
+                <span className="text-[14.5px] font-medium flex-1">Add to library</span>
+              </button>
+
+              {/* 10. Set as Ringtone */}
+              <button
+                onClick={handleSetTrackAsRingtone}
+                className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.99] border border-white/[0.04] ${textMain} transition-all text-left`}
+              >
+                <Bell size={20} className={`${textMuted} shrink-0`} />
+                <span className="text-[14.5px] font-medium flex-1">Set as Ringtone</span>
+              </button>
+
+              {/* 11. Listen Together */}
+              <button
+                onClick={handleOpenListenTogether}
+                className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.99] border border-white/[0.04] ${textMain} transition-all text-left`}
+              >
+                <Users size={20} className={`${activeColor} shrink-0`} />
+                <span className="text-[14.5px] font-medium flex-1">Listen Together</span>
+                <span className={`text-[9px] font-black uppercase tracking-wider bg-white/10 ${activeColor} border border-white/15 px-1.5 py-0.5 rounded-full`}>Live Jam</span>
+              </button>
+
+              {/* 12. Details */}
+              <button
                 onClick={() => {
                   triggerHaptic();
                   setShowMobileOptionsMenu(false);
-                  setShowAddToPlaylist(true);
+                  setShowSongDetailsModal(true);
                 }}
-                className="flex items-center justify-between py-3 px-1 cursor-pointer active:opacity-70 transition-opacity"
+                className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.99] border border-white/[0.04] ${textMain} transition-all text-left`}
               >
-                <div className="flex items-center gap-3">
-                  <ListPlus size={18} className={textMuted} />
-                  <span className={`text-[14px] font-medium ${textMain}`}>Add to Playlist</span>
-                </div>
-                <Plus size={16} className={textMuted} />
-              </div>
+                <Info size={20} className={`${textMuted} shrink-0`} />
+                <span className="text-[14.5px] font-medium flex-1">Details</span>
+              </button>
 
-              {/* Line 4: Queue List */}
-              <div 
-                onClick={() => {
-                  triggerHaptic();
-                  setShowMobileOptionsMenu(false);
-                  setShowMobileQueue(true);
-                  setShowLyrics(false);
-                }}
-                className="flex items-center justify-between py-3 px-1 cursor-pointer active:opacity-70 transition-opacity"
-              >
-                <div className="flex items-center gap-3">
-                  <ListMusic size={18} className={textMuted} />
-                  <span className={`text-[14px] font-medium ${textMain}`}>Queue List</span>
-                </div>
-                <span className={`text-[12px] ${textMuted}`}>
-                  {(upNextQueue?.length || 0) + queue.length} tracks
-                </span>
-              </div>
             </div>
           </div>
         </div>
+
+        {/* SONG DETAILS MODAL */}
+        {showSongDetailsModal && currentSong && (
+          <div 
+            className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
+            onClick={() => setShowSongDetailsModal(false)}
+          >
+            <div 
+              className={`w-full max-w-sm rounded-3xl p-6 ${barBg || 'bg-[#161817]'} border shadow-2xl space-y-4`}
+              onClick={(e) => e.stopPropagation()}
+              style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <Info size={18} className={activeColor} />
+                  <h3 className={`text-base font-bold ${textMain}`}>Track Details</h3>
+                </div>
+                <button 
+                  onClick={() => setShowSongDetailsModal(false)}
+                  className={`p-1 rounded-full ${textMuted} hover:${textMain}`}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="space-y-2.5 text-xs">
+                <div className="flex justify-between py-1 border-b border-white/5">
+                  <span className={textMuted}>Title</span>
+                  <span className={`font-bold ${textMain} text-right truncate max-w-[200px]`}>{currentSong.title}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-white/5">
+                  <span className={textMuted}>Artist</span>
+                  <span className={`font-bold ${textMain} text-right truncate max-w-[200px]`}>{currentSong.artist || 'Unknown'}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-white/5">
+                  <span className={textMuted}>Duration</span>
+                  <span className={`font-mono ${textMain}`}>{formatTime(duration || currentSong.duration || 0)}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-white/5">
+                  <span className={textMuted}>Audio Quality</span>
+                  <span className={`font-bold ${activeColor}`}>320kbps HD Audio</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-white/5">
+                  <span className={textMuted}>Stream Source</span>
+                  <span className={`font-bold ${textMain}`}>YouTube Music Engine</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-white/5">
+                  <span className={textMuted}>Storage Status</span>
+                  <span className={isOfflineDownloaded ? 'text-emerald-400 font-bold' : textMuted}>
+                    {isOfflineDownloaded ? 'Saved Offline' : 'Online Streaming'}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1">
+                  <span className={textMuted}>Track Identifier</span>
+                  <span className={`font-mono text-[10px] ${textMuted} truncate max-w-[170px]`}>{currentSong.id}</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowSongDetailsModal(false)}
+                className="w-full py-2.5 rounded-2xl bg-white text-black font-bold text-xs hover:bg-white/90 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── MINI PLAYER BAR ── */}
@@ -2173,16 +2346,17 @@ useEffect(() => {
               </div>
             </div>
 
-            {/* Expand Large Player Window Button */}
+            {/* Toggle Desktop Large Player Window Button */}
             <button
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 triggerHaptic();
-                setIsFullScreen(true);
+                setIsDesktopFullScreen(!isDesktopFullScreen);
               }}
-              title="Open Full Player"
+              title={isDesktopFullScreen ? "Collapse Full Player" : "Open Full Player"}
               className={`p-1.5 rounded-lg transition-colors ${textMuted} hover:text-white/90 hover:bg-white/5 ml-0.5`}
             >
-              <ChevronUp size={16} />
+              {isDesktopFullScreen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
             </button>
           </div>
         </div>

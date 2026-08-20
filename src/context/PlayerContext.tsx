@@ -760,24 +760,167 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => { localStorage.setItem('player_shuffle', String(isShuffle)) }, [isShuffle])
   useEffect(() => { localStorage.setItem('player_repeat', repeatMode) }, [repeatMode])
 
+  // --- BACKGROUND PLAYBACK & NOTIFICATION BAR CONTROL ENGINE ---
+  useEffect(() => {
+    // 1. Setup Standard Web & Android WebView MediaSession Handlers
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.setActionHandler('play', () => {
+          resumeSong();
+        });
+        navigator.mediaSession.setActionHandler('pause', () => {
+          pauseSong();
+        });
+        navigator.mediaSession.setActionHandler('nexttrack', () => {
+          nextSong();
+        });
+        navigator.mediaSession.setActionHandler('previoustrack', () => {
+          previousSong();
+        });
+        navigator.mediaSession.setActionHandler('seekto', (details) => {
+          if (details.seekTime !== undefined && details.seekTime !== null) {
+            setCurrentTimeHandler(details.seekTime);
+          }
+        });
+        navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+          const skipTime = details.seekOffset || 10;
+          const cur = audioRef.current?.currentTime || currentTime;
+          setCurrentTimeHandler(Math.max(0, cur - skipTime));
+        });
+        navigator.mediaSession.setActionHandler('seekforward', (details) => {
+          const skipTime = details.seekOffset || 10;
+          const cur = audioRef.current?.currentTime || currentTime;
+          setCurrentTimeHandler(cur + skipTime);
+        });
+        navigator.mediaSession.setActionHandler('stop', () => {
+          pauseSong();
+        });
+      } catch (err) {
+        console.warn('Web MediaSession action handler setup error:', err);
+      }
+    }
+
+    // 2. Setup Capacitor Native Android / iOS MediaSession Handlers
+    try {
+      MediaSession.setActionHandler({ action: 'play' }, () => {
+        resumeSong();
+      });
+      MediaSession.setActionHandler({ action: 'pause' }, () => {
+        pauseSong();
+      });
+      MediaSession.setActionHandler({ action: 'nexttrack' }, () => {
+        nextSong();
+      });
+      MediaSession.setActionHandler({ action: 'previoustrack' }, () => {
+        previousSong();
+      });
+      MediaSession.setActionHandler({ action: 'seekto' }, (data: any) => {
+        const targetPos = data.position ?? data.seekTime;
+        if (targetPos !== undefined && targetPos !== null) {
+          setCurrentTimeHandler(Number(targetPos));
+        }
+      });
+      MediaSession.setActionHandler({ action: 'seekbackward' }, (data: any) => {
+        const offset = data.seekOffset || 10;
+        const cur = audioRef.current?.currentTime || currentTime;
+        setCurrentTimeHandler(Math.max(0, cur - offset));
+      });
+      MediaSession.setActionHandler({ action: 'seekforward' }, (data: any) => {
+        const offset = data.seekOffset || 10;
+        const cur = audioRef.current?.currentTime || currentTime;
+        setCurrentTimeHandler(cur + offset);
+      });
+    } catch (err) {
+      console.warn('Capacitor MediaSession action handler setup error:', err);
+    }
+  }, []);
+
+  // Synchronize Track Metadata across Lock Screen & Notification Center
+  useEffect(() => {
+    if (!currentSong) {
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = null;
+        navigator.mediaSession.playbackState = 'none';
+      }
+      MediaSession.setPlaybackState({ playbackState: 'none' }).catch(() => {});
+      return;
+    }
+
+    const artworkList = currentSong.coverArtBase64 ? [
+      { src: currentSong.coverArtBase64, sizes: '96x96', type: 'image/png' },
+      { src: currentSong.coverArtBase64, sizes: '128x128', type: 'image/png' },
+      { src: currentSong.coverArtBase64, sizes: '192x192', type: 'image/png' },
+      { src: currentSong.coverArtBase64, sizes: '256x256', type: 'image/png' },
+      { src: currentSong.coverArtBase64, sizes: '384x384', type: 'image/png' },
+      { src: currentSong.coverArtBase64, sizes: '512x512', type: 'image/png' }
+    ] : [];
+
+    // Web MediaSession Metadata
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: currentSong.title || 'SoundWave Track',
+          artist: currentSong.artist || 'Unknown Artist',
+          album: 'SoundWave',
+          artwork: artworkList
+        });
+        navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+      } catch (err) {}
+    }
+
+    // Native Capacitor MediaSession Metadata
+    MediaSession.setMetadata({
+      title: currentSong.title || 'SoundWave Track',
+      artist: currentSong.artist || 'Unknown Artist',
+      album: 'SoundWave',
+      artwork: artworkList
+    }).catch(() => {});
+
+    MediaSession.setPlaybackState({
+      playbackState: isPlaying ? 'playing' : 'paused'
+    }).catch(() => {});
+  }, [currentSong?.id, currentSong?.title, currentSong?.artist, isPlaying]);
+
+  // Synchronize Timeline Scrubber on Notification Bar every second
   useEffect(() => {
     if (!currentSong) return;
 
-    const syncNativeMedia = async () => {
-      await MediaSession.setMetadata({
-        title: currentSong.title || 'Unknown Title',
-        artist: currentSong.artist || 'Unknown Artist',
-        album: 'Soundwave',
-        artwork: currentSong.coverArtBase64 ? [{ src: currentSong.coverArtBase64, sizes: '512x512', type: 'image/png' }] : []
-      });
+    const syncNotificationTimeline = () => {
+      const dur = duration || currentSong.duration || (audioRef.current?.duration) || 0;
+      const pos = currentTime || (audioRef.current?.currentTime) || 0;
 
-      await MediaSession.setPlaybackState({
-        playbackState: isPlaying ? 'playing' : 'paused'
-      });
+      if (dur > 0 && !isNaN(dur) && !isNaN(pos)) {
+        // Web MediaSession position state
+        if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
+          try {
+            navigator.mediaSession.setPositionState({
+              duration: dur,
+              playbackRate: 1.0,
+              position: Math.min(dur, Math.max(0, pos))
+            });
+          } catch (err) {}
+        }
+
+        // Native Capacitor MediaSession position state
+        MediaSession.setPositionState({
+          duration: dur,
+          playbackRate: 1.0,
+          position: Math.min(dur, Math.max(0, pos))
+        }).catch(() => {});
+
+        MediaSession.setPlaybackState({
+          playbackState: isPlaying ? 'playing' : 'paused',
+          duration: dur,
+          position: Math.min(dur, Math.max(0, pos)),
+          playbackRate: 1.0
+        }).catch(() => {});
+      }
     };
 
-    syncNativeMedia();
-  }, [currentSong, isPlaying]);
+    syncNotificationTimeline();
+    const timer = setInterval(syncNotificationTimeline, 1000);
+    return () => clearInterval(timer);
+  }, [currentSong?.id, isPlaying, currentTime, duration]);
 
   const playSong = async (song: Song, addToHistory = true, startPosition = 0) => {
     if (!song) return
