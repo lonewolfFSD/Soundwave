@@ -517,7 +517,9 @@ useEffect(() => {
       textMain: 'text-white',
       textMuted: 'text-gray-400',
       lyricsActive: 'text-white',
-      lyricsMuted: 'text-white/40'
+      lyricsMuted: 'text-white/40',
+      remoteBarBg: 'bg-indigo-950/90 border-indigo-500/30 text-indigo-300',
+      remotePulse: 'bg-indigo-400'
     },
     sunset: {
       barBg: 'bg-[#1a0502]/95 border-orange-500/20',
@@ -529,7 +531,9 @@ useEffect(() => {
       textMain: 'text-orange-50',
       textMuted: 'text-orange-200/60',
       lyricsActive: 'text-orange-200',
-      lyricsMuted: 'text-orange-500/40'
+      lyricsMuted: 'text-orange-500/40',
+      remoteBarBg: 'bg-orange-950/90 border-orange-500/30 text-orange-300',
+      remotePulse: 'bg-orange-400'
     },
     valentine: {
       barBg: 'bg-[#1f0610]/95 border-pink-500/20',
@@ -541,7 +545,9 @@ useEffect(() => {
       textMain: 'text-pink-50',
       textMuted: 'text-pink-200/60',
       lyricsActive: 'text-pink-200',
-      lyricsMuted: 'text-pink-500/40'
+      lyricsMuted: 'text-pink-500/40',
+      remoteBarBg: 'bg-pink-950/90 border-pink-500/30 text-pink-300',
+      remotePulse: 'bg-pink-400'
     },
     jungle: {
       barBg: 'bg-[#03170b]/95 border-emerald-500/20',
@@ -553,7 +559,9 @@ useEffect(() => {
       textMain: 'text-emerald-50',
       textMuted: 'text-emerald-200/60',
       lyricsActive: 'text-emerald-200',
-      lyricsMuted: 'text-emerald-500/40'
+      lyricsMuted: 'text-emerald-500/40',
+      remoteBarBg: 'bg-emerald-950/90 border-emerald-500/30 text-emerald-300',
+      remotePulse: 'bg-emerald-400'
     },
     ocean: {
       barBg: 'bg-[#04121c]/95 border-cyan-500/20',
@@ -565,7 +573,9 @@ useEffect(() => {
       textMain: 'text-cyan-50',
       textMuted: 'text-cyan-200/60',
       lyricsActive: 'text-cyan-200',
-      lyricsMuted: 'text-cyan-500/40'
+      lyricsMuted: 'text-cyan-500/40',
+      remoteBarBg: 'bg-cyan-950/90 border-cyan-500/30 text-cyan-300',
+      remotePulse: 'bg-cyan-400'
     },
     cyberpunk: {
       barBg: 'bg-[#120322]/95 border-fuchsia-500/20',
@@ -577,7 +587,9 @@ useEffect(() => {
       textMain: 'text-fuchsia-50',
       textMuted: 'text-fuchsia-200/60',
       lyricsActive: 'text-fuchsia-200',
-      lyricsMuted: 'text-fuchsia-500/40'
+      lyricsMuted: 'text-fuchsia-500/40',
+      remoteBarBg: 'bg-fuchsia-950/90 border-fuchsia-500/30 text-fuchsia-300',
+      remotePulse: 'bg-fuchsia-400'
     },
     midnight: {
       barBg: 'bg-[#0f071c]/95 border-violet-500/20',
@@ -589,7 +601,9 @@ useEffect(() => {
       textMain: 'text-violet-50',
       textMuted: 'text-violet-200/60',
       lyricsActive: 'text-violet-200',
-      lyricsMuted: 'text-violet-500/40'
+      lyricsMuted: 'text-violet-500/40',
+      remoteBarBg: 'bg-violet-950/90 border-violet-500/30 text-violet-300',
+      remotePulse: 'bg-violet-400'
     },
     coffee: {
       barBg: 'bg-[#140c06]/95 border-amber-600/20',
@@ -601,7 +615,9 @@ useEffect(() => {
       textMain: 'text-amber-50',
       textMuted: 'text-amber-200/60',
       lyricsActive: 'text-amber-200',
-      lyricsMuted: 'text-amber-600/40'
+      lyricsMuted: 'text-amber-600/40',
+      remoteBarBg: 'bg-amber-950/90 border-amber-600/30 text-amber-300',
+      remotePulse: 'bg-amber-400'
     }
   }
 
@@ -1862,14 +1878,14 @@ useEffect(() => {
         {isRemotePlayback && (
           <div
             onClick={(e) => { e.stopPropagation(); triggerHaptic(); setShowDevicePicker(true); }}
-            className="absolute -top-7 left-0 right-0 h-7 bg-emerald-950/90 border-t border-emerald-500/30 backdrop-blur-md px-4 flex items-center justify-between text-xs font-bold text-emerald-300 cursor-pointer hover:bg-emerald-900/90 transition-colors z-10"
+            className={`absolute -top-7 left-0 right-0 h-7 ${activeTheme.remoteBarBg || 'bg-indigo-950/90 border-indigo-500/30 text-indigo-300'} border-t backdrop-blur-md px-4 flex items-center justify-between text-xs font-bold cursor-pointer transition-colors z-10`}
           >
             <div className="flex items-center gap-2 truncate">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
-              <Cast size={14} className="text-emerald-400 shrink-0" />
+              <span className={`w-2 h-2 rounded-full ${activeTheme.remotePulse || 'bg-indigo-400'} animate-ping shrink-0`} />
+              <Cast size={14} className="shrink-0" />
               <span className="truncate">Playing on {activeDeviceName || 'Remote Device'}</span>
             </div>
-            <span className="text-[11px] text-emerald-400 underline font-semibold shrink-0 ml-2">Switch Device</span>
+            <span className="text-[11px] underline font-semibold shrink-0 ml-2">Switch Device</span>
           </div>
         )}
 
@@ -2134,13 +2150,13 @@ useEffect(() => {
               title={isRemotePlayback ? `Playing on ${activeDeviceName} (Click to switch)` : "Connect to a Device"}
               className={`p-1.5 rounded-lg transition-colors relative ${
                 isRemotePlayback
-                  ? 'text-emerald-400 bg-emerald-500/10 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                  ? `${activeColor} bg-white/10 shadow-[0_0_12px_rgba(255,255,255,0.15)]`
                   : `${textMuted} hover:text-white/90 hover:bg-white/5`
               }`}
             >
               <Cast size={16} className={isRemotePlayback ? 'animate-pulse' : ''} />
               {isRemotePlayback && (
-                <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${activeTheme.remotePulse || 'bg-indigo-400'}`} />
               )}
             </button>
 

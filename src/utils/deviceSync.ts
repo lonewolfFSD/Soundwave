@@ -26,7 +26,7 @@ export interface PlaybackState {
   isPlaying: boolean
   position: number // in seconds
   duration: number
-  updatedAt: number // epoch ms for latency compensation
+  updatedAt: number // epoch ms
   queue: Song[]
   isShuffle: boolean
   repeatMode: 'none' | 'one' | 'all'
@@ -124,9 +124,10 @@ export const detectDeviceInfo = (): DeviceInfo => {
 export const registerDevice = async (userId: string): Promise<DeviceInfo> => {
   const info = detectDeviceInfo()
   try {
-    const deviceRef = doc(db, 'users', userId, 'devices', info.deviceId)
+    const deviceRef = doc(db, 'playback_sessions', userId, 'devices', info.deviceId)
     await setDoc(deviceRef, {
       ...info,
+      userId,
       lastSeen: Date.now(),
       isOnline: true,
     }, { merge: true })
@@ -139,7 +140,7 @@ export const registerDevice = async (userId: string): Promise<DeviceInfo> => {
 // Update device heartbeat in Firestore
 export const updateDeviceHeartbeat = async (userId: string, deviceId: string) => {
   try {
-    const deviceRef = doc(db, 'users', userId, 'devices', deviceId)
+    const deviceRef = doc(db, 'playback_sessions', userId, 'devices', deviceId)
     await setDoc(deviceRef, {
       lastSeen: Date.now(),
       isOnline: true,
@@ -152,7 +153,7 @@ export const updateDeviceHeartbeat = async (userId: string, deviceId: string) =>
 // Mark device offline on signout/window close
 export const unregisterDevice = async (userId: string, deviceId: string) => {
   try {
-    const deviceRef = doc(db, 'users', userId, 'devices', deviceId)
+    const deviceRef = doc(db, 'playback_sessions', userId, 'devices', deviceId)
     await setDoc(deviceRef, {
       isOnline: false,
       lastSeen: Date.now(),
@@ -167,7 +168,7 @@ export const subscribeToUserDevices = (
   userId: string,
   onDevicesUpdate: (devices: DeviceInfo[]) => void
 ) => {
-  const devicesCol = collection(db, 'users', userId, 'devices')
+  const devicesCol = collection(db, 'playback_sessions', userId, 'devices')
   return onSnapshot(devicesCol, (snapshot: any) => {
     const now = Date.now()
     const devices: DeviceInfo[] = []
@@ -194,7 +195,7 @@ export const subscribeToPlaybackState = (
   userId: string,
   onStateUpdate: (state: PlaybackState | null) => void
 ) => {
-  const playbackDoc = doc(db, 'users', userId, 'playback', 'current')
+  const playbackDoc = doc(db, 'playback_sessions', userId)
   return onSnapshot(playbackDoc, (snapshot: any) => {
     if (snapshot.exists()) {
       onStateUpdate(snapshot.data() as PlaybackState)
@@ -212,7 +213,7 @@ export const syncPlaybackState = async (
   state: Partial<PlaybackState>
 ) => {
   try {
-    const playbackDoc = doc(db, 'users', userId, 'playback', 'current')
+    const playbackDoc = doc(db, 'playback_sessions', userId)
     await setDoc(playbackDoc, {
       ...state,
       updatedAt: Date.now(),
@@ -230,7 +231,7 @@ export const transferPlaybackToTarget = async (
   currentState: Partial<PlaybackState>
 ) => {
   try {
-    const playbackDoc = doc(db, 'users', userId, 'playback', 'current')
+    const playbackDoc = doc(db, 'playback_sessions', userId)
     await setDoc(playbackDoc, {
       ...currentState,
       activeDeviceId: targetDeviceId,
