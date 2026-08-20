@@ -26,14 +26,12 @@ import {
   List,
   Check,
   ListPlus,
-  DownloadCloud,
   CheckCircle2,
   HardDrive,
   Heart,
   Shuffle
 } from 'lucide-react'
 import GlobalSongUpload from './GlobalSongUpload'
-import { getOfflineSongs, deleteOfflineSong } from '../utils/offlineStorage'
 
 import { Capacitor } from '@capacitor/core';
 import { Toast } from '@capacitor/toast';
@@ -205,8 +203,7 @@ const Library = () => {
   const { user } = useAuth()
   const { playSong, pauseSong, isPlaying, currentSong, setQueue, addToQueue, upNextQueue, likedSongs, isSongLiked, toggleLikeSong } = usePlayer()
   const [songs, setSongs] = useState<any[]>([])
-  const [offlineSongs, setOfflineSongs] = useState<any[]>([])
-  const [libraryTab, setLibraryTab] = useState<'uploads' | 'liked' | 'offline'>('uploads')
+  const [libraryTab, setLibraryTab] = useState<'uploads' | 'liked'>('uploads')
   const [filteredSongs, setFilteredSongs] = useState<any[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
@@ -229,19 +226,6 @@ const Library = () => {
   });
   const [compactMode, setCompactMode] = useState(localStorage.getItem('sw_compact_mode') === 'true')
   const [reduceMotion, setReduceMotion] = useState(localStorage.getItem('sw_reduce_motion') === 'true')
-
-  // Load offline songs
-  const loadOffline = async () => {
-    const list = await getOfflineSongs()
-    setOfflineSongs(list)
-  }
-
-  useEffect(() => {
-    loadOffline()
-    const handleOfflineEvent = () => loadOffline()
-    window.addEventListener('soundwave-offline-updated', handleOfflineEvent)
-    return () => window.removeEventListener('soundwave-offline-updated', handleOfflineEvent)
-  }, [])
 
   useEffect(() => {
     localStorage.setItem('sw_lib_view', viewMode)
@@ -332,14 +316,14 @@ const Library = () => {
   };
 
   useEffect(() => {
-    const targetList = libraryTab === 'uploads' ? songs : libraryTab === 'liked' ? likedSongs : offlineSongs;
+    const targetList = libraryTab === 'uploads' ? songs : likedSongs;
     const lower = searchQuery.toLowerCase();
     const filtered = targetList.filter(s => 
       s.title?.toLowerCase().includes(lower) || 
       s.artist?.toLowerCase().includes(lower)
     );
     setFilteredSongs(filtered);
-  }, [searchQuery, songs, offlineSongs, likedSongs, libraryTab]);
+  }, [searchQuery, songs, likedSongs, libraryTab]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -352,14 +336,6 @@ const Library = () => {
   }, []);
 
   const handleDelete = async (song: any) => {
-    if (libraryTab === 'offline') {
-      if (!window.confirm(`Remove "${song.title}" from offline storage?`)) return;
-      setActiveMenuId(null);
-      await deleteOfflineSong(song.id);
-      await loadOffline();
-      return;
-    }
-
     if (!window.confirm(`Delete "${song.title}"?`)) return;
     setActiveMenuId(null);
     try {
@@ -482,16 +458,6 @@ const Library = () => {
             >
               <Heart size={13} fill="currentColor" /> Liked Songs ({likedSongs.length})
             </button>
-            <button
-              onClick={() => { triggerHaptic(); setLibraryTab('offline'); }}
-              className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
-                libraryTab === 'offline'
-                  ? 'bg-emerald-400 text-black shadow-lg shadow-emerald-500/20'
-                  : 'bg-white/5 text-emerald-400/80 hover:bg-white/10 hover:text-emerald-300'
-              }`}
-            >
-              <DownloadCloud size={14} /> Offline Downloads ({offlineSongs.length})
-            </button>
           </div>
         </div>
         
@@ -523,7 +489,7 @@ const Library = () => {
               style={{ fontFamily: 'Space Grotesk, sans-serif' }} 
               value={searchQuery} 
               onChange={(e) => setSearchQuery(e.target.value)} 
-              placeholder={libraryTab === 'uploads' ? 'Search uploads...' : libraryTab === 'liked' ? 'Search liked songs...' : 'Search offline tracks...'} 
+              placeholder={libraryTab === 'uploads' ? 'Search uploads...' : 'Search liked songs...'} 
               className={`w-full border rounded-xl py-3 pl-12 pr-4 text-sm ${textMain} focus:outline-none transition-all ${inputBg}`} 
             />
           </div>
@@ -666,11 +632,6 @@ const Library = () => {
                       <h3 className={`font-bold truncate leading-tight ${isGrid ? 'text-sm' : 'text-sm'} ${isActive ? activeText : textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.title}</h3>
                       <div className="flex items-center gap-1.5 mt-1">
                         <p className={`text-xs truncate font-medium ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.artist || 'Unknown Artist'}</p>
-                        {(song.isOffline || libraryTab === 'offline') && (
-                          <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded font-bold shrink-0">
-                            Offline
-                          </span>
-                        )}
                       </div>
                     </div>
                     <div className="relative shrink-0 flex items-center gap-1">

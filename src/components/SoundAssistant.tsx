@@ -22,7 +22,8 @@ const SoundieAssistant = ({ isOpen, onClose: onCloseExternal }: { isOpen?: boole
   const {
     currentSong, pauseSong, resumeSong, nextSong, previousSong,
     playSong, addToQueue, queue, globalLibrary, setGlobalLibrary,
-    setQueue, playedHistory, toggleShuffle, toggleRepeat, toggleLikeSong
+    setQueue, playedHistory, toggleShuffle, toggleRepeat, toggleLikeSong,
+    is8DMode, setIs8DMode
   } = usePlayer();
 
   const [internalOpen, setInternalOpen] = useState(false);
@@ -1082,6 +1083,7 @@ const SoundieAssistant = ({ isOpen, onClose: onCloseExternal }: { isOpen?: boole
         const turnOff = /\b(off|disable|stop|deactivate)\b/.test(lower);
         
         if (turnOn) {
+          setIs8DMode(true);
           localStorage.setItem('sw_8d_mode', 'true');
           window.dispatchEvent(new Event('sw-settings-updated'));
           const resp = "8D Spatial Audio is now enabled. Enjoy the 360-degree soundscape.";
@@ -1089,6 +1091,7 @@ const SoundieAssistant = ({ isOpen, onClose: onCloseExternal }: { isOpen?: boole
           await speakWithUnreal(resp);
           return;
         } else if (turnOff) {
+          setIs8DMode(false);
           localStorage.setItem('sw_8d_mode', 'false');
           window.dispatchEvent(new Event('sw-settings-updated'));
           const resp = "8D Audio has been disabled.";

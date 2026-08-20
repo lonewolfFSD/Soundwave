@@ -2,12 +2,12 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import {
-  Play, Headphones, Palette, CloudUpload, Mic2,
-  ArrowRight, Zap, Layers, MessageSquare, Activity, ChevronDown,
-  Cloud, Shield, Shuffle, BarChart2, Music, Star, Globe, Lock,
+  Play, Headphones, CloudUpload, Mic2,
+  ArrowRight, Zap, Layers, MessageSquare, ChevronDown,
+  Shield, Music, Star,
   Twitter, Github, Instagram, Mail, Volume2, Sparkles,
-  Mic, BrainCircuit, Search, ChevronRight, ListMusic, SkipForward,
-  Clock, Trash2, Radio
+  Mic, BrainCircuit, Search, ChevronRight, ListMusic,
+  Clock, Radio
 } from 'lucide-react'
 import Logo from '../images/logo.png'
 
@@ -97,15 +97,16 @@ const HeroGrid = () => {
    SOUNDIE LIVE TERMINAL
 ───────────────────────────────────────────────────────── */
 const soundieCommands = [
-  { prompt: 'play Blinding Lights',          reply: '▶  Playing "Blinding Lights" by The Weeknd',     color: '#f97316' },
-  { prompt: 'enable 8D audio',               reply: '🎧 8D Spatial Audio activated',                   color: '#ec4899' },
-  { prompt: 'add this to Chill mix',         reply: '✅ Added to "Chill mix"',                         color: '#10b981' },
-  { prompt: 'set volume to 60',              reply: '🔊 Volume set to 60%',                            color: '#06b6d4' },
-  { prompt: 'create playlist called Focus',  reply: '🔥 Playlist "Focus" created',                     color: '#f97316' },
+  { prompt: 'play something sad',            reply: '🌧️ Putting on sad & emotional acoustic vibes',  color: '#f97316' },
+  { prompt: 'play The Weeknd top hits',      reply: '🎵 Playing top hits by The Weeknd from catalog',  color: '#8b5cf6' },
+  { prompt: 'enable 8D spatial audio',       reply: '🎧 8D Spatial Audio activated',                   color: '#ec4899' },
+  { prompt: 'drop some gym phonk',           reply: '🔥 Dropping high-energy workout & phonk bangers', color: '#f97316' },
+  { prompt: 'add this to Chill mix',         reply: '✅ Added to "Chill mix" playlist',                color: '#10b981' },
+  { prompt: 'set volume to 80',              reply: '🔊 Volume set to 80%',                            color: '#06b6d4' },
+  { prompt: 'create playlist called Midnight',reply: '🔥 Playlist "Midnight" created',                color: '#f97316' },
   { prompt: 'sleep timer in 30 minutes',     reply: '😴 Music stops in 30 min. Sleep well!',           color: '#8b5cf6' },
-  { prompt: "what's playing",                reply: '🎵 "Levitating" by Dua Lipa',                     color: '#06b6d4' },
-  { prompt: 'play something random',         reply: '🎲 Playing "Midnight Rain" — surprise!',          color: '#10b981' },
-  { prompt: 'skip',                          reply: '⏭  Skipping to next track',                       color: '#8b5cf6' },
+  { prompt: "what's playing right now?",     reply: '🎵 "Starboy" by The Weeknd & Daft Punk',          color: '#06b6d4' },
+  { prompt: 'skip to next track',            reply: '⏭  Skipping to next track in queue',              color: '#8b5cf6' },
 ]
 
 const SoundieTerminal: React.FC = () => {
@@ -298,17 +299,17 @@ const Landing = () => {
   const toggleFAQ = (i: number) => setOpenFAQ(openFAQ === i ? null : i)
 
   const faqs = [
-    { q: "What audio formats are supported?", a: "SoundWave supports MP3, WAV, OGG, and FLAC for high-fidelity lossless playback directly from your personal cloud." },
-    { q: "How does the spatial 8D engine work?", a: "We utilize hardware-accelerated Web Audio APIs to dynamically pan and filter frequencies, creating a psychoacoustic 3D orbital effect without needing special headphones." },
-    { q: "Is my uploaded music private?", a: "Absolutely. Your library is synced securely via Firebase to your personal authenticated account. No one else has access to your designated cloud bucket." },
-    { q: "What can Soundie AI actually do?", a: "Soundie can play/pause/skip tracks, search your library by voice, create and manage playlists, control volume and brightness, set sleep timers, enable 8D audio — all hands-free via voice or text." },
-    { q: "Will there be a native mobile app?", a: "Yes. While SoundWave is currently an optimized PWA, native iOS and Android wrappers with full Soundie AI are actively in our deployment pipeline." },
+    { q: "Is SoundWave really 100% free and open-source?", a: "Yes! SoundWave is completely free, ad-free, and open-source. There are no paywalls, subscriptions, or locked features." },
+    { q: "Can I stream songs online or do I have to upload files?", a: "Both! You can search and stream millions of songs directly from the global online music catalog, or upload your own lossless files (MP3, WAV, FLAC, OGG) to your private cloud." },
+    { q: "How does Listen Together / Jam Rooms work?", a: "Create a Jam room, share your 6-character room code with friends, and listen in synchronized playback with real-time scrub sync, collaborative queues, live chat, and floating emoji reactions." },
+    { q: "What makes Soundie AI different?", a: "Soundie features a smart NLP intent engine. Ask her to 'play something sad', 'play top hits by Eminem', 'drop gym phonk', 'enable 8D audio', or manage playlists — hands-free via voice or text." },
+    { q: "How does the spatial 8D engine work?", a: "We utilize hardware-accelerated Web Audio APIs to dynamically pan and filter frequencies, creating a 3D psychoacoustic orbital soundstage in your headphones." },
   ]
 
   const steps = [
-    { icon: CloudUpload, title: "Upload Your Library", desc: "Drag and drop any audio file. We handle metadata, artwork, and cloud sync automatically.", color: "text-cyan-400", bg: "from-cyan-500/10" },
-    { icon: Palette, title: "Personalize Everything", desc: "Edit titles, swap covers, add lyrics. Make every album feel like it was designed for you.", color: "text-purple-400", bg: "from-purple-500/10" },
-    { icon: Volume2, title: "Talk to Soundie", desc: "Enable spatial 8D audio and give Soundie AI voice commands. Hands-free, ad-free, your way.", color: "text-orange-400", bg: "from-orange-500/10" },
+    { icon: Search, title: "Search & Stream Globally", desc: "Stream millions of songs instantly or drag-and-drop your private collection. High-fidelity lossless audio with zero ads.", color: "text-emerald-400", bg: "from-emerald-500/10" },
+    { icon: Radio, title: "Jam in Real-Time Sync", desc: "Create a Jam room, invite friends with a room code, and listen together with synchronized scrub and shared queues.", color: "text-indigo-400", bg: "from-indigo-500/10" },
+    { icon: Sparkles, title: "Command with Soundie AI", desc: "Ask Soundie for any vibe, mood, or artist with hands-free voice commands and smart intent detection.", color: "text-orange-400", bg: "from-orange-500/10" },
   ]
 
   if (user) return null
@@ -398,20 +399,20 @@ const Landing = () => {
       <main ref={heroRef.elementRef} className={`relative z-10 min-h-[90vh] flex flex-col items-center justify-center text-center px-6 pt-24 pb-12 ${heroRef.isVisible ? 'is-visible' : ''}`}>
         <HeroGrid />
         <div className="scroll-reveal relative z-10 mb-6 inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 backdrop-blur-sm" style={{ animationDelay: '50ms' }}>
-          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
-          <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-300" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Now in Public Beta</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-300" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>100% Free · Open-Source Music Engine</span>
         </div>
         <h1 className="text-4xl md:text-5xl lg:text-7xl font-extrabold tracking-tighter mb-5 max-w-4xl leading-[1.02] scroll-reveal relative z-10"
           style={{ animationDelay: '100ms', fontFamily: 'Space Grotesk, sans-serif' }}>
-          Your personal cloud.<br /><span className="shimmer-text">Engineered for sound.</span>
+          Unlimited Free Music.<br /><span className="shimmer-text">Engineered for Sound.</span>
         </h1>
-        <p className="text-sm md:text-base text-zinc-400 max-w-lg mb-10 leading-relaxed scroll-reveal relative z-10" style={{ animationDelay: '200ms', fontFamily: 'Space Grotesk, sans-serif' }}>
-          Upload your library, experience spatial 8D audio, and talk to <span className="text-orange-400 font-semibold">Soundie AI</span> hands-free. The ultimate private streaming setup — no ads, no algorithms.
+        <p className="text-sm md:text-base text-zinc-400 max-w-xl mb-10 leading-relaxed scroll-reveal relative z-10" style={{ animationDelay: '200ms', fontFamily: 'Space Grotesk, sans-serif' }}>
+          Stream millions of tracks globally, host real-time <span className="text-white font-semibold">Jam Rooms</span> with friends, experience psychoacoustic <span className="text-indigo-400 font-semibold">8D Spatial Audio</span>, and command <span className="text-orange-400 font-semibold">Soundie AI</span> by voice. 100% ad-free and open-source.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 scroll-reveal z-20" style={{ animationDelay: '300ms' }}>
           <Link to="/signup" style={{ fontFamily: 'Space Grotesk, sans-serif' }}
             className="group flex items-center justify-center gap-2 bg-white text-black px-10 py-3.5 rounded-xl text-sm font-bold hover:scale-105 transition-all shadow-[0_0_30px_rgba(255,255,255,0.2)]">
-            <Play size={16} fill="currentColor" /> Start Listening Free
+            <Play size={16} fill="currentColor" /> Start Streaming Free
           </Link>
           <a href="#soundie" style={{ fontFamily: 'Space Grotesk, sans-serif' }}
             className="flex items-center justify-center backdrop-blur-lg gap-2 border border-orange-500/30 bg-orange-500/5 text-orange-300 px-8 py-3.5 rounded-xl text-sm font-medium hover:border-orange-400/50 hover:text-orange-200 transition-all">
@@ -424,20 +425,22 @@ const Landing = () => {
       {/* ══════ MARQUEE ══════ */}
       <div className="w-full border-y border-white/5 bg-zinc-950/80 backdrop-blur-md overflow-hidden py-4 relative z-10 flex">
         <div className="flex whitespace-nowrap animate-[marquee_40s_linear_infinite]">
-          {[...Array(12)].map((_, i) => (
+          {[...Array(8)].map((_, i) => (
             <div key={i} className="flex items-center gap-6 mx-4" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-              <span className="text-[10px] font-bold tracking-[0.2em] text-zinc-500 uppercase">Immersive 8D</span>
+              <span className="text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase">Global Music Streaming</span>
+              <span className="w-1 h-1 rounded-full bg-emerald-500/50" />
+              <span className="text-[10px] font-bold tracking-[0.2em] text-emerald-400 uppercase">Real-Time Jam Rooms</span>
               <span className="w-1 h-1 rounded-full bg-indigo-500/50" />
-              <span className="text-[10px] font-bold tracking-[0.2em] text-zinc-500 uppercase">Dynamic Aura</span>
-              <span className="w-1 h-1 rounded-full bg-purple-500/50" />
-              <span className="text-[10px] font-bold tracking-[0.2em] text-zinc-500 uppercase">Cloud Sync</span>
-              <span className="w-1 h-1 rounded-full bg-pink-500/50" />
-              <span className="text-[10px] font-extrabold tracking-[0.2em] text-orange-500/80 uppercase">Soundie AI</span>
+              <span className="text-[10px] font-extrabold tracking-[0.2em] text-orange-400 uppercase">Soundie Voice & NLP AI</span>
               <span className="w-1 h-1 rounded-full bg-orange-500/50" />
-              <span className="text-[10px] font-bold tracking-[0.2em] text-zinc-500 uppercase">Ad Free</span>
+              <span className="text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase">Immersive 8D Audio</span>
+              <span className="w-1 h-1 rounded-full bg-purple-500/50" />
+              <span className="text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase">Time-Synced Lyrics</span>
+              <span className="w-1 h-1 rounded-full bg-pink-500/50" />
+              <span className="text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase">Dynamic Theming</span>
               <span className="w-1 h-1 rounded-full bg-yellow-500/50" />
-              <span className="text-[10px] font-bold tracking-[0.2em] text-zinc-500 uppercase">Ghost Lyrics</span>
-              <span className="w-1 h-1 rounded-full bg-rose-500/50" />
+              <span className="text-[10px] font-bold tracking-[0.2em] text-indigo-300 uppercase">100% Free & Open Source</span>
+              <span className="w-1 h-1 rounded-full bg-indigo-500/50" />
             </div>
           ))}
         </div>
@@ -450,31 +453,32 @@ const Landing = () => {
             <div className="absolute -inset-4 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 blur-3xl -z-10 rounded-full" />
             <img src="https://i.ibb.co/SwRzH4tV/Untitled-design.png" alt="Personal Streaming Interface" className="w-full aspect-video object-cover -mb-10 rounded-2xl border border-white/10 shadow-2xl" />
             <div className="absolute -bottom-4 -right-4 glass-panel p-3 rounded-lg flex items-center gap-3 animate-float">
-              <Activity size={16} className="text-indigo-400" />
+              <Radio size={16} className="text-emerald-400" />
               <div>
-                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Library</p>
-                <p className="text-[13px] font-bold text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>100% Ad-Free</p>
+                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Listen Together</p>
+                <p className="text-[13px] font-bold text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Synced Jam Rooms</p>
               </div>
             </div>
             <div className="absolute -top-4 -left-4 glass-panel p-3 rounded-lg flex items-center gap-3 animate-float" style={{ animationDelay: '2s' }}>
-              <Lock size={14} className="text-green-400" />
+              <Sparkles size={14} className="text-orange-400" />
               <div>
-                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Privacy</p>
-                <p className="text-[13px] font-bold text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>End-to-End</p>
+                <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Soundie AI</p>
+                <p className="text-[13px] font-bold text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Smart Intent NLP</p>
               </div>
             </div>
           </div>
           <div className="w-full mt-10 lg:w-1/2 scroll-reveal" style={{ animationDelay: '200ms' }}>
             <h2 className="text-3xl font-extrabold mb-4" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-              Your music. <span className="text-gradient-accent">Your rules.</span>
+              Stream anything. <span className="text-gradient-accent">Zero limits.</span>
             </h2>
-            <p className="text-sm text-zinc-400 mb-6 leading-relaxed max-w-md">Upload any track and build your own ad-free streaming library. Customize everything from album covers and lyrics to song titles, and let the entire UI morph to match your mood.</p>
+            <p className="text-sm text-zinc-400 mb-6 leading-relaxed max-w-md">Search and stream millions of songs from the global music catalog, host synchronized Jam parties with friends, and customize every visual aura. No ads, no subscriptions, ever.</p>
             <ul className="space-y-3">
               {[
-                { icon: Palette, color: "text-indigo-400", label: "Customize album covers, titles, and lyrics" },
-                { icon: Layers, color: "text-purple-400", label: "Dynamic themes that adapt to your mood" },
-                { icon: CloudUpload, color: "text-pink-400", label: "Upload and stream from anywhere, ad-free" },
-                { icon: Shuffle, color: "text-cyan-400", label: "Smart queue, crossfade, and gapless playback" },
+                { icon: Radio, color: "text-emerald-400", label: "Listen Together — Real-time synced listening parties & chat" },
+                { icon: Sparkles, color: "text-orange-400", label: "Soundie AI — Voice assistant with smart NLP mood & artist search" },
+                { icon: Headphones, color: "text-indigo-400", label: "8D Spatial Audio — Psychoacoustic orbital sound stage" },
+                { icon: Layers, color: "text-purple-400", label: "Dynamic Theming — Responsive color auras & Ghost Lyrics" },
+                { icon: CloudUpload, color: "text-cyan-400", label: "Personal Cloud & Global Catalog — Stream or upload" },
               ].map(({ icon: Icon, color, label }, i) => (
                 <li key={i} className="flex items-center gap-3 group">
                   <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/5 group-hover:border-white/15 transition-colors"><Icon size={14} className={color} /></div>
@@ -694,42 +698,42 @@ const Landing = () => {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 auto-rows-[220px]">
           <div className="bento-card md:col-span-2 md:row-span-2 p-8 flex flex-col justify-between group scroll-reveal" style={{ animationDelay: '100ms' }}>
-            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 blur-[80px] rounded-full group-hover:bg-indigo-500/20 transition-colors" />
+            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[80px] rounded-full group-hover:bg-emerald-500/20 transition-colors" />
             <div className="relative z-10">
-              <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center mb-5"><Headphones size={22} className="text-indigo-400" /></div>
-              <h3 className="text-2xl font-bold mb-3" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Spatial 8D Engine</h3>
-              <p className="text-zinc-400 max-w-sm text-sm leading-relaxed">Toggle hardware-accelerated Web Audio panning to make your tracks physically orbit your head. Like sitting in the middle of a live studio.</p>
+              <div className="w-12 h-12 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center mb-5"><Radio size={22} className="text-emerald-400" /></div>
+              <h3 className="text-2xl font-bold mb-3" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Listen Together Jam Rooms</h3>
+              <p className="text-zinc-400 max-w-sm text-sm leading-relaxed">Host or join real-time synchronized listening sessions with sub-second audio sync, timeline scrub alignment, collaborative queues, live chat, and burst reactions.</p>
             </div>
             <div className="w-full h-24 mt-6 flex items-end gap-1 opacity-50 group-hover:opacity-100 transition-opacity relative z-10">
-              {[...Array(40)].map((_, i) => <div key={i} className="flex-1 bg-indigo-500/50 rounded-t-[1px]" style={{ height: `${Math.random() * 100}%` }} />)}
+              {[...Array(40)].map((_, i) => <div key={i} className="flex-1 bg-emerald-500/50 rounded-t-[1px]" style={{ height: `${Math.random() * 100}%` }} />)}
             </div>
           </div>
           <div className="bento-card p-6 group scroll-reveal animate-bg-shift bg-gradient-to-br from-indigo-900/20 via-zinc-900/60 to-purple-900/20" style={{ animationDelay: '200ms' }}>
-            <div className="w-10 h-10 bg-white/5 border border-white/10 rounded-lg flex items-center justify-center mb-4"><Palette size={18} className="text-white" /></div>
-            <h3 className="text-xl font-bold mb-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Advance Theming</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">The UI extracts colors from album art in real-time, morphing shadows and buttons to match.</p>
+            <div className="w-10 h-10 bg-white/5 border border-white/10 rounded-lg flex items-center justify-center mb-4"><Headphones size={18} className="text-indigo-400" /></div>
+            <h3 className="text-xl font-bold mb-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Spatial 8D Audio</h3>
+            <p className="text-xs text-zinc-400 leading-relaxed">Hardware-accelerated Web Audio orbital panning makes sound rotate dynamically around your head.</p>
           </div>
           <div className="bento-card p-6 group scroll-reveal" style={{ animationDelay: '300ms' }}>
             <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:16px_16px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_80%)]" />
             <div className="relative z-10">
-              <div className="w-10 h-10 bg-white/5 border border-white/10 rounded-lg flex items-center justify-center mb-4"><CloudUpload size={18} className="text-cyan-400" /></div>
-              <h3 className="text-xl font-bold mb-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Cloud Sync</h3>
-              <p className="text-xs text-zinc-400 leading-relaxed">Drag, drop, and play. Custom MP3s and metadata are securely synced instantly.</p>
+              <div className="w-10 h-10 bg-white/5 border border-white/10 rounded-lg flex items-center justify-center mb-4"><Sparkles size={18} className="text-orange-400" /></div>
+              <h3 className="text-xl font-bold mb-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Soundie NLP AI</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">Natural intent discovery — ask for moods, vibes, artists, and playback controls hands-free.</p>
             </div>
           </div>
           <div className="bento-card md:col-span-3 p-8 flex flex-col md:flex-row items-center justify-between gap-8 group scroll-reveal" style={{ animationDelay: '400ms' }}>
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 bg-white/5 border border-white/10 rounded-lg flex items-center justify-center"><Mic2 size={18} className="text-white" /></div>
-                <span className="px-2.5 py-1.5 rounded-lg bg-gray-500/20 text-indigo-400 text-[8px] font-bold uppercase tracking-wider border border-indigo-500/30">Development Phase</span>
+                <span className="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-[8px] font-bold uppercase tracking-wider border border-emerald-500/30">Live Sync</span>
               </div>
-              <h3 className="text-xl font-bold mb-3" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Ghost Lyrics Interface</h3>
-              <p className="text-sm text-zinc-400 max-w-md leading-relaxed">A full-screen `.lrc` engine with Apple-style blurred backgrounds to bring your library to life.</p>
+              <h3 className="text-xl font-bold mb-3" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Ghost Lyrics & Dynamic Auras</h3>
+              <p className="text-sm text-zinc-400 max-w-md leading-relaxed">A full-screen time-synced lyrics engine with Apple-style blurred backgrounds and visual aura theming that adapts to any mood.</p>
             </div>
             <div className="flex-1 w-full min-h-[100px] bg-black/50 rounded-xl p-5 border border-white/5 font-bold text-base md:text-lg leading-relaxed text-center opacity-60 group-hover:opacity-100 transition-opacity flex flex-col justify-center">
-              <div className="text-white/30 blur-[1px]" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>A new way to see music...</div>
-              <div className="text-white scale-105 my-2 drop-shadow-xl text-gradient" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>The Interface of v2.0</div>
-              <div className="text-white/30 blur-[1px]" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Coming to your library.</div>
+              <div className="text-white/30 blur-[1px]" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Synchronized with the beat...</div>
+              <div className="text-white scale-105 my-2 drop-shadow-xl text-gradient" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Open Source Music Universe</div>
+              <div className="text-white/30 blur-[1px]" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Free forever · No ads</div>
             </div>
           </div>
           
@@ -774,13 +778,13 @@ const Landing = () => {
           <div className="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] bg-gradient-to-br from-indigo-500/10 to-transparent rotate-12 pointer-events-none" />
           <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full border border-indigo-500/10 animate-spin-slow" />
           <div className="absolute -bottom-8 -left-8 w-24 h-24 rounded-full border border-purple-500/10 animate-spin-slow" style={{ animationDirection: 'reverse' }} />
-          <h2 className="text-4xl font-extrabold mb-4 tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Drop the algorithm.</h2>
-          <p className="text-zinc-400 mb-8 max-w-sm mx-auto text-sm leading-relaxed">Take control of your listening experience. No ads, no forced recommendations. Just your music — and Soundie by your side.</p>
+          <h2 className="text-4xl font-extrabold mb-4 tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Pure Music. No Compromises.</h2>
+          <p className="text-zinc-400 mb-8 max-w-sm mx-auto text-sm leading-relaxed">Unlimited online streaming, real-time synchronized Jam rooms with friends, 8D audio, and Soundie AI — completely free & open source.</p>
           <Link to="/signup" style={{ fontFamily: 'Space Grotesk, sans-serif' }}
             className="inline-flex items-center gap-2 bg-white text-black px-10 py-4 rounded-2xl text-sm font-bold hover:scale-[102%] transition-all shadow-[0_0_30px_rgba(255,255,255,0.2)]">
-            Create Free Account <ArrowRight size={14} className="mb-[1px]" />
+            Start Streaming Free <ArrowRight size={14} className="mb-[1px]" />
           </Link>
-          <p className="text-xs text-zinc-600 mt-4">No credit card required · Cancel anytime</p>
+          <p className="text-xs text-zinc-600 mt-4">100% Free · No credit card required · Open Source</p>
         </div>
       </section>
 
@@ -793,7 +797,7 @@ const Landing = () => {
                 <div className="w-8 h-8"><img src={Logo} alt="SoundWave Logo" className="w-full h-full object-contain" /></div>
                 <span className="text-base font-bold tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>SoundWave</span>
               </div>
-              <p className="text-xs text-zinc-500 leading-relaxed max-w-xs mb-5">A personal cloud music player built for audiophiles. Upload, customize, and experience your music — with Soundie AI at your command.</p>
+              <p className="text-xs text-zinc-500 leading-relaxed max-w-xs mb-5">An open-source music streaming platform and personal audio engine. Stream globally, jam in real time with friends, and experience 8D spatial audio with Soundie AI.</p>
               <div className="flex items-center gap-3">
                 {[Twitter, Github, Instagram, Mail].map((Icon, i) => (
                   <a key={i} href="#" className="w-8 h-8 rounded-lg border border-white/5 bg-white/[0.03] flex items-center justify-center text-zinc-500 hover:text-white hover:border-white/15 transition-all"><Icon size={14} /></a>

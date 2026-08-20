@@ -243,6 +243,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const midFilterRef = useRef<BiquadFilterNode | null>(null)
   const highFilterRef = useRef<BiquadFilterNode | null>(null)
   const pannerNodeRef = useRef<StereoPannerNode | null>(null)
+  const spatialFilterRef = useRef<BiquadFilterNode | null>(null)
   const compressorRef = useRef<DynamicsCompressorNode | null>(null)
   const gainNodeRef = useRef<GainNode | null>(null)
   const panAnimFrameRef = useRef<number | null>(null)
@@ -283,6 +284,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         pannerNodeRef.current = panner
       }
 
+      const spatialFilter = ctx.createBiquadFilter()
+      spatialFilter.type = 'lowpass'
+      spatialFilter.frequency.value = 20000
+      spatialFilterRef.current = spatialFilter
+
       const compressor = ctx.createDynamicsCompressor()
       compressor.threshold.setValueAtTime(-14, ctx.currentTime)
       compressor.knee.setValueAtTime(40, ctx.currentTime)
@@ -300,14 +306,16 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         lowFilter.connect(midFilter)
         midFilter.connect(highFilter)
         highFilter.connect(panner)
-        panner.connect(compressor)
+        panner.connect(spatialFilter)
+        spatialFilter.connect(compressor)
         compressor.connect(gainNode)
         gainNode.connect(ctx.destination)
       } else {
         source.connect(lowFilter)
         lowFilter.connect(midFilter)
         midFilter.connect(highFilter)
-        highFilter.connect(compressor)
+        highFilter.connect(spatialFilter)
+        spatialFilter.connect(compressor)
         compressor.connect(gainNode)
         gainNode.connect(ctx.destination)
       }
@@ -367,13 +375,16 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         cancelAnimationFrame(panAnimFrameRef.current)
         panAnimFrameRef.current = null
       }
-      if (pannerNodeRef.current) {
-        pannerNodeRef.current.pan.value = 0
+      if (pannerNodeRef.current && audioCtxRef.current) {
+        pannerNodeRef.current.pan.setValueAtTime(0, audioCtxRef.current.currentTime)
+      }
+      if (spatialFilterRef.current && audioCtxRef.current) {
+        spatialFilterRef.current.frequency.setValueAtTime(20000, audioCtxRef.current.currentTime)
       }
       return
     }
 
-    // Ensure audio graph is initialized
+    // Ensure audio graph is initialized and context is active
     initAudioGraph()
 
     if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
@@ -383,13 +394,31 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     let angle = 0
     let lastTime = performance.now()
     const rotate = (nowTime: number) => {
-      if (!pannerNodeRef.current) return
-      const dt = (nowTime - lastTime) / 1000
+      const dt = Math.min((nowTime - lastTime) / 1000, 0.1)
       lastTime = nowTime
-      // Rotate ~360 degrees every 6.5 seconds for distinct 8D spatial feeling
-      angle += dt * (Math.PI * 2 / 6.5)
+
+      // Smooth orbital rotation: 1 full 360-degree rotation every 5.5 seconds
+      angle = (angle + dt * (Math.PI * 2 / 5.5)) % (Math.PI * 2)
+
+      // Dynamic Left (-1.0) to Right (+1.0) sinusoidal panning
       const panValue = Math.sin(angle)
-      pannerNodeRef.current.pan.value = Math.max(-1, Math.min(1, panValue))
+
+      // Psychoacoustic behind-head occlusion simulation:
+      // When sound is behind listener (cos(angle) < 0), gently dip highest frequencies
+      const cosAngle = Math.cos(angle)
+      const depth = (cosAngle + 1) / 2 // 0 (behind) to 1 (in front)
+      const cutoffFreq = 4000 + depth * 16000 // 4kHz to 20kHz
+
+      if (audioCtxRef.current) {
+        const now = audioCtxRef.current.currentTime
+        if (pannerNodeRef.current) {
+          pannerNodeRef.current.pan.setValueAtTime(Math.max(-1, Math.min(1, panValue)), now)
+        }
+        if (spatialFilterRef.current) {
+          spatialFilterRef.current.frequency.setValueAtTime(cutoffFreq, now)
+        }
+      }
+
       panAnimFrameRef.current = requestAnimationFrame(rotate)
     }
     panAnimFrameRef.current = requestAnimationFrame(rotate)
