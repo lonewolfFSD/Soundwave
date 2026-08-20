@@ -98,6 +98,8 @@ interface PlayerContextType {
 
 const PlayerContext = createContext<PlayerContextType | null>(null)
 
+const SILENT_AUDIO_URI = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'
+
 export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const audioRef = useRef<HTMLAudioElement>(null)
   const ytPlayerRef = useRef<any>(null)
@@ -952,14 +954,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => clearInterval(timer);
   }, [currentSong?.id, isPlaying]); // Remove currentTime and duration to avoid interval thrashing
 
-  // Keep AudioContext and HTML5 Audio alive across app minimization & screen lock
+  // Keep AudioContext, HTML5 Audio, and YouTube background sessions alive across browser tab switches & screen lock
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (audioCtxRef.current && audioCtxRef.current.state === 'suspended' && isPlayingRef.current) {
         audioCtxRef.current.resume().catch(() => {});
       }
-      if (activeEngineRef.current === 'html5' && audioRef.current && isPlayingRef.current && audioRef.current.paused) {
-        audioRef.current.play().catch(() => {});
+      if (isPlayingRef.current) {
+        if (activeEngineRef.current === 'html5') {
+          if (audioRef.current && audioRef.current.paused) {
+            audioRef.current.play().catch(() => {});
+          }
+        } else if (activeEngineRef.current === 'youtube') {
+          if (audioRef.current && audioRef.current.paused) {
+            audioRef.current.play().catch(() => {});
+          }
+          try { ytPlayerRef.current?.playVideo() } catch {}
+        }
       }
     };
 
@@ -1050,12 +1061,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     const isNative = Capacitor.isNativePlatform();
 
-    const isLocalHost = !isNative && typeof window !== 'undefined' && (
-      window.location.hostname === 'localhost' ||
-      window.location.hostname === '127.0.0.1' ||
-      window.location.hostname.includes('192.168.')
-    )
-
     const isUploadedSong = song.url?.startsWith('blob:') ||
       song.url?.startsWith('data:') ||
       song.playlistId === 'global' ||
@@ -1064,16 +1069,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       song.url?.includes('cloudinary') ||
       song.url?.includes('firebasestorage')
 
-    // Request Battery Optimization Ignore on Start if on Android
-    if (Capacitor.getPlatform() === 'android' && (window as any).AndroidSettings?.requestIgnoreBatteryOptimizations) {
-      (window as any).AndroidSettings.requestIgnoreBatteryOptimizations();
-    }
-
     if (isUploadedSong) {
       activeEngineRef.current = 'html5'
       try { ytPlayerRef.current?.pauseVideo() } catch {}
 
       if (audioRef.current && song.url) {
+        audioRef.current.loop = false
         audioRef.current.crossOrigin = 'anonymous'
         audioRef.current.src = song.url
         audioRef.current.volume = volume
@@ -1103,7 +1104,16 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       if (videoId) {
         activeEngineRef.current = 'youtube'
-        try { audioRef.current?.pause() } catch {}
+        // Keep a silent audio track running in the HTML5 audio element so Chrome never suspends background playback!
+        if (audioRef.current) {
+          try {
+            audioRef.current.src = SILENT_AUDIO_URI
+            audioRef.current.loop = true
+            audioRef.current.volume = 0.001
+            audioRef.current.muted = false
+            audioRef.current.play().catch(() => {})
+          } catch {}
+        }
 
         const playYt = () => {
           if (ytPlayerRef.current && typeof ytPlayerRef.current.loadVideoById === 'function') {
@@ -1155,6 +1165,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     if (activeEngineRef.current === 'youtube') {
       try { ytPlayerRef.current?.pauseVideo() } catch {}
+      try { audioRef.current?.pause() } catch {}
     } else {
       audioRef.current?.pause()
     }
@@ -1201,6 +1212,17 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     if (activeEngineRef.current === 'youtube') {
+      if (audioRef.current) {
+        try {
+          if (audioRef.current.src !== SILENT_AUDIO_URI) {
+            audioRef.current.src = SILENT_AUDIO_URI
+            audioRef.current.loop = true
+          }
+          audioRef.current.volume = 0.001
+          audioRef.current.muted = false
+          audioRef.current.play().catch(() => {})
+        } catch {}
+      }
       try {
         ytPlayerRef.current?.unMute()
         ytPlayerRef.current?.setVolume(volume * 100)
