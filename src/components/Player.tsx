@@ -36,7 +36,8 @@ import {
   Sliders,
   Moon,
   Trash2,
-  Zap
+  Zap,
+  Cast
 } from 'lucide-react'
 import { MediaSession } from '@capgo/capacitor-media-session';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
@@ -46,6 +47,7 @@ import { downloadSongForOffline, isSongOffline, deleteOfflineSong } from '../uti
 import { findYouTubeVideoId } from '../utils/ytMusic';
 import { updateJamPlayback } from '../utils/jamRoomService';
 import AddToPlaylistModal from './AddToPlaylistModal';
+import { DevicePickerModal } from './DevicePickerModal';
 import { AppleLyricsLine } from './AppleLyricsLine';
 import { SyncedVideoPlayer } from './SyncedVideoPlayer';
 
@@ -111,7 +113,14 @@ const Player: React.FC = () => {
     isInJam,
     activeJamRoom,
     is8DMode,
-    setIs8DMode
+    setIs8DMode,
+    currentDeviceId,
+    activeDeviceId,
+    activeDeviceName,
+    connectedDevices,
+    isRemotePlayback,
+    showDevicePicker,
+    setShowDevicePicker
   } = usePlayer()
 
   const handlePlayPause = async () => {
@@ -1395,6 +1404,18 @@ useEffect(() => {
             </button>
 
             <div className="flex items-center gap-1.5">
+              {/* CONNECT DEVICE BUTTON */}
+              <button
+                onClick={() => { triggerHaptic(); setShowDevicePicker(true); }}
+                className={`p-2 rounded-xl transition-colors relative ${isRemotePlayback ? 'text-emerald-400 bg-emerald-500/10 animate-pulse' : `${textMuted} hover:bg-white/5`}`}
+                title="Connect to a device"
+              >
+                <Cast size={20} />
+                {isRemotePlayback && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-400" />
+                )}
+              </button>
+
               {/* 8D SPATIAL AUDIO BUTTON */}
               <button
                 onClick={() => { triggerHaptic(); setIs8DMode(!is8DMode); }}
@@ -1837,6 +1858,21 @@ useEffect(() => {
       <div className={`fixed bottom-0 left-0 right-0 backdrop-blur-2xl border-t z-[70] flex items-center shadow-2xl transition-all duration-500 ${barBg} ${isFullScreen ? 'translate-y-full md:translate-y-0' : 'translate-y-0'}`}>
         <video ref={hiddenVideoRef} className="hidden" muted playsInline />
 
+        {/* Remote Playback Device Bar */}
+        {isRemotePlayback && (
+          <div
+            onClick={(e) => { e.stopPropagation(); triggerHaptic(); setShowDevicePicker(true); }}
+            className="absolute -top-7 left-0 right-0 h-7 bg-emerald-950/90 border-t border-emerald-500/30 backdrop-blur-md px-4 flex items-center justify-between text-xs font-bold text-emerald-300 cursor-pointer hover:bg-emerald-900/90 transition-colors z-10"
+          >
+            <div className="flex items-center gap-2 truncate">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+              <Cast size={14} className="text-emerald-400 shrink-0" />
+              <span className="truncate">Playing on {activeDeviceName || 'Remote Device'}</span>
+            </div>
+            <span className="text-[11px] text-emerald-400 underline font-semibold shrink-0 ml-2">Switch Device</span>
+          </div>
+        )}
+
         {/* Thin progress line — mobile only */}
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-white/[0.06] md:hidden pointer-events-none">
           <div
@@ -2092,6 +2128,22 @@ useEffect(() => {
               <Headphones size={16} />
             </button>
 
+            {/* Spotify Connect Devices Button */}
+            <button
+              onClick={() => { triggerHaptic(); setShowDevicePicker(true); }}
+              title={isRemotePlayback ? `Playing on ${activeDeviceName} (Click to switch)` : "Connect to a Device"}
+              className={`p-1.5 rounded-lg transition-colors relative ${
+                isRemotePlayback
+                  ? 'text-emerald-400 bg-emerald-500/10 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                  : `${textMuted} hover:text-white/90 hover:bg-white/5`
+              }`}
+            >
+              <Cast size={16} className={isRemotePlayback ? 'animate-pulse' : ''} />
+              {isRemotePlayback && (
+                <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              )}
+            </button>
+
             <button
               onClick={togglePiP}
               title="Picture in Picture"
@@ -2134,6 +2186,12 @@ useEffect(() => {
         isOpen={showAddToPlaylist}
         song={currentSong}
         onClose={() => setShowAddToPlaylist(false)}
+      />
+
+      {/* Spotify Connect Cross-Device Modal */}
+      <DevicePickerModal
+        isOpen={showDevicePicker}
+        onClose={() => setShowDevicePicker(false)}
       />
     </>
   )

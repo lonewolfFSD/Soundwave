@@ -23,7 +23,7 @@ const SoundieAssistant = ({ isOpen, onClose: onCloseExternal }: { isOpen?: boole
     currentSong, pauseSong, resumeSong, nextSong, previousSong,
     playSong, addToQueue, queue, globalLibrary, setGlobalLibrary,
     setQueue, playedHistory, toggleShuffle, toggleRepeat, toggleLikeSong,
-    is8DMode, setIs8DMode
+    is8DMode, setIs8DMode, setShowDevicePicker
   } = usePlayer();
 
   const [internalOpen, setInternalOpen] = useState(false);
@@ -1099,6 +1099,15 @@ const SoundieAssistant = ({ isOpen, onClose: onCloseExternal }: { isOpen?: boole
           await speakWithUnreal(resp);
           return;
         }
+      }
+
+      // --- 8.5 CROSS-DEVICE PLAYBACK TRANSFER ---
+      if (/\b(connect device|switch device|transfer playback|change device|device picker|show devices|play on my)\b/i.test(lower)) {
+        setShowDevicePicker(true);
+        const resp = "Opening device manager. Select which device you want to stream to.";
+        setAiResponse(resp);
+        await speakWithUnreal(resp);
+        return;
       }
 
       // --- 9. SLEEP TIMER SETTING ---

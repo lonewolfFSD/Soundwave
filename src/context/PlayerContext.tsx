@@ -8,6 +8,19 @@ import { getLocalLikedSongs, saveLocalLikedSongs, fetchRemoteLikedSongs } from '
 import { getLocalListenHistory, recordSongPlay } from '../utils/listenHistory';
 import { auth } from '../utils/firebase';
 import { getOfflineSongById } from '../utils/offlineStorage';
+import {
+  getOrCreateDeviceId,
+  detectDeviceInfo,
+  registerDevice,
+  updateDeviceHeartbeat,
+  unregisterDevice,
+  subscribeToUserDevices,
+  subscribeToPlaybackState,
+  syncPlaybackState,
+  transferPlaybackToTarget,
+  type DeviceInfo,
+  type PlaybackState
+} from '../utils/deviceSync';
 
 declare global {
   interface Window {
@@ -73,6 +86,14 @@ interface PlayerContextType {
   activeJamRoom: any | null
   setActiveJamRoom: (room: any | null) => void
   isInJam: boolean
+  currentDeviceId: string
+  activeDeviceId: string | null
+  activeDeviceName: string
+  connectedDevices: DeviceInfo[]
+  isRemotePlayback: boolean
+  transferPlaybackToDevice: (targetDeviceId: string, targetDeviceName: string) => Promise<void>
+  showDevicePicker: boolean
+  setShowDevicePicker: (show: boolean) => void
 }
 
 const PlayerContext = createContext<PlayerContextType | null>(null)
@@ -112,6 +133,150 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   })
 
   const [isDragging, setIsDragging] = useState(false)
+
+  // ── CROSS-DEVICE & SPOTIFY CONNECT SYNC STATES ──
+  const [currentDeviceId] = useState<string>(() => getOrCreateDeviceId())
+  const [localDeviceInfo, setLocalDeviceInfo] = useState<DeviceInfo>(() => detectDeviceInfo())
+  const [connectedDevices, setConnectedDevices] = useState<DeviceInfo[]>([])
+  const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null)
+  const [activeDeviceName, setActiveDeviceName] = useState<string>('')
+  const [showDevicePicker, setShowDevicePicker] = useState(false)
+  const isSyncingFromRemoteRef = useRef(false)
+  const isTransferringRef = useRef(false)
+  const isRemotePlayback = !!(activeDeviceId && activeDeviceId !== currentDeviceId)
+
+  // ── CROSS-DEVICE LIFECYCLE & PRESENCE ──
+  useEffect(() => {
+    const unsubAuth = auth.onAuthStateChanged(async (firebaseUser) => {
+      if (!firebaseUser) {
+        setConnectedDevices([])
+        setActiveDeviceId(null)
+        return
+      }
+
+      // Register this device in Firestore
+      const info = await registerDevice(firebaseUser.uid)
+      setLocalDeviceInfo(info)
+
+      // Heartbeat pulse every 25 seconds
+      const heartbeatInterval = setInterval(() => {
+        updateDeviceHeartbeat(firebaseUser.uid, currentDeviceId)
+      }, 25000)
+
+      // Subscribe to connected devices
+      const unsubDevices = subscribeToUserDevices(firebaseUser.uid, (devices) => {
+        setConnectedDevices(devices)
+      })
+
+      // Subscribe to real-time playback state
+      const unsubPlayback = subscribeToPlaybackState(firebaseUser.uid, async (remoteState) => {
+        if (!remoteState || !remoteState.currentSong) return
+        if (isTransferringRef.current) return
+
+        // 1. Playback is active on another device (Remote Mode)
+        if (remoteState.activeDeviceId && remoteState.activeDeviceId !== currentDeviceId) {
+          setActiveDeviceId(remoteState.activeDeviceId)
+          setActiveDeviceName(remoteState.activeDeviceName || 'Remote Device')
+
+          // Stop local audio output immediately so only the remote device plays
+          if (activeEngineRef.current === 'youtube') {
+            try { ytPlayerRef.current?.pauseVideo() } catch {}
+          } else {
+            audioRef.current?.pause()
+          }
+          setIsPlaying(remoteState.isPlaying)
+
+          // Mirror remote state metadata in UI
+          isSyncingFromRemoteRef.current = true
+          setCurrentSong(remoteState.currentSong)
+          setCurrentTime(remoteState.position || 0)
+          setDuration(remoteState.duration || 210)
+          setTimeout(() => { isSyncingFromRemoteRef.current = false }, 150)
+          return
+        }
+
+        // 2. Playback was transferred TO THIS DEVICE
+        if (remoteState.activeDeviceId === currentDeviceId) {
+          setActiveDeviceId(currentDeviceId)
+          setActiveDeviceName(localDeviceInfo.name)
+
+          const isSameSong = currentSong?.id === remoteState.currentSong.id
+          if (!isSameSong || !isPlaying) {
+            // Latency compensation
+            const elapsed = Math.max(0, Math.min(30, (Date.now() - (remoteState.updatedAt || Date.now())) / 1000))
+            const targetPos = Math.min((remoteState.position || 0) + (remoteState.isPlaying ? elapsed : 0), remoteState.duration || 9999)
+
+            isSyncingFromRemoteRef.current = true
+            await playSong(remoteState.currentSong, false)
+            setCurrentTimeHandler(targetPos)
+            if (remoteState.isPlaying) {
+              resumeSong()
+            }
+            setTimeout(() => { isSyncingFromRemoteRef.current = false }, 500)
+          }
+        }
+      })
+
+      return () => {
+        clearInterval(heartbeatInterval)
+        unsubDevices()
+        unsubPlayback()
+        unregisterDevice(firebaseUser.uid, currentDeviceId)
+      }
+    })
+
+    return () => {
+      unsubAuth()
+    }
+  }, [currentDeviceId])
+
+  // ── SPOTIFY CONNECT TRANSFER FUNCTION ──
+  const transferPlaybackToDevice = async (targetDeviceId: string, targetDeviceName: string) => {
+    const user = auth.currentUser
+    if (!user) return
+
+    isTransferringRef.current = true
+    const isTargetThisDevice = targetDeviceId === currentDeviceId
+
+    if (isTargetThisDevice) {
+      setActiveDeviceId(currentDeviceId)
+      setActiveDeviceName(localDeviceInfo.name)
+      if (currentSong) {
+        await playSong(currentSong, false)
+        setCurrentTimeHandler(currentTime)
+        resumeSong()
+      }
+      await syncPlaybackState(user.uid, {
+        activeDeviceId: currentDeviceId,
+        activeDeviceName: localDeviceInfo.name,
+        currentSong,
+        isPlaying: true,
+        position: currentTime,
+        duration,
+        queue,
+        isShuffle,
+        repeatMode,
+        updatedAt: Date.now()
+      })
+    } else {
+      pauseSong()
+      setActiveDeviceId(targetDeviceId)
+      setActiveDeviceName(targetDeviceName)
+      await transferPlaybackToTarget(user.uid, targetDeviceId, targetDeviceName, {
+        currentSong,
+        isPlaying: true,
+        position: currentTime,
+        duration,
+        queue,
+        isShuffle,
+        repeatMode
+      })
+    }
+
+    setTimeout(() => {
+      isTransferringRef.current = false
+    }, 1000)
+  }
 
   // ── INITIALIZE GLOBAL OFFICIAL YOUTUBE PLAYER ──
   useEffect(() => {
@@ -537,6 +702,25 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setCurrentTime(0)
     setDuration(song.duration || 210)
 
+    // Cross-Device Playback Sync
+    const currentUser = auth.currentUser
+    if (currentUser && !isInJam && !isSyncingFromRemoteRef.current) {
+      setActiveDeviceId(currentDeviceId)
+      setActiveDeviceName(localDeviceInfo.name)
+      syncPlaybackState(currentUser.uid, {
+        activeDeviceId: currentDeviceId,
+        activeDeviceName: localDeviceInfo.name,
+        currentSong: song,
+        isPlaying: true,
+        position: 0,
+        duration: song.duration || 210,
+        queue,
+        isShuffle,
+        repeatMode,
+        updatedAt: Date.now()
+      })
+    }
+
     if (localStorage.getItem('sw_keep_awake') === 'true' && 'wakeLock' in navigator) {
       try {
         wakeLockRef.current = await (navigator as any).wakeLock.request('screen')
@@ -672,6 +856,17 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       wakeLockRef.current.release().catch(() => {})
       wakeLockRef.current = null
     }
+
+    const user = auth.currentUser
+    if (user && !isInJam && !isSyncingFromRemoteRef.current) {
+      syncPlaybackState(user.uid, {
+        activeDeviceId: activeDeviceId || currentDeviceId,
+        activeDeviceName: activeDeviceName || localDeviceInfo.name,
+        isPlaying: false,
+        position: currentTime,
+        updatedAt: Date.now()
+      })
+    }
   }
 
   const resumeSong = () => {
@@ -693,6 +888,17 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           .then(() => setIsPlaying(true))
           .catch(e => console.error("Resume failed:", e))
       }
+    }
+
+    const user = auth.currentUser
+    if (user && !isInJam && !isSyncingFromRemoteRef.current) {
+      syncPlaybackState(user.uid, {
+        activeDeviceId: activeDeviceId || currentDeviceId,
+        activeDeviceName: activeDeviceName || localDeviceInfo.name,
+        isPlaying: true,
+        position: currentTime,
+        updatedAt: Date.now()
+      })
     }
   }
 
@@ -789,6 +995,16 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (audioRef.current) {
         audioRef.current.currentTime = time
       }
+    }
+
+    const user = auth.currentUser
+    if (user && !isInJam && !isSyncingFromRemoteRef.current) {
+      syncPlaybackState(user.uid, {
+        activeDeviceId: activeDeviceId || currentDeviceId,
+        activeDeviceName: activeDeviceName || localDeviceInfo.name,
+        position: time,
+        updatedAt: Date.now()
+      })
     }
   }
 
@@ -928,6 +1144,14 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         activeJamRoom,
         setActiveJamRoom,
         isInJam,
+        currentDeviceId,
+        activeDeviceId,
+        activeDeviceName,
+        connectedDevices,
+        isRemotePlayback,
+        transferPlaybackToDevice,
+        showDevicePicker,
+        setShowDevicePicker,
       }}
     >
       {children}
