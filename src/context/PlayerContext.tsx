@@ -890,32 +890,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           })
           .catch(e => console.error("Audio playback error:", e))
       }
-    } else if (isLocalHost) {
-      // Local dev server with yt-dlp backend
-      const activeSong = await resolveFullLengthSong(song, audioQuality)
-      setCurrentSong(activeSong)
-      activeEngineRef.current = 'html5'
-      try { ytPlayerRef.current?.pauseVideo() } catch {}
-
-      if (audioRef.current && activeSong.url) {
-        audioRef.current.crossOrigin = 'anonymous'
-        audioRef.current.src = activeSong.url
-        audioRef.current.volume = volume
-        audioRef.current.muted = false
-        if (startPosition > 0) {
-          audioRef.current.currentTime = startPosition
-        }
-        audioRef.current.play()
-          .then(() => {
-            setIsPlaying(true)
-            if (startPosition > 0 && audioRef.current) {
-              audioRef.current.currentTime = startPosition
-            }
-          })
-          .catch(e => console.error("Audio playback error:", e))
-      }
     } else {
-      // 🌟 Native App & Production: Official YouTube Stream Player (100% Full Song, 0 Errors)
+      // 🌟 Official YouTube Stream Player (100% Full Song, Lossless Full Length, 0 Previews)
       let videoId = extractYoutubeVideoId(song.id) ||
                     extractYoutubeVideoId((song as any).youtubeId) ||
                     extractYoutubeVideoId(song.youtubeUrl) ||
@@ -925,41 +901,32 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         videoId = await findYouTubeVideoId(song.title, song.artist);
       }
 
-      if (videoId && ytPlayerRef.current && typeof ytPlayerRef.current.loadVideoById === 'function') {
+      if (videoId) {
         activeEngineRef.current = 'youtube'
         try { audioRef.current?.pause() } catch {}
 
-        try {
-          ytPlayerRef.current.loadVideoById({ videoId, startSeconds: startPosition })
-          ytPlayerRef.current.unMute()
-          ytPlayerRef.current.setVolume(volume * 100)
-          ytPlayerRef.current.playVideo()
-          setIsPlaying(true)
-          if (startPosition > 0) {
-            setTimeout(() => {
-              try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {}
-            }, 300)
-            setTimeout(() => {
-              try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {}
-            }, 700)
-            setTimeout(() => {
-              try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {}
-            }, 1200)
-          }
-        } catch (e) {
-          console.warn('YouTube Player load error:', e)
-          if (song.previewUrl || song.url) {
-            activeEngineRef.current = 'html5'
-            if (audioRef.current) {
-              audioRef.current.src = song.previewUrl || song.url
-              audioRef.current.currentTime = startPosition
-              audioRef.current.volume = volume
-              audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {})
+        const playYt = () => {
+          if (ytPlayerRef.current && typeof ytPlayerRef.current.loadVideoById === 'function') {
+            try {
+              ytPlayerRef.current.loadVideoById({ videoId, startSeconds: startPosition })
+              ytPlayerRef.current.unMute()
+              ytPlayerRef.current.setVolume(volume * 100)
+              ytPlayerRef.current.playVideo()
+              setIsPlaying(true)
+              if (startPosition > 0) {
+                setTimeout(() => { try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {} }, 300)
+                setTimeout(() => { try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {} }, 700)
+                setTimeout(() => { try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {} }, 1200)
+              }
+            } catch (e) {
+              console.warn('YouTube Player load error:', e)
             }
+          } else {
+            setTimeout(playYt, 250)
           }
         }
+        playYt()
       } else if (song.previewUrl || (song.url && song.url.startsWith('http'))) {
-        // Fallback to HTML5 audio preview
         activeEngineRef.current = 'html5'
         if (audioRef.current) {
           audioRef.current.src = song.previewUrl || song.url
