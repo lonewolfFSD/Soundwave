@@ -573,6 +573,8 @@ useEffect(() => {
                   setTimeout(() => {
                     if (!userIntentionalPauseRef.current && isPlayingRef.current) {
                       try {
+                        event.target.unMute()
+                        event.target.setVolume(volumeRef.current * 100)
                         event.target.playVideo()
                       } catch {}
                     }
@@ -640,7 +642,9 @@ useEffect(() => {
       }, 300)
       return () => {
         clearInterval(interval)
+        
         document.removeEventListener('visibilitychange', stopVisibilityPropagation, true)
+        document.removeEventListener('visibilitychange', handleVisibility)
       }
     }
   }, [])
@@ -1218,7 +1222,7 @@ useEffect(() => {
       })
     }
 
-    if (localStorage.getItem('sw_keep_awake') === 'true' && 'wakeLock' in navigator) {
+    if ('wakeLock' in navigator) {
       try {
         wakeLockRef.current = await (navigator as any).wakeLock.request('screen')
       } catch {}
@@ -1826,7 +1830,9 @@ useEffect(() => {
           opacity: 1,
           pointerEvents: 'none',
           zIndex: 1,
-          overflow: 'hidden'
+          overflow: 'hidden',
+          transform: 'translateZ(0)',
+          willChange: 'transform'
         }}
       >
         <div id="soundwave-global-yt-player" />
