@@ -61,6 +61,7 @@ import { updateJamPlayback } from '../utils/jamRoomService';
 import { setSongAsDeviceRingtone, isNativeAndroid } from '../utils/ringtone';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import { DevicePickerModal } from './DevicePickerModal';
+import { RingtoneModal } from './RingtoneModal';
 import { AppleLyricsLine } from './AppleLyricsLine';
 import { SyncedVideoPlayer } from './SyncedVideoPlayer';
 
@@ -176,6 +177,7 @@ const Player: React.FC = () => {
 
   const [showMobileQueue, setShowMobileQueue] = useState(false);
   const [showAddToPlaylist, setShowAddToPlaylist] = useState(false);
+  const [showRingtoneModal, setShowRingtoneModal] = useState(false);
   const [isOfflineDownloaded, setIsOfflineDownloaded] = useState(false);
   const [isDownloadingOffline, setIsDownloadingOffline] = useState(false);
   const [offlineDownloadProgress, setOfflineDownloadProgress] = useState(0);
@@ -410,7 +412,7 @@ const Player: React.FC = () => {
     setShowMobileOptionsMenu(false);
 
     if (isNativeAndroid()) {
-      await setSongAsDeviceRingtone(currentSong);
+      setShowRingtoneModal(true);
     }
   };
 
@@ -2343,6 +2345,13 @@ useEffect(() => {
       <DevicePickerModal
         isOpen={showDevicePicker}
         onClose={() => setShowDevicePicker(false)}
+      />
+
+      {/* 🔔 Native Android Ringtone Trimmer & Preview Modal */}
+      <RingtoneModal
+        isOpen={showRingtoneModal}
+        song={currentSong}
+        onClose={() => setShowRingtoneModal(false)}
       />
     </>
   )

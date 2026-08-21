@@ -1,4 +1,4 @@
-package com.lonewolffsd.soundwave;
+﻿package com.lonewolffsd.soundwave;
 
 import android.content.ContentResolver;
 import android.content.ContentValues;
@@ -61,7 +61,7 @@ public class RingtonePlugin extends Plugin {
         // 1. Verify WRITE_SETTINGS permission on Android 6+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.System.canWrite(context)) {
             new Handler(Looper.getMainLooper()).post(() -> {
-                Toast.makeText(context, "Please allow Soundwave to modify system settings to set ringtones", Toast.LENGTH_LONG).show();
+                Toast.makeText(context, "Please enable 'Allow modify system settings' to set ringtones", Toast.LENGTH_LONG).show();
             });
             Intent intent = new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS);
             intent.setData(Uri.parse("package:" + context.getPackageName()));
@@ -76,6 +76,7 @@ public class RingtonePlugin extends Plugin {
         String base64Data = call.getString("base64Data");
         String title = call.getString("title", "Soundwave Ringtone");
         String artist = call.getString("artist", "Soundwave");
+        String mimeType = call.getString("mimeType", "audio/mpeg");
 
         if ((urlStr == null || urlStr.isEmpty()) && (filePath == null || filePath.isEmpty()) && (base64Data == null || base64Data.isEmpty())) {
             call.reject("INVALID_DATA", "Must provide url, filePath, or base64Data");
@@ -121,7 +122,8 @@ public class RingtonePlugin extends Plugin {
 
                 String cleanTitle = title.replaceAll("[^a-zA-Z0-9._ -]", "").trim();
                 if (cleanTitle.isEmpty()) cleanTitle = "Soundwave_Ringtone";
-                String fileName = cleanTitle + ".mp3";
+                String ext = mimeType.contains("wav") ? ".wav" : ".mp3";
+                String fileName = cleanTitle + ext;
 
                 Uri ringtoneUri = null;
                 ContentResolver resolver = context.getContentResolver();
@@ -129,11 +131,12 @@ public class RingtonePlugin extends Plugin {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     ContentValues values = new ContentValues();
                     values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
-                    values.put(MediaStore.MediaColumns.MIME_TYPE, "audio/mpeg");
+                    values.put(MediaStore.MediaColumns.TITLE, cleanTitle);
+                    values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
                     values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_RINGTONES);
                     values.put(MediaStore.Audio.Media.IS_RINGTONE, true);
-                    values.put(MediaStore.Audio.Media.IS_NOTIFICATION, false);
-                    values.put(MediaStore.Audio.Media.IS_ALARM, false);
+                    values.put(MediaStore.Audio.Media.IS_NOTIFICATION, true);
+                    values.put(MediaStore.Audio.Media.IS_ALARM, true);
                     values.put(MediaStore.Audio.Media.IS_MUSIC, false);
 
                     ringtoneUri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values);
@@ -165,25 +168,35 @@ public class RingtonePlugin extends Plugin {
                     ContentValues values = new ContentValues();
                     values.put(MediaStore.MediaColumns.DATA, destFile.getAbsolutePath());
                     values.put(MediaStore.MediaColumns.TITLE, cleanTitle);
-                    values.put(MediaStore.MediaColumns.MIME_TYPE, "audio/mpeg");
+                    values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
                     values.put(MediaStore.Audio.Media.IS_RINGTONE, true);
-                    values.put(MediaStore.Audio.Media.IS_NOTIFICATION, false);
-                    values.put(MediaStore.Audio.Media.IS_ALARM, false);
+                    values.put(MediaStore.Audio.Media.IS_NOTIFICATION, true);
+                    values.put(MediaStore.Audio.Media.IS_ALARM, true);
                     values.put(MediaStore.Audio.Media.IS_MUSIC, false);
 
                     ringtoneUri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values);
                 }
 
                 if (ringtoneUri == null) {
-                    call.reject("SAVE_FAILED", "Failed to save ringtone to device storage");
+                    call.reject("SAVE_FAILED", "Failed to save ringtone to storage");
                     return;
                 }
 
-                // 2. Set actual system default ringtone
-                RingtoneManager.setActualDefaultRingtoneUri(context, RingtoneManager.TYPE_RINGTONE, ringtoneUri);
+                // 2. Set as actual default system ringtone via RingtoneManager & Settings fallback
+                try {
+                    RingtoneManager.setActualDefaultRingtoneUri(context, RingtoneManager.TYPE_RINGTONE, ringtoneUri);
+                } catch (Exception rErr) {
+                    rErr.printStackTrace();
+                }
+
+                try {
+                    Settings.System.putString(context.getContentResolver(), Settings.System.RINGTONE, ringtoneUri.toString());
+                } catch (Exception sErr) {
+                    sErr.printStackTrace();
+                }
 
                 new Handler(Looper.getMainLooper()).post(() -> {
-                    Toast.makeText(context, "🎵 Ringtone set to: " + title, Toast.LENGTH_LONG).show();
+                    Toast.makeText(context, "🔔 Phone Ringtone set to: " + title, Toast.LENGTH_LONG).show();
                 });
 
                 JSObject ret = new JSObject();
