@@ -285,11 +285,11 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
 
                 <div
                   onClick={() => onSelectArtist && onSelectArtist(matchedArtist.name)}
-                  className="relative p-6 rounded-2xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.06] hover:border-white/[0.12] transition-all duration-300 cursor-pointer group shadow-xl overflow-hidden flex flex-col justify-between min-h-[220px]"
+                  className="p-5 sm:p-6 rounded-2xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.06] hover:border-white/[0.12] transition-all duration-300 cursor-pointer group shadow-xl flex flex-col justify-between gap-5"
                 >
-                  <div className="space-y-4">
+                  <div className="flex items-center sm:items-start gap-4 sm:gap-5">
                     {/* Natural Circular Artist Avatar */}
-                    <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden shadow-2xl shrink-0 bg-zinc-900 border border-white/10">
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-full overflow-hidden shadow-xl shrink-0 bg-zinc-900 border border-white/10">
                       {matchedArtist.pictureUrl ? (
                         <img
                           src={matchedArtist.pictureUrl}
@@ -298,20 +298,20 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
-                          <User size={36} className="text-zinc-500" />
+                          <User size={32} className="text-zinc-500" />
                         </div>
                       )}
                     </div>
 
                     {/* Artist Name & Tag */}
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <h3
-                        className="text-2xl sm:text-3xl font-black text-white truncate tracking-tight"
+                        className="text-xl sm:text-2xl md:text-3xl font-black text-white truncate tracking-tight"
                         style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                       >
                         {matchedArtist.name}
                       </h3>
-                      <div className="flex items-center gap-2 mt-1.5">
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                         <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-white/10 text-white/90">
                           Artist
                         </span>
@@ -324,22 +324,35 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
                     </div>
                   </div>
 
-                  {/* Floating Play Button */}
-                  {matchedArtist.topSongs && matchedArtist.topSongs.length > 0 && (
-                    <div className="absolute right-6 bottom-6">
+                  {/* Buttons below the tags and metadata */}
+                  <div className="flex items-center gap-2.5 pt-1">
+                    {matchedArtist.topSongs && matchedArtist.topSongs.length > 0 && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
                           handlePlaySong(matchedArtist.topSongs[0])
                           if (setQueue) setQueue(matchedArtist.topSongs)
                         }}
-                        className="w-12 h-12 rounded-full bg-white text-black flex items-center justify-center shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
-                        title="Play Top Hits"
+                        className="px-5 py-2.5 rounded-full bg-white text-black font-extrabold text-xs flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
+                        style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                       >
-                        <Play size={18} fill="currentColor" className="ml-0.5 text-black" />
+                        <Play size={15} fill="currentColor" className="ml-0.5 text-black" /> Play Top Hits
                       </button>
-                    </div>
-                  )}
+                    )}
+
+                    {onSelectArtist && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onSelectArtist(matchedArtist.name)
+                        }}
+                        className="px-4 py-2.5 rounded-full bg-white/10 hover:bg-white/15 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                        style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+                      >
+                        View Profile
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : topTrack ? (
@@ -350,11 +363,11 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
 
                 <div
                   onClick={() => handlePlaySong(topTrack)}
-                  className="relative p-6 rounded-2xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.06] hover:border-white/[0.12] transition-all duration-300 cursor-pointer group shadow-xl overflow-hidden flex flex-col justify-between min-h-[220px]"
+                  className="p-5 sm:p-6 rounded-2xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.06] hover:border-white/[0.12] transition-all duration-300 cursor-pointer group shadow-xl flex flex-col justify-between gap-5"
                 >
-                  <div className="space-y-4">
+                  <div className="flex items-center sm:items-start gap-4 sm:gap-5">
                     {/* Artwork */}
-                    <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden shadow-2xl shrink-0 bg-zinc-900 border border-white/10 relative">
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-xl overflow-hidden shadow-xl shrink-0 bg-zinc-900 border border-white/10 relative">
                       {topTrack.coverArtBase64 ? (
                         <img
                           src={topTrack.coverArtBase64}
@@ -363,20 +376,20 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
-                          <Music size={36} className="text-zinc-500" />
+                          <Music size={32} className="text-zinc-500" />
                         </div>
                       )}
                     </div>
 
                     {/* Meta */}
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <h3
-                        className="text-2xl sm:text-3xl font-black text-white truncate tracking-tight"
+                        className="text-xl sm:text-2xl md:text-3xl font-black text-white truncate tracking-tight"
                         style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                       >
                         {topTrack.title}
                       </h3>
-                      <div className="flex items-center gap-2 mt-1.5">
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                         <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-white/10 text-white/90">
                           Song
                         </span>
@@ -397,37 +410,47 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  <div className="absolute right-6 bottom-6 flex items-center gap-2">
+                  {/* Buttons below the tags and metadata */}
+                  <div className="flex items-center gap-2.5 pt-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handlePlaySong(topTrack)
+                      }}
+                      className="px-5 py-2.5 rounded-full bg-white text-black font-extrabold text-xs flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
+                      style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+                    >
+                      {currentSong?.id === topTrack.id && isPlaying ? (
+                        <>
+                          <Pause size={15} fill="currentColor" /> Pause
+                        </>
+                      ) : (
+                        <>
+                          <Play size={15} fill="currentColor" className="ml-0.5" /> Play
+                        </>
+                      )}
+                    </button>
+
                     <button
                       onClick={(e) => handleQueueSong(e, topTrack)}
                       title="Add to Priority Queue"
-                      className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer"
+                      className="px-3.5 py-2.5 rounded-full bg-white/10 hover:bg-white/15 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                      style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                     >
-                      <Plus size={16} />
+                      <Plus size={15} /> Queue
                     </button>
+
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
                         toggleLikeSong(topTrack)
                       }}
                       title={isSongLiked(topTrack) ? 'Liked' : 'Like'}
-                      className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer"
+                      className={`p-2.5 rounded-full transition-colors ${
+                        isSongLiked(topTrack) ? 'bg-white/20 text-white fill-white' : 'bg-white/10 hover:bg-white/15 text-white'
+                      }`}
                     >
                       <Heart size={16} fill={isSongLiked(topTrack) ? 'currentColor' : 'none'} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handlePlaySong(topTrack)
-                      }}
-                      className="w-12 h-12 rounded-full bg-white text-black flex items-center justify-center shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
-                    >
-                      {currentSong?.id === topTrack.id && isPlaying ? (
-                        <Pause size={18} fill="currentColor" />
-                      ) : (
-                        <Play size={18} fill="currentColor" className="ml-0.5" />
-                      )}
                     </button>
                   </div>
                 </div>
