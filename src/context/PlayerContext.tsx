@@ -188,7 +188,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const currentTimeRef = useRef<number>(0)
   const durationRef = useRef<number>(0)
   const nextSongRef = useRef<() => void>(() => {})
-  const repeatModeRef = useRef<'off'|'all'|'one'>('off')
+  const repeatModeRef = useRef<'none'|'all'|'one'>('none')
   const isRemotePlayback = !!(activeDeviceId && activeDeviceId !== currentDeviceId)
   const isRemotePlaybackRef = useRef(false)
 
@@ -320,7 +320,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             if (!isSameSong || !isLocalPlaying) {
               isSyncingFromRemoteRef.current = true
               await playSong(remoteState.currentSong, false, targetPos, true)
-              setTimeout(() => { isSyncingFromRemoteRef.current = false }, 500)
+              setTimeout(() => { isSyncingFromRemoteRef.current = false }, 2000)
             } else {
               if (Math.abs(currentTimeRef.current - targetPos) > 3) {
                 if (activeEngineRef.current === 'youtube') {
@@ -1111,7 +1111,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return
     }
 
-    if (currentUser && !isInJam && !isSyncingFromRemoteRef.current) {
+    if (currentUser && !isInJam && !isSyncingFromRemoteRef.current && !isRemotePlaybackRef.current) {
       activeDeviceIdRef.current = currentDeviceId
       isRemotePlaybackRef.current = false
       setActiveDeviceId(currentDeviceId)
@@ -1404,6 +1404,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const nextIdx = currentIndex !== -1 && currentIndex < effectiveQueue.length - 1 ? currentIndex + 1 : 0
       const target = effectiveQueue[nextIdx]
       if (target) {
+        const effectiveQueueForSync = queue.length > 0 ? queue : globalLibrary
         syncPlaybackState(auth.currentUser.uid, {
           activeDeviceId,
           activeDeviceName,
@@ -1412,6 +1413,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           isPlaying: true,
           position: 0,
           duration: target.duration || 210,
+          queue: effectiveQueueForSync,
           updatedAt: Date.now()
         })
       }
