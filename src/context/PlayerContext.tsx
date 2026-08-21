@@ -1260,17 +1260,20 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           try {
             const streamUrl = await getAudioStreamUrl(videoId, song.title, song.artist)
 
-            // Reject watch-page URLs — these are not audio streams and CORS-blocked by browsers
+            // Reject watch-page URLs — these are not direct audio streams
             const isValidAudioStream = streamUrl &&
               !streamUrl.includes('youtube.com/watch') &&
               !streamUrl.includes('youtu.be/') &&
               (
+                streamUrl.includes('yt-stream') ||
                 streamUrl.includes('.mp3') ||
                 streamUrl.includes('.m4a') ||
                 streamUrl.includes('.ogg') ||
                 streamUrl.includes('.webm') ||
                 streamUrl.includes('googlevideo.com') ||
                 streamUrl.includes('audio') ||
+                streamUrl.startsWith('http') ||
+                streamUrl.startsWith('/') ||
                 streamUrl.startsWith('blob:') ||
                 streamUrl.startsWith('data:')
               )
@@ -1329,16 +1332,19 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               }
 
               // Verify if playback actually started (catch Autoplay blocks or stuck buffering)
+              const verifyDelay = forceLocal ? 750 : 2000
               setTimeout(() => {
                 try {
                   const state = ytPlayerRef.current?.getPlayerState()
-                  // If not Playing (1) and not Buffering (3) after 3 seconds, assume blocked
+                  // If not Playing (1) and not Buffering (3), force direct audio stream fallback immediately
                   if (state !== 1 && state !== 3) {
-                    console.warn('YouTube playback stalled or blocked by autoplay. Forcing fallback stream.')
+                    console.warn('YouTube playback stalled or blocked by autoplay. Forcing direct stream fallback.')
                     fallbackToDirectStream()
                   }
-                } catch (e) {}
-              }, 3000)
+                } catch (e) {
+                  fallbackToDirectStream()
+                }
+              }, verifyDelay)
             } catch (e) {
               console.warn('YouTube Player load error, using stream fallback:', e)
               fallbackToDirectStream()
