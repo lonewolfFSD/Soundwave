@@ -162,14 +162,23 @@ export const searchYouTubeMusic = async (query: string): Promise<Song[]> => {
 
   const isNonMusicJunk = (title: string, artist: string, durationSecs: number) => {
     const text = `${title} ${artist}`.toLowerCase()
+    
+    // 1. Blacklist full playlists, compilation mixes, greatest hits albums, DJ mixes
+    const playlistOrCompilationRegex = /\b(playlist|songs playlist|greatest hits|full album|best of|top \d+ songs|all songs|billboard hot 100|nonstop|non stop|dj mix|mega mix|party mix|lofi mix|chill mix|mix \d+|1 hour|2 hours|3 hours|10 hours|soundtrack full|ost full|discography|anthology|music mix|mashup collection|album #\d+)\b/i
+    if (playlistOrCompilationRegex.test(text)) return true
+
+    // 2. Non-music keywords blacklist
     const nonMusicRegex = /\b(how to|tutorial|origami|step by step|diy|craft|sound effect|sfx|asmr|sleep sounds|rain sounds|white noise|anxiety control|stress relief sounds|guided meditation|meditation guide|binaural beats for sleep|documentary|podcast|audiobook|lecture|vlog|reaction|gameplay|walkthrough|unboxing|review|lesson|speech|news report)\b/i
     if (nonMusicRegex.test(text)) {
-      const isExplicitSong = /\b(official video|official music video|official audio|audio track|song|lyric video|music video)\b/i.test(text)
+      const isExplicitSong = /\b(official video|official music video|official audio|audio track|lyric video|music video)\b/i.test(text)
       if (!isExplicitSong) return true
     }
-    if (durationSecs > 900 || durationSecs < 45) {
-      if (!/\b(album|full album|ep|discography)\b/i.test(text)) return true
+
+    // 3. Single song duration bounds: 35s to 480s (8 mins)
+    if (durationSecs > 480 || durationSecs < 35) {
+      return true
     }
+
     return false
   }
 
@@ -223,18 +232,7 @@ export const searchYouTubeMusic = async (query: string): Promise<Song[]> => {
  * Fetch Top Trending Online Tracks
  */
 export const getTrendingYouTubeMusic = async (): Promise<Song[]> => {
-  // 1. Try YouTube Search for top hits
-  try {
-    const res = await fetch(`/api/yt-search?q=${encodeURIComponent('Top Hits 2024 Popular Songs')}`, { signal: AbortSignal.timeout(6000) })
-    if (res.ok) {
-      const items = await res.json()
-      if (Array.isArray(items) && items.length > 0) {
-        return items.map((song: any) => ({ ...song, playlistId: 'trending' }))
-      }
-    }
-  } catch {}
-
-  // 2. Fallback to iTunes Top Charts (metadata only, full track resolved on play)
+  // 1. Primary: Verified Top Songs Chart (guaranteed individual single tracks)
   try {
     const res = await fetch('https://itunes.apple.com/us/rss/topsongs/limit=50/json')
     if (res.ok) {
@@ -260,11 +258,25 @@ export const getTrendingYouTubeMusic = async (): Promise<Song[]> => {
         }
       })
 
-      return [...songs].sort(() => 0.5 - Math.random())
+      if (songs.length > 0) {
+        return [...songs].sort(() => 0.5 - Math.random())
+      }
     }
   } catch (err) {
     console.error('Trending fetch error:', err)
   }
+
+  // 2. Fallback: YouTube Search
+  try {
+    const res = await fetch(`/api/yt-search?q=${encodeURIComponent('Top Billboard Songs Official Audio')}`, { signal: AbortSignal.timeout(6000) })
+    if (res.ok) {
+      const items = await res.json()
+      if (Array.isArray(items) && items.length > 0) {
+        return items.map((song: any) => ({ ...song, playlistId: 'trending' }))
+      }
+    }
+  } catch {}
+
   return []
 }
 
