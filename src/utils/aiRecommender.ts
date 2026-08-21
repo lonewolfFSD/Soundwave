@@ -317,21 +317,47 @@ export const getSongRadioQueue = async (
     }
   }
 
-  // 2. Fetch similar vibe songs from online music catalog (artist hits & genre/vibe tracks)
+  // 2. Fetch similar vibe songs from online music catalog
   try {
+    const seedYoutubeId = extractYoutubeVideoId(seedSong.id) || 
+                          extractYoutubeVideoId((seedSong as any).youtubeId) || 
+                          extractYoutubeVideoId(seedSong.youtubeUrl);
+                          
+    if (seedYoutubeId) {
+      try {
+        const res = await fetch(`/api/yt-upnext?id=${seedYoutubeId}`, { signal: AbortSignal.timeout(6000) });
+        if (res.ok) {
+          const upnextSongs = await res.json();
+          if (Array.isArray(upnextSongs) && upnextSongs.length > 0) {
+            for (const s of upnextSongs) {
+              if (isDuplicateOfSeed(s.title)) continue;
+              const key = `${normalizeTitle(s.title)}_${normalizeTitle(s.artist)}`;
+              if (!seenKeys.has(key)) {
+                seenKeys.add(key);
+                candidatePool.push(s);
+              }
+            }
+            return candidatePool.slice(0, limit);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to fetch yt-upnext:', err);
+      }
+    }
+
     const fetchPromises: Promise<any>[] = []
     
-    // A. Fetch distinct songs from the same artist
+    // Fallback A. Fetch distinct songs from the same artist
     const cleanArtist = normalizeArtist(seedSong.artist)
     if (cleanArtist && cleanArtist !== 'Unknown Artist' && cleanArtist !== 'Unknown') {
       fetchPromises.push(
-        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(cleanArtist)}&media=music&entity=song&limit=25`)
+        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(cleanArtist)}&media=music&entity=song&limit=15`)
           .then(r => r.json())
           .catch(() => ({ results: [] }))
       )
     }
 
-    // B. Detect dominant mood vector and query related vibe tracks
+    // Fallback B. Detect dominant mood vector and query related vibe tracks
     const moodVector = extractMoodVector(seedSong)
     let maxIdx = 0
     let maxVal = -1
@@ -345,14 +371,14 @@ export const getSongRadioQueue = async (
 
     if (cleanArtist) {
       fetchPromises.push(
-        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(`${cleanArtist} ${dominantMood}`)}&media=music&entity=song&limit=20`)
+        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(`${cleanArtist} ${dominantMood}`)}&media=music&entity=song&limit=10`)
           .then(r => r.json())
           .catch(() => ({ results: [] }))
       )
     }
 
     fetchPromises.push(
-      fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(`${dominantMood} pop hits`)}&media=music&entity=song&limit=20`)
+      fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(`${dominantMood} pop hits`)}&media=music&entity=song&limit=10`)
         .then(r => r.json())
         .catch(() => ({ results: [] }))
     )
