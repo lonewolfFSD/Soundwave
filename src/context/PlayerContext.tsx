@@ -187,6 +187,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const currentTimeRef = useRef<number>(0)
   const durationRef = useRef<number>(0)
   const nextSongRef = useRef<() => void>(() => {})
+  const repeatModeRef = useRef<'off'|'all'|'one'>('off')
   const isRemotePlayback = !!(activeDeviceId && activeDeviceId !== currentDeviceId)
   const isRemotePlaybackRef = useRef(false)
 
