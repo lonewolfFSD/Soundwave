@@ -32,13 +32,16 @@ interface SearchResultsViewProps {
   user: any
   onBack: () => void
   onSelectArtist?: (artistName: string) => void
+  activeTheme?: any
 }
 
-export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText, user, onBack, onSelectArtist }) => {
+export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText, user, onBack, onSelectArtist, activeTheme }) => {
   const { currentSong, isPlaying, playSong, pauseSong, resumeSong, setQueue, playedHistory, isSongLiked, toggleLikeSong, addToQueue, upNextQueue } = usePlayer()
   const [loading, setLoading] = useState(true)
   const [queueToast, setQueueToast] = useState<string | null>(null)
   const [matchedArtist, setMatchedArtist] = useState<ArtistProfile | null>(null)
+  const accentColor = activeTheme?.accentColor || '#ffffff'
+  const accentGlow = activeTheme?.accentGlow || 'rgba(255,255,255,0.15)'
   const [searchResults, setSearchResults] = useState<{
     songs: any[]
     playlists: any[]
@@ -250,7 +253,10 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
 
       {loading ? (
         <div className="py-24 flex flex-col items-center justify-center gap-3">
-          <div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+          <div
+            className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
+            style={{ borderColor: `${accentColor}30`, borderTopColor: accentColor }}
+          />
           <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
             Searching music catalog...
           </p>
@@ -273,17 +279,36 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
             {/* ── TOP RESULT HERO CARD (Left Column) ── */}
             {matchedArtist ? (
               <div className="lg:col-span-5 space-y-3">
-                <h2 className="text-[14px] font-bold uppercase tracking-widest text-indigo-400 flex items-center gap-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-                  <Sparkles size={14} className="text-indigo-400" /> Top Result • Artist
+                <h2
+                  className="text-[14px] font-bold uppercase tracking-widest flex items-center gap-2"
+                  style={{ color: accentColor, fontFamily: 'Space Grotesk, sans-serif' }}
+                >
+                  <Sparkles size={14} style={{ color: accentColor }} /> Top Result • Artist
                 </h2>
 
                 <div
                   onClick={() => onSelectArtist && onSelectArtist(matchedArtist.name)}
-                  className="relative p-6 rounded-2xl bg-gradient-to-br from-indigo-950/40 via-white/[0.04] to-purple-950/30 border border-indigo-500/20 hover:border-indigo-500/50 transition-all cursor-pointer group shadow-2xl overflow-hidden backdrop-blur-md"
+                  className="relative p-6 rounded-2xl bg-white/[0.03] border transition-all cursor-pointer group shadow-2xl overflow-hidden backdrop-blur-md"
+                  style={{
+                    borderColor: `${accentColor}25`,
+                    backgroundImage: `radial-gradient(circle at 10% 20%, ${accentColor}12, transparent 65%)`
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = `${accentColor}60`
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = `${accentColor}25`
+                  }}
                 >
                   <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
-                    {/* Artist Circular Avatar */}
-                    <div className="w-32 h-32 md:w-36 md:h-36 rounded-full overflow-hidden shadow-2xl shrink-0 ring-4 ring-indigo-500/30 group-hover:ring-indigo-400/70 group-hover:scale-105 transition-all duration-300 relative">
+                    {/* Artist Circular Avatar with Theme Glow */}
+                    <div
+                      className="w-32 h-32 md:w-36 md:h-36 rounded-full overflow-hidden shadow-2xl shrink-0 group-hover:scale-105 transition-all duration-300 relative border-2"
+                      style={{
+                        borderColor: accentColor,
+                        boxShadow: `0 0 24px ${accentGlow}`
+                      }}
+                    >
                       {matchedArtist.pictureUrl ? (
                         <img
                           src={matchedArtist.pictureUrl}
@@ -299,15 +324,22 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
 
                     {/* Meta */}
                     <div className="flex-1 min-w-0 text-center sm:text-left">
-                      <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 mb-2">
+                      <span
+                        className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider mb-2 border"
+                        style={{
+                          background: `${accentColor}15`,
+                          borderColor: `${accentColor}30`,
+                          color: accentColor
+                        }}
+                      >
                         Artist
                       </span>
                       <h3
-                        className="text-xl md:text-2xl font-extrabold text-white truncate flex items-center justify-center sm:justify-start gap-2 group-hover:text-indigo-300 transition-colors"
+                        className="text-xl md:text-2xl font-extrabold text-white truncate flex items-center justify-center sm:justify-start gap-2 transition-colors"
                         style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                       >
                         {matchedArtist.name}
-                        <CheckCircle2 size={18} className="text-indigo-400 fill-indigo-400/20 shrink-0" />
+                        <CheckCircle2 size={18} style={{ color: accentColor }} className="shrink-0" />
                       </h3>
                       {matchedArtist.monthlyListeners ? (
                         <p className="text-xs text-zinc-400 font-medium truncate mt-1" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
@@ -340,8 +372,13 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
                               e.stopPropagation()
                               onSelectArtist(matchedArtist.name)
                             }}
-                            className="px-4 py-2.5 rounded-full bg-indigo-500/20 hover:bg-indigo-500/35 text-indigo-200 border border-indigo-500/30 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
-                            style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+                            className="px-4 py-2.5 rounded-full border font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer hover:brightness-125"
+                            style={{
+                              background: `${accentColor}18`,
+                              borderColor: `${accentColor}35`,
+                              color: accentColor,
+                              fontFamily: 'Space Grotesk, sans-serif'
+                            }}
                           >
                             View Profile
                           </button>
@@ -354,7 +391,7 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
             ) : topTrack ? (
               <div className="lg:col-span-5 space-y-3">
                 <h2 className="text-[14px] font-bold uppercase tracking-widest text-zinc-400 flex items-center gap-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-                  <Sparkles size={14} className="text-indigo-400" /> Top Result
+                  <Sparkles size={14} style={{ color: accentColor }} /> Top Result
                 </h2>
 
                 <div
@@ -521,10 +558,11 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
 
                           <div className="min-w-0">
                             <h4
-                              className={`text-sm font-bold truncate group-hover:text-white transition-colors ${
-                                isActive ? 'text-indigo-400' : 'text-white/90'
-                              }`}
-                              style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+                              className="text-sm font-bold truncate transition-colors text-white/90 group-hover:text-white"
+                              style={{
+                                color: isActive ? accentColor : undefined,
+                                fontFamily: 'Space Grotesk, sans-serif'
+                              }}
                             >
                               {song.title}
                             </h4>
@@ -566,11 +604,10 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
                             <button
                               onClick={(e) => handleQueueSong(e, song)}
                               title="Add to Priority Queue (Play Next)"
-                              className={`p-1.5 rounded-lg hover:bg-white/10 transition-colors ${
-                                upNextQueue?.some(s => s.id === song.id || s.title === song.title)
-                                  ? 'text-indigo-400'
-                                  : 'text-white/70 hover:text-white'
-                              }`}
+                              className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/70 hover:text-white"
+                              style={{
+                                color: upNextQueue?.some(s => s.id === song.id || s.title === song.title) ? accentColor : undefined
+                              }}
                             >
                               <Plus size={16} />
                             </button>
@@ -698,8 +735,14 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
 
       {/* Floating Queue Toast Feedback */}
       {queueToast && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-zinc-900/95 border border-indigo-500/40 text-white px-4 py-2.5 rounded-full shadow-2xl backdrop-blur-xl flex items-center gap-2.5 animate-in fade-in slide-in-from-bottom-4 duration-200">
-          <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center text-white">
+        <div
+          className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-zinc-900/95 text-white px-4 py-2.5 rounded-full shadow-2xl backdrop-blur-xl flex items-center gap-2.5 animate-in fade-in slide-in-from-bottom-4 duration-200 border"
+          style={{ borderColor: `${accentColor}40`, boxShadow: `0 10px 30px -10px ${accentGlow}` }}
+        >
+          <div
+            className="w-5 h-5 rounded-full flex items-center justify-center font-bold"
+            style={{ background: accentColor, color: '#000000' }}
+          >
             <Check size={12} strokeWidth={3} />
           </div>
           <span className="text-xs font-bold truncate max-w-xs sm:max-w-md" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>

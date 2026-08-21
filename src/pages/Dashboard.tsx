@@ -1071,6 +1071,7 @@ const Dashboard = () => {
                   user={user}
                   onBack={() => setSearchParams({})}
                   onSelectArtist={openArtistProfile}
+                  activeTheme={activeTheme}
                 />
               </div>
             ) : (
