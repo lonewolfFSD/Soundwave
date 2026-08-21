@@ -6,9 +6,6 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 import { execFile } from 'child_process'
 
-import icon_one from './src/images/rounded.png';
-import icon_two from './src/images/rounded.png';
-
 const streamUrlCache = new Map<string, { url: string; timestamp: number }>()
 
 function resolveStreamUrlWithYtDlp(videoId: string, quality: 'best' | 'standard' = 'best'): Promise<string> {
@@ -727,8 +724,8 @@ export default defineConfig({
       scope: '/',
       start_url: '/',
       icons: [
-        { src: icon_one, sizes: '192x192', type: 'image/png' },
-        { src: icon_two, sizes: '512x512', type: 'image/png' }
+        { src: 'https://i.ibb.co/CXZr3cQ/rounded.png', sizes: '192x192', type: 'image/png' },
+        { src: 'https://i.ibb.co/CXZr3cQ/rounded.png', sizes: '512x512', type: 'image/png' }
       ]
     }
   })],
