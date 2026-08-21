@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { usePlayer, Song } from '../context/PlayerContext'
 import { searchYouTubeMusic } from '../utils/ytMusic'
+import { fetchArtistProfile, type ArtistProfile } from '../utils/artistService'
 import { getSongRadioQueue } from '../utils/aiRecommender'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../utils/firebase'
@@ -21,7 +22,9 @@ import {
   Heart,
   Shuffle,
   Plus,
-  Check
+  Check,
+  CheckCircle2,
+  User
 } from 'lucide-react'
 
 interface SearchResultsViewProps {
@@ -35,6 +38,7 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
   const { currentSong, isPlaying, playSong, pauseSong, resumeSong, setQueue, playedHistory, isSongLiked, toggleLikeSong, addToQueue, upNextQueue } = usePlayer()
   const [loading, setLoading] = useState(true)
   const [queueToast, setQueueToast] = useState<string | null>(null)
+  const [matchedArtist, setMatchedArtist] = useState<ArtistProfile | null>(null)
   const [searchResults, setSearchResults] = useState<{
     songs: any[]
     playlists: any[]
@@ -88,14 +92,41 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
             )
         }
 
-        // 3. Search millions of online YouTube Music tracks
-        const ytTracks = await searchYouTubeMusic(queryText)
+        // 3. Search millions of online YouTube Music tracks & Artist Profile concurrently
+        const [ytTracks, artistProfile] = await Promise.all([
+          searchYouTubeMusic(queryText),
+          fetchArtistProfile(queryText.trim()).catch(() => null)
+        ])
+
+        let foundArtist: ArtistProfile | null = null
+        let finalYtTracks = ytTracks || []
+
+        if (artistProfile && artistProfile.name) {
+          const normQ = queryText.toLowerCase().replace(/[^a-z0-9]/g, '')
+          const normName = artistProfile.name.toLowerCase().replace(/[^a-z0-9]/g, '')
+          if (normName.includes(normQ) || normQ.includes(normName) || normName.split(' ').some(w => w === normQ)) {
+            foundArtist = artistProfile
+            if (artistProfile.topSongs && artistProfile.topSongs.length > 0) {
+              const seen = new Set<string>()
+              const merged: Song[] = []
+              for (const s of [...artistProfile.topSongs, ...finalYtTracks]) {
+                const key = (s.title + ' ' + s.artist).toLowerCase().replace(/[^a-z0-9]/g, '')
+                if (!seen.has(key)) {
+                  seen.add(key)
+                  merged.push(s)
+                }
+              }
+              finalYtTracks = merged
+            }
+          }
+        }
 
         if (isMounted) {
+          setMatchedArtist(foundArtist)
           setSearchResults({
             songs: userSongs,
             playlists: userPlaylists,
-            youtube: ytTracks
+            youtube: finalYtTracks
           })
         }
       } catch (err) {
@@ -240,7 +271,87 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             
             {/* ── TOP RESULT HERO CARD (Left Column) ── */}
-            {topTrack && (
+            {matchedArtist ? (
+              <div className="lg:col-span-5 space-y-3">
+                <h2 className="text-[14px] font-bold uppercase tracking-widest text-indigo-400 flex items-center gap-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                  <Sparkles size={14} className="text-indigo-400" /> Top Result • Artist
+                </h2>
+
+                <div
+                  onClick={() => onSelectArtist && onSelectArtist(matchedArtist.name)}
+                  className="relative p-6 rounded-2xl bg-gradient-to-br from-indigo-950/40 via-white/[0.04] to-purple-950/30 border border-indigo-500/20 hover:border-indigo-500/50 transition-all cursor-pointer group shadow-2xl overflow-hidden backdrop-blur-md"
+                >
+                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
+                    {/* Artist Circular Avatar */}
+                    <div className="w-32 h-32 md:w-36 md:h-36 rounded-full overflow-hidden shadow-2xl shrink-0 ring-4 ring-indigo-500/30 group-hover:ring-indigo-400/70 group-hover:scale-105 transition-all duration-300 relative">
+                      {matchedArtist.pictureUrl ? (
+                        <img
+                          src={matchedArtist.pictureUrl}
+                          alt={matchedArtist.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-zinc-900 flex items-center justify-center">
+                          <User size={40} className="text-zinc-600" />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Meta */}
+                    <div className="flex-1 min-w-0 text-center sm:text-left">
+                      <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 mb-2">
+                        Artist
+                      </span>
+                      <h3
+                        className="text-xl md:text-2xl font-extrabold text-white truncate flex items-center justify-center sm:justify-start gap-2 group-hover:text-indigo-300 transition-colors"
+                        style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+                      >
+                        {matchedArtist.name}
+                        <CheckCircle2 size={18} className="text-indigo-400 fill-indigo-400/20 shrink-0" />
+                      </h3>
+                      {matchedArtist.monthlyListeners ? (
+                        <p className="text-xs text-zinc-400 font-medium truncate mt-1" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                          {matchedArtist.monthlyListeners}
+                        </p>
+                      ) : matchedArtist.genres && matchedArtist.genres.length > 0 ? (
+                        <p className="text-xs text-zinc-400 font-medium truncate mt-1" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                          {matchedArtist.genres.slice(0, 2).join(' • ')}
+                        </p>
+                      ) : null}
+
+                      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 mt-5">
+                        {matchedArtist.topSongs && matchedArtist.topSongs.length > 0 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handlePlaySong(matchedArtist.topSongs[0])
+                              if (setQueue) setQueue(matchedArtist.topSongs)
+                            }}
+                            className="px-5 py-2.5 rounded-full bg-white text-black font-extrabold text-xs flex items-center gap-2 shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                            style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+                          >
+                            <Play size={15} fill="currentColor" className="ml-0.5" /> Play Top Hits
+                          </button>
+                        )}
+
+                        {onSelectArtist && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onSelectArtist(matchedArtist.name)
+                            }}
+                            className="px-4 py-2.5 rounded-full bg-indigo-500/20 hover:bg-indigo-500/35 text-indigo-200 border border-indigo-500/30 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                            style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+                          >
+                            View Profile
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : topTrack ? (
               <div className="lg:col-span-5 space-y-3">
                 <h2 className="text-[14px] font-bold uppercase tracking-widest text-zinc-400 flex items-center gap-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                   <Sparkles size={14} className="text-indigo-400" /> Top Result
@@ -370,7 +481,7 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
                   </div>
                 </div>
               </div>
-            )}
+            ) : null}
 
             {/* ── SONGS LIST (Right Column) ── */}
             {otherTracks.length > 0 && (
