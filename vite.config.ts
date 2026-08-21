@@ -2,7 +2,12 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+import { VitePWA } from 'vite-plugin-pwa'
+
 import { execFile } from 'child_process'
+
+import icon_one from './src/images/rounded.png';
+import icon_two from './src/images/rounded.png';
 
 const streamUrlCache = new Map<string, { url: string; timestamp: number }>()
 
@@ -708,7 +713,25 @@ function youtubeMusicPlugin() {
 
 export default defineConfig({
   base: "./",
-  plugins: [react(), youtubeMusicPlugin()],
+    plugins: [react(), youtubeMusicPlugin(), VitePWA({
+    registerType: 'autoUpdate',
+    workbox: {
+      globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+    },
+    manifest: {
+      name: 'Soundwave',
+      short_name: 'Soundwave',
+      theme_color: '#000000',
+      background_color: '#000000',
+      display: 'standalone',
+      scope: '/',
+      start_url: '/',
+      icons: [
+        { src: icon_one, sizes: '192x192', type: 'image/png' },
+        { src: icon_two, sizes: '512x512', type: 'image/png' }
+      ]
+    }
+  })],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
