@@ -178,6 +178,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [localDeviceInfo, setLocalDeviceInfo] = useState<DeviceInfo>(() => detectDeviceInfo())
   const [connectedDevices, setConnectedDevices] = useState<DeviceInfo[]>([])
   const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null)
+  const activeDeviceIdRef = useRef<string | null>(null)
   const [activeDeviceName, setActiveDeviceName] = useState<string>('')
   const [showDevicePicker, setShowDevicePicker] = useState(false)
   const isSyncingFromRemoteRef = useRef(false)
@@ -192,8 +193,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const isRemotePlaybackRef = useRef(false)
 
   useEffect(() => {
-    isRemotePlaybackRef.current = isRemotePlayback
-  }, [isRemotePlayback])
+    activeDeviceIdRef.current = activeDeviceId
+    isRemotePlaybackRef.current = !!(activeDeviceId && activeDeviceId !== currentDeviceId)
+  }, [activeDeviceId, currentDeviceId])
 
   useEffect(() => {
     currentSongRef.current = currentSong
@@ -271,8 +273,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           return
         }
 
-        // 2. Playback is active on THIS DEVICE
+        // 2. Playback is active on THIS DEVICE (This device is the Host)
         if (remoteState.activeDeviceId === currentDeviceId) {
+          activeDeviceIdRef.current = currentDeviceId
+          isRemotePlaybackRef.current = false
           setActiveDeviceId(currentDeviceId)
           setActiveDeviceName(localDeviceInfo.name)
 
@@ -317,7 +321,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           if (remoteState.isPlaying) {
             if (!isSameSong || !isLocalPlaying) {
               isSyncingFromRemoteRef.current = true
-              await playSong(remoteState.currentSong, false, targetPos)
+              await playSong(remoteState.currentSong, false, targetPos, true)
               setTimeout(() => { isSyncingFromRemoteRef.current = false }, 500)
             } else {
               if (Math.abs(currentTime - targetPos) > 3) {
@@ -1056,7 +1060,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, []);
 
-  const playSong = async (song: Song, addToHistory = true, startPosition = 0) => {
+  const playSong = async (song: Song, addToHistory = true, startPosition = 0, forceLocal = false) => {
     if (!song) return
 
     initAudioGraph()
@@ -1087,10 +1091,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     // Cross-Device Playback Sync & Remote Control Mode
     const currentUser = auth.currentUser
-    if (isRemotePlaybackRef.current && currentUser && !isInJam && !isSyncingFromRemoteRef.current) {
+    if (!forceLocal && isRemotePlaybackRef.current && currentUser && !isInJam && !isSyncingFromRemoteRef.current) {
       setIsPlaying(true)
       await syncPlaybackState(currentUser.uid, {
-        activeDeviceId,
+        activeDeviceId: activeDeviceIdRef.current || activeDeviceId,
         activeDeviceName,
         senderDeviceId: currentDeviceId,
         currentSong: song,
@@ -1106,6 +1110,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     if (currentUser && !isInJam && !isSyncingFromRemoteRef.current) {
+      activeDeviceIdRef.current = currentDeviceId
+      isRemotePlaybackRef.current = false
       setActiveDeviceId(currentDeviceId)
       setActiveDeviceName(localDeviceInfo.name)
       syncPlaybackState(currentUser.uid, {
