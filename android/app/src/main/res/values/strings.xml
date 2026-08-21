@@ -4,6 +4,7 @@
     <string name="title_activity_main">Soundwave Music</string>
     <string name="package_name">com.lonewolffsd.soundwave</string>
     <string name="custom_url_scheme">com.lonewolffsd.soundwave</string>
+    <string name="default_web_client_id">928688843298-tuvkab8jhcphjuuf2ee36ogu0054t30d.apps.googleusercontent.com</string>
 
     <!-- Shortcut Labels -->
     <string name="shortcut_search">Search</string>

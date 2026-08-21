@@ -211,12 +211,14 @@ const Login = () => {
     setError('');
     try {
       if (Capacitor.isNativePlatform()) {
-        const result = await FirebaseAuthentication.signInWithGoogle({
-          useCredentialManager: false
-        });
-        const credential = GoogleAuthProvider.credential(result.credential?.idToken);
-        const userCredential = await signInWithCredential(auth, credential);
-        await ensureUserInFirestore(userCredential.user);
+        const result = await FirebaseAuthentication.signInWithGoogle();
+        if (result.credential?.idToken) {
+          const credential = GoogleAuthProvider.credential(result.credential.idToken);
+          const userCredential = await signInWithCredential(auth, credential);
+          await ensureUserInFirestore(userCredential.user);
+        } else if (result.user) {
+          await ensureUserInFirestore(result.user as any);
+        }
         navigate('/dashboard');
       } else {
         const result = await signInWithPopup(auth, googleProvider);
