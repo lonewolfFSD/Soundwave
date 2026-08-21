@@ -29,6 +29,9 @@ declare global {
   }
 }
 
+// Silent 1-second WAV audio loop to hold browser audio session permanently active for remote casting & prevent background throttling
+const SILENT_AUDIO_URI = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'
+
 export interface Song {
   id: string
   title: string
@@ -102,6 +105,7 @@ const PlayerContext = createContext<PlayerContextType | null>(null)
 
 export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const audioRef = useRef<HTMLAudioElement>(null)
+  const silentAudioRef = useRef<HTMLAudioElement>(null)
   const ytPlayerRef = useRef<any>(null)
   const activeEngineRef = useRef<'html5' | 'youtube'>('html5')
   const isAdvancingRef = useRef(false)
@@ -171,11 +175,22 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [])
 
-  useEffect(() => {
-    const unlockAudio = () => {
+  // ── BACKGROUND AUDIO SESSION KEEPER & AUTOPLAY UNLOCK ──
+  const startSilentAudioKeeper = () => {
+    try {
+      if (silentAudioRef.current) {
+        silentAudioRef.current.volume = 0.001
+        silentAudioRef.current.play().catch(() => {})
+      }
       if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
         audioCtxRef.current.resume().catch(() => {})
       }
+    } catch {}
+  }
+
+  useEffect(() => {
+    const unlockAudio = () => {
+      startSilentAudioKeeper()
     }
 
     window.addEventListener('pointerdown', unlockAudio, { once: true })
@@ -1224,7 +1239,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           .catch(e => console.error("Audio playback error:", e))
       }
     } else {
-      // 🌟 Official YouTube Stream Player (100% Full Song, 0 Previews, 0 Backend Dependencies)
+      // 🌟 Official YouTube Stream Player + Resilient Direct Audio Fallback
       let videoId = extractYoutubeVideoId(song.id) ||
                     extractYoutubeVideoId((song as any).youtubeId) ||
                     extractYoutubeVideoId(song.youtubeUrl) ||
@@ -1238,12 +1253,58 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         activeEngineRef.current = 'youtube'
         try { audioRef.current?.pause() } catch {}
 
+        let fallbackTriggered = false
+        const fallbackToDirectStream = async () => {
+          if (fallbackTriggered) return
+          fallbackTriggered = true
+          try {
+            const streamUrl = await getAudioStreamUrl(videoId, song.title, song.artist)
+
+            // Reject watch-page URLs — these are not direct audio streams
+            const isValidAudioStream = streamUrl &&
+              !streamUrl.includes('youtube.com/watch') &&
+              !streamUrl.includes('youtu.be/') &&
+              (
+                streamUrl.includes('yt-stream') ||
+                streamUrl.includes('.mp3') ||
+                streamUrl.includes('.m4a') ||
+                streamUrl.includes('.ogg') ||
+                streamUrl.includes('.webm') ||
+                streamUrl.includes('googlevideo.com') ||
+                streamUrl.includes('audio') ||
+                streamUrl.startsWith('http') ||
+                streamUrl.startsWith('/') ||
+                streamUrl.startsWith('blob:') ||
+                streamUrl.startsWith('data:')
+              )
+
+            if (isValidAudioStream && audioRef.current) {
+              activeEngineRef.current = 'html5'
+              try { ytPlayerRef.current?.pauseVideo() } catch {}
+              audioRef.current.loop = false
+              audioRef.current.crossOrigin = 'anonymous'
+              audioRef.current.src = streamUrl
+              audioRef.current.volume = volumeRef.current
+              audioRef.current.muted = false
+              await audioRef.current.play()
+              if (startPosition > 0) audioRef.current.currentTime = startPosition
+              setIsPlaying(true)
+            } else if (streamUrl) {
+              console.warn('getAudioStreamUrl returned a non-streamable URL (likely a watch page). Skipping direct stream fallback:', streamUrl)
+              // Don't assign it — let the YouTube IFrame player handle it
+            }
+          } catch (streamErr) {
+            console.error('Direct audio stream fallback failed:', streamErr)
+          }
+        }
+
+        let attempts = 0
         const playYt = () => {
+          attempts++
           if (ytPlayerRef.current && typeof ytPlayerRef.current.loadVideoById === 'function') {
             try {
-              ytPlayerRef.current.unMute()
-              ytPlayerRef.current.setVolume(volume * 100)
               ytPlayerRef.current.loadVideoById({ videoId, startSeconds: startPosition })
+              ytPlayerRef.current.unMute()
 
               if (cfSec > 0 && startPosition === 0) {
                 ytPlayerRef.current.setVolume(1)
@@ -1270,24 +1331,30 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 setTimeout(() => { try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {} }, 1200)
               }
 
-              // Multi-tick play invocation for smooth autoplay across devices
+              // Verify if playback actually started (catch Autoplay blocks or stuck buffering)
+              const verifyDelay = forceLocal ? 750 : 2000
               setTimeout(() => {
                 try {
-                  ytPlayerRef.current?.unMute()
-                  ytPlayerRef.current?.playVideo()
-                } catch {}
-              }, 250)
-              setTimeout(() => {
-                try {
-                  ytPlayerRef.current?.unMute()
-                  ytPlayerRef.current?.playVideo()
-                } catch {}
-              }, 600)
+                  const state = ytPlayerRef.current?.getPlayerState()
+                  // If not Playing (1) and not Buffering (3), force direct audio stream fallback immediately
+                  if (state !== 1 && state !== 3) {
+                    console.warn('YouTube playback stalled or blocked by autoplay. Forcing direct stream fallback.')
+                    fallbackToDirectStream()
+                  }
+                } catch (e) {
+                  fallbackToDirectStream()
+                }
+              }, verifyDelay)
             } catch (e) {
-              console.warn('YouTube Player load error:', e)
+              console.warn('YouTube Player load error, using stream fallback:', e)
+              fallbackToDirectStream()
             }
           } else {
-            setTimeout(playYt, 200)
+            if (attempts > 5) {
+              fallbackToDirectStream()
+            } else {
+              setTimeout(playYt, 250)
+            }
           }
         }
         playYt()
@@ -1748,6 +1815,15 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     >
       {children}
       <audio ref={audioRef} crossOrigin="anonymous" preload="auto" />
+      {/* 🔇 Silent Audio Session Keeper: keeps tab alive & bypasses autoplay blocks for remote casting */}
+      <audio
+        ref={silentAudioRef}
+        src={SILENT_AUDIO_URI}
+        loop
+        preload="auto"
+        playsInline
+        style={{ display: 'none' }}
+      />
       {/* 🌟 Global Official YouTube Stream Bridge for Full-Length Playback */}
       <div
         id="soundwave-global-yt-player-container"
