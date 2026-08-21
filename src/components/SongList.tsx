@@ -33,6 +33,7 @@ import {
 import type { Song } from '../context/PlayerContext'
 import { searchYouTubeMusic, getTrendingYouTubeMusic } from '../utils/ytMusic'
 import { fetchArtistProfile } from '../utils/artistService'
+import { getPlaylistVibeRecommendations } from '../utils/aiRecommender'
 
 import SongUpload from './SongUpload'
 import { Capacitor } from '@capacitor/core';
@@ -280,65 +281,13 @@ const SongList: React.FC<SongListProps> = ({ playlistId }) => {
     return true;
   };
 
-  // --- FETCH SPOTIFY-STYLE SMART PLAYLIST RECOMMENDATIONS ---
+  // --- FETCH SPOTIFY-STYLE SMART PLAYLIST VIBE RECOMMENDATIONS ---
   const fetchRecommendations = async () => {
     if (!playlistId) return;
     setLoadingRecs(true);
     try {
-      let candidatePool: Song[] = [];
-
-      if (songs.length > 0) {
-        const uniqueArtists = Array.from(new Set(songs.map(s => s.artist).filter(Boolean)));
-        const shuffledArtists = [...uniqueArtists].sort(() => 0.5 - Math.random());
-        const selectedArtists = shuffledArtists.slice(0, 3);
-
-        // 1. Fetch official artist top songs concurrently
-        const artistPromises = selectedArtists.map(async (artist) => {
-          try {
-            const profile = await fetchArtistProfile(artist);
-            if (profile && profile.topSongs && profile.topSongs.length > 0) {
-              return profile.topSongs;
-            }
-          } catch {}
-          return searchYouTubeMusic(`${artist} official audio`);
-        });
-
-        // 2. Also search tracks related to a random song in the playlist
-        const randomSong = songs[Math.floor(Math.random() * songs.length)];
-        const songRelatedPromise = randomSong
-          ? searchYouTubeMusic(`${randomSong.title} ${randomSong.artist || ''}`)
-          : Promise.resolve([]);
-
-        const results = await Promise.all([...artistPromises, songRelatedPromise]);
-        candidatePool = results.flat();
-      } else {
-        // Empty playlist: Recommend global trending hits
-        const trending = await getTrendingYouTubeMusic();
-        candidatePool = trending;
-      }
-
-      // Existing playlist song signatures for strict deduplication
-      const existingIds = new Set(songs.map(s => s.id));
-      const existingTitles = new Set(
-        songs.map(s => `${s.title.toLowerCase().replace(/[^a-z0-9]/g, '')}_${(s.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '')}`)
-      );
-
-      const seenInBatch = new Set<string>();
-      const filtered: Song[] = [];
-
-      for (const r of candidatePool) {
-        if (!isGenuineSong(r)) continue;
-        if (existingIds.has(r.id)) continue;
-
-        const normSig = `${r.title.toLowerCase().replace(/[^a-z0-9]/g, '')}_${(r.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-        if (existingTitles.has(normSig) || seenInBatch.has(normSig)) continue;
-
-        seenInBatch.add(normSig);
-        filtered.push(r);
-      }
-
-      // Shuffle candidates and provide 10 top individual songs
-      setRecommendedSongs(filtered.sort(() => 0.5 - Math.random()).slice(0, 10));
+      const recs = await getPlaylistVibeRecommendations(songs);
+      setRecommendedSongs(recs);
     } catch (err) {
       console.error('Failed to fetch recommendations:', err);
     } finally {
@@ -590,7 +539,7 @@ const SongList: React.FC<SongListProps> = ({ playlistId }) => {
               <Music className={`w-16 h-16 mb-4 ${emptyIconColor}`} />
               <h3 className={`text-2xl font-bold mb-2 ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Your playlist is empty</h3>
               <p className={`text-sm max-w-sm ${textMuted} mb-6`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-                Search for songs on YouTube Music or check out the recommendations below to add tracks.
+                Search for songs or check out the recommendations below to add tracks to your playlist.
               </p>
               <div className="flex items-center gap-3">
                 <button onClick={handleFocusAddSongs} className={`px-6 py-2.5 rounded-full font-bold text-xs flex items-center gap-2 ${reduceMotion ? '' : 'transition-all hover:scale-105'} ${primaryBtn}`}>
@@ -728,10 +677,10 @@ const SongList: React.FC<SongListProps> = ({ playlistId }) => {
                 </h3>
                 <p className="text-xs text-zinc-400 font-medium mt-1" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                   {searchQuery.trim() 
-                    ? `Searching YouTube Music for "${searchQuery}"`
+                    ? `Search results for "${searchQuery}"`
                     : songs.length > 0 
-                      ? "Based on what's in this playlist" 
-                      : "Popular songs to get your playlist started"}
+                      ? "Based on the vibe of this playlist" 
+                      : "Popular tracks to get your playlist started"}
                 </p>
               </div>
 
@@ -765,7 +714,7 @@ const SongList: React.FC<SongListProps> = ({ playlistId }) => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search for songs or artists on YouTube Music..."
+                placeholder="Search for songs or artists..."
                 className="w-full pl-11 pr-10 py-3 rounded-xl bg-white/[0.06] border border-white/10 focus:border-white/30 text-white placeholder-zinc-500 text-sm outline-none transition-all"
                 style={{ fontFamily: 'Space Grotesk, sans-serif' }}
               />

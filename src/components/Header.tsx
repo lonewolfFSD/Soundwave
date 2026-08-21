@@ -584,7 +584,7 @@ const Header: React.FC<HeaderProps> = ({ user, onSelectPlaylist }) => {
                       handleSelectQuery(searchQuery);
                     }
                   }}
-                  placeholder="Search songs, artists, YouTube Music..."
+                  placeholder="Search songs, artists, albums..."
                   style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                   className={`w-full ${inputBg} border ${headerBorder} rounded-xl py-3 pl-11 pr-10 text-[13px] text-white focus:outline-none transition-colors duration-300`}
                 />

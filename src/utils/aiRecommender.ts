@@ -794,3 +794,187 @@ export const generateFeaturedMixes = (
   return mixes
 }
 
+// ── ARTIST SIMILARITY / VIBE CLUSTERS ──
+const SIMILAR_ARTIST_CLUSTERS: Record<string, string[]> = {
+  // Party / Dance / Latin / Pop
+  pitbull: ['Flo Rida', 'Sean Paul', 'Kesha', 'David Guetta', 'LMFAO', 'Taio Cruz', 'Akon', 'Black Eyed Peas', 'Calvin Harris', 'Afrojack', 'Daddy Yankee', 'J Balvin'],
+  'flo rida': ['Pitbull', 'Taio Cruz', 'Sean Paul', 'LMFAO', 'Kesha', 'David Guetta', 'B.o.B', 'Jason Derulo'],
+  'sean paul': ['Shaggy', 'Pitbull', 'Major Lazer', 'Rihanna', 'Kranium', 'Shenseea', 'Beenie Man'],
+  'david guetta': ['Calvin Harris', 'Avicii', 'Tiësto', 'Afrojack', 'Alesso', 'Swedish House Mafia', 'Martin Garrix', 'Pitbull'],
+  
+  // Pop / Teen Pop / Synth-Pop
+  'sabrina carpenter': ['Olivia Rodrigo', 'Chappell Roan', 'Tate McRae', 'Gracie Abrams', 'Madison Beer', 'Dua Lipa', 'Camila Cabello', 'Billie Eilish'],
+  'olivia rodrigo': ['Sabrina Carpenter', 'Chappell Roan', 'Billie Eilish', 'Conan Gray', 'Gracie Abrams', 'Lorde', 'Paramore', 'Phoebe Bridgers'],
+  'chappell roan': ['Sabrina Carpenter', 'Olivia Rodrigo', 'Reneé Rapp', 'Charli xcx', 'Troye Sivan', 'Lorde', 'Lady Gaga'],
+  'tate mcrae': ['Sabrina Carpenter', 'Olivia Rodrigo', 'Madison Beer', 'Nessa Barrett', 'Dua Lipa', 'Zara Larsson'],
+  'taylor swift': ['Phoebe Bridgers', 'Kacey Musgraves', 'Lorde', 'Lana Del Rey', 'Maisie Peters', 'Gracie Abrams', 'Olivia Rodrigo', 'Bleachers'],
+  'dua lipa': ['Sabrina Carpenter', 'Ava Max', 'Bebe Rexha', 'Kylie Minogue', 'Charli xcx', 'Doja Cat', 'Calvin Harris'],
+  'billie eilish': ['FINNEAS', 'Lorde', 'Lana Del Rey', 'Girl in Red', 'Clairo', 'Olivia Rodrigo', 'Melanie Martinez'],
+  'ariana grande': ['Victoria Monét', 'Camila Cabello', 'Selena Gomez', 'Doja Cat', 'Normani', 'SZA'],
+
+  // R&B / Dark Pop / Neo-Soul / Alternative R&B
+  'the weeknd': ['SZA', 'Post Malone', 'Frank Ocean', 'Joji', 'Travis Scott', 'Brent Faiyaz', 'Giveon', 'Daniel Caesar', 'Daft Punk'],
+  'sza': ['Summer Walker', 'Jhené Aiko', 'Kehlani', 'The Weeknd', 'Frank Ocean', 'Brent Faiyaz', 'Snoh Aalegra', 'Kali Uchis'],
+  'post malone': ['The Weeknd', 'Juice WRLD', 'Swae Lee', 'Khalid', '24kGoldn', 'Iann Dior', 'The Kid LAROI'],
+  'frank ocean': ['Daniel Caesar', 'Steve Lacy', 'Tyler, The Creator', 'Brent Faiyaz', 'Joji', 'The Weeknd', 'Dominic Fike'],
+  'brent faiyaz': ['Giveon', 'Daniel Caesar', 'SZA', 'Frank Ocean', 'SiR', 'Summer Walker', 'PartyNextDoor'],
+
+  // Hip Hop / Trap / Modern Rap
+  drake: ['Travis Scott', '21 Savage', 'Future', 'Lil Baby', 'Post Malone', 'Jack Harlow', 'Gunna', 'Kendrick Lamar'],
+  'travis scott': ['Don Toliver', 'Future', 'Playboi Carti', 'Metro Boomin', '21 Savage', 'Sheck Wes', 'Young Thug', 'Drake'],
+  'kendrick lamar': ['J. Cole', 'Baby Keem', 'Pusha T', 'Tyler, The Creator', 'ScHoolboy Q', 'Vince Staples', 'Freddie Gibbs'],
+  eminem: ['50 Cent', 'Dr. Dre', 'Snoop Dogg', 'Royce da 5\'9"', '2Pac', 'Tech N9ne', 'Joyner Lucas', 'NF'],
+
+  // Rock / Indie Rock / Alternative
+  'arctic monkeys': ['The Strokes', 'The Neighbourhood', 'Cage the Elephant', 'The 1975', 'Franz Ferdinand', 'Foals', 'Two Door Cinema Club'],
+  'the neighbourhood': ['Arctic Monkeys', 'Chase Atlantic', 'Lana Del Rey', 'Wallows', 'TV Girl', 'Cigarettes After Sex'],
+  'coldplay': ['Imagine Dragons', 'OneRepublic', 'The Fray', 'Snow Patrol', 'Keane', 'The Script', 'U2', 'Bastille'],
+
+  // EDM / Dance
+  avicii: ['Kygo', 'Martin Garrix', 'Swedish House Mafia', 'Alesso', 'Zedd', 'Calvin Harris', 'The Chainsmokers', 'Galantis'],
+  kygo: ['Avicii', 'Gryffin', 'Robin Schulz', 'Jonas Blue', 'Sam Feldt', 'The Chainsmokers', 'Felix Jaehn'],
+  'the chainsmokers': ['Zedd', 'Marshmello', 'Kygo', 'Martin Garrix', 'Illenium', 'Cheat Codes', 'Bebe Rexha'],
+
+  // Bollywood / Indian Pop
+  'arijit singh': ['Shreya Ghoshal', 'Atif Aslam', 'Mohit Chauhan', 'Pritam', 'Jubin Nautiyal', 'Armaan Malik', 'Vishal Mishra'],
+  'anuv jain': ['Prateek Kuhad', 'Jasleen Royal', 'When Chai Met Toast', 'Zaeden', 'The Local Train', 'Aditya A'],
+  'ap dhillon': ['Gurinder Gill', 'Shubh', 'Karan Aujla', 'Diljit Dosanjh', 'Sidhu Moose Wala', 'Tegi Pannu']
+}
+
+/**
+ * Intelligent Playlist Vibe Recommender
+ * Discovers similar-sounding tracks and same-vibe artists rather than repeating the playlist's artists
+ */
+export const getPlaylistVibeRecommendations = async (playlistSongs: Song[]): Promise<Song[]> => {
+  if (!playlistSongs || playlistSongs.length === 0) {
+    // If playlist is empty, return top trending tracks
+    try {
+      const res = await fetch('https://itunes.apple.com/us/rss/topsongs/limit=50/json')
+      if (res.ok) {
+        const data = await res.json()
+        const entries = data.feed?.entry || []
+        const trending = entries.map((entry: any) => {
+          const title = entry['im:name']?.label || 'Top Hit'
+          const artist = entry['im:artist']?.label || 'Top Artist'
+          const rawCover = entry['im:image']?.[2]?.label || entry['im:image']?.[0]?.label
+          const cover = rawCover ? rawCover.replace(/170x170bb/g, '600x600bb') : ''
+          const trackId = entry.id?.attributes?.['im:id'] || Math.random().toString(36).slice(2, 9)
+          return {
+            id: `top_${trackId}`,
+            title,
+            artist,
+            duration: 210,
+            url: '',
+            previewUrl: '',
+            playlistId: 'trending',
+            coverArtBase64: cover,
+            youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + ' ' + artist)}`
+          }
+        })
+        return trending.sort(() => 0.5 - Math.random()).slice(0, 10)
+      }
+    } catch {}
+    return []
+  }
+
+  const existingTitles = new Set(playlistSongs.map(s => s.title.toLowerCase().replace(/[^a-z0-9]/g, '')))
+  const existingArtists = new Set(playlistSongs.map(s => (s.artist || '').toLowerCase().trim()))
+  const existingIds = new Set(playlistSongs.map(s => s.id))
+
+  const candidatePool: Song[] = []
+  const seenSigs = new Set<string>()
+
+  // 1. Extract similar artists for each artist in the playlist
+  const similarArtistNames: string[] = []
+  for (const art of existingArtists) {
+    if (!art) continue
+    const norm = art.toLowerCase().trim()
+    if (SIMILAR_ARTIST_CLUSTERS[norm]) {
+      similarArtistNames.push(...SIMILAR_ARTIST_CLUSTERS[norm])
+    }
+  }
+
+  // Shuffle and pick 4 distinct similar artists
+  const distinctSimilar = Array.from(new Set(similarArtistNames))
+    .filter(a => !existingArtists.has(a.toLowerCase().trim()))
+    .sort(() => 0.5 - Math.random())
+    .slice(0, 5)
+
+  // 2. Fetch top songs of those similar artists
+  const similarPromises = distinctSimilar.map(async (similarArtist) => {
+    try {
+      const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(similarArtist)}&media=music&entity=song&limit=10`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.results && Array.isArray(data.results)) {
+          return data.results.map((item: any) => {
+            const highCover = item.artworkUrl100
+              ? item.artworkUrl100.replace('100x100bb.jpg', '600x600bb.jpg').replace('100x100bb', '600x600bb')
+              : item.artworkUrl60
+            return {
+              id: `vibe_${item.trackId}`,
+              title: item.trackName || 'Unknown Title',
+              artist: item.artistName || similarArtist,
+              duration: item.trackTimeMillis ? Math.round(item.trackTimeMillis / 1000) : 210,
+              url: item.previewUrl || `yt_online://${item.trackId}`,
+              previewUrl: item.previewUrl || '',
+              playlistId: 'vibe_rec',
+              coverArtBase64: highCover,
+              youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent((item.trackName || '') + ' ' + (item.artistName || similarArtist))}`
+            }
+          })
+        }
+      }
+    } catch {}
+    return []
+  })
+
+  // 3. Concurrently fetch YouTube Music style UpNext Radio tracks from a random playlist seed song
+  const randomSeed = playlistSongs[Math.floor(Math.random() * playlistSongs.length)]
+  const radioPromise = (async () => {
+    try {
+      let seedYoutubeId = extractYoutubeVideoId(randomSeed?.id) ||
+                          extractYoutubeVideoId((randomSeed as any)?.youtubeId) ||
+                          extractYoutubeVideoId(randomSeed?.youtubeUrl)
+      if (!seedYoutubeId && randomSeed?.title) {
+        seedYoutubeId = await findYouTubeVideoId(randomSeed.title, randomSeed.artist || '')
+      }
+      if (seedYoutubeId) {
+        const res = await fetch(`/api/yt-upnext?id=${seedYoutubeId}`, { signal: AbortSignal.timeout(6000) })
+        if (res.ok) {
+          const items = await res.json()
+          if (Array.isArray(items)) return items
+        }
+      }
+    } catch {}
+    return []
+  })()
+
+  const [similarResults, radioResults] = await Promise.all([
+    Promise.all(similarPromises),
+    radioPromise
+  ])
+
+  const allFetched = [...similarResults.flat(), ...radioResults]
+
+  for (const song of allFetched) {
+    if (!song || !song.title) continue
+
+    const tNorm = song.title.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const aNorm = (song.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+    const sig = `${tNorm}_${aNorm}`
+
+    // Check blacklist keywords
+    const blacklistRegex = /\b(playlist|songs playlist|greatest hits|full album|best of|top \d+ songs|all songs|billboard hot 100|nonstop|non stop|dj mix|mega mix|party mix|lofi mix|chill mix|mix \d+|1 hour|2 hours|3 hours|10 hours|soundtrack full|ost full|discography|anthology|music mix|mashup collection|album #\d+)\b/i
+    if (blacklistRegex.test(`${song.title} ${song.artist}`)) continue
+
+    if (song.duration && (song.duration > 480 || song.duration < 35)) continue
+    if (existingIds.has(song.id) || existingTitles.has(tNorm) || seenSigs.has(sig)) continue
+
+    seenSigs.add(sig)
+    candidatePool.push(song)
+  }
+
+  return candidatePool.sort(() => 0.5 - Math.random()).slice(0, 10)
+}
+

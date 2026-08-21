@@ -1884,7 +1884,7 @@ useEffect(() => {
                 <RefreshCw size={20} className={isRefetching ? `animate-spin ${activeColor} shrink-0` : `${textMuted} shrink-0`} />
                 <div className="flex flex-col min-w-0 flex-1">
                   <span className="text-[14.5px] font-medium">Refetch</span>
-                  <span className={`text-[11.5px] ${textMuted} truncate`}>Refetching the stream from YouTube Music</span>
+                  <span className={`text-[11.5px] ${textMuted} truncate`}>Refetch high-quality stream</span>
                 </div>
               </button>
 
@@ -1988,7 +1988,7 @@ useEffect(() => {
                 </div>
                 <div className="flex justify-between py-1 border-b border-white/5">
                   <span className={textMuted}>Stream Source</span>
-                  <span className={`font-bold ${textMain}`}>YouTube Music Engine</span>
+                  <span className={`font-bold ${textMain}`}>Soundwave Hi-Fi Engine</span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-white/5">
                   <span className={textMuted}>Storage Status</span>
