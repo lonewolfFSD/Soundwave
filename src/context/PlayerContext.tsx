@@ -1220,7 +1220,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           fallbackTriggered = true
           try {
             const streamUrl = await getAudioStreamUrl(videoId, song.title, song.artist)
-            if (streamUrl && audioRef.current) {
+
+            // Reject watch-page URLs — these are not audio streams and CORS-blocked by browsers
+            const isValidAudioStream = streamUrl &&
+              !streamUrl.includes('youtube.com/watch') &&
+              !streamUrl.includes('youtu.be/') &&
+              (
+                streamUrl.includes('.mp3') ||
+                streamUrl.includes('.m4a') ||
+                streamUrl.includes('.ogg') ||
+                streamUrl.includes('.webm') ||
+                streamUrl.includes('googlevideo.com') ||
+                streamUrl.includes('audio') ||
+                streamUrl.startsWith('blob:') ||
+                streamUrl.startsWith('data:')
+              )
+
+            if (isValidAudioStream && audioRef.current) {
               activeEngineRef.current = 'html5'
               try { ytPlayerRef.current?.pauseVideo() } catch {}
               audioRef.current.loop = false
@@ -1231,6 +1247,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               await audioRef.current.play()
               if (startPosition > 0) audioRef.current.currentTime = startPosition
               setIsPlaying(true)
+            } else if (streamUrl) {
+              console.warn('getAudioStreamUrl returned a non-streamable URL (likely a watch page). Skipping direct stream fallback:', streamUrl)
+              // Don't assign it — let the YouTube IFrame player handle it
             }
           } catch (streamErr) {
             console.error('Direct audio stream fallback failed:', streamErr)
