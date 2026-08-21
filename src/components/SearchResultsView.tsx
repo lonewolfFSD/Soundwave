@@ -126,18 +126,25 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
     return unique
   }
 
-  const handlePlaySong = (song: Song) => {
+  const handlePlaySong = async (song: Song) => {
     const isActive = currentSong?.id === song.id || (currentSong?.title === song.title && currentSong?.artist === song.artist)
     if (isActive) {
       if (isPlaying) pauseSong()
       else resumeSong()
     } else {
-      const allSongs = getAllSearchSongs()
-      const effectiveQueue = allSongs.length > 0 ? allSongs : [song]
-      if (setQueue) {
-        setQueue(effectiveQueue)
-      }
+      // 1. Play clicked track immediately
       playSong(song)
+      if (setQueue) setQueue([song])
+
+      // 2. Concurrently generate YouTube Music style similar-vibe radio queue
+      try {
+        const radioVibeQueue = await getSongRadioQueue(song, [], playedHistory, 25)
+        if (radioVibeQueue.length > 0 && setQueue) {
+          setQueue([song, ...radioVibeQueue])
+        }
+      } catch (err) {
+        console.warn('Radio queue generation failed:', err)
+      }
     }
   }
 

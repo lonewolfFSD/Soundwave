@@ -1,5 +1,6 @@
 // Machine Learning Acoustic & Mood Classifier and Smooth Transition Engine
 import type { Song } from '../context/PlayerContext'
+import { extractYoutubeVideoId, findYouTubeVideoId } from './ytMusic'
 
 export interface MusicCategory {
   id: string
@@ -271,7 +272,7 @@ export const getSongRadioQueue = async (
   seedSong: Song,
   localCandidatePool: Song[] = [],
   history: Song[] = [],
-  limit = 20
+  limit = 25
 ): Promise<Song[]> => {
   if (!seedSong) return []
 
@@ -279,7 +280,6 @@ export const getSongRadioQueue = async (
     (t || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim()
 
   const seedNormTitle = normalizeTitle(seedSong.title)
-  // Extract significant words (> 3 chars) from seed title
   const seedTitleWords = (seedSong.title || '')
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, '')
@@ -293,7 +293,6 @@ export const getSongRadioQueue = async (
     if (norm.length > 3 && seedNormTitle.length > 3) {
       if (norm.includes(seedNormTitle) || seedNormTitle.includes(norm)) return true
     }
-    // Check if candidate contains the primary title keyword
     if (seedTitleWords.length > 0) {
       const matchCount = seedTitleWords.filter(w => norm.includes(w)).length
       if (matchCount >= Math.min(2, seedTitleWords.length)) return true
@@ -301,133 +300,178 @@ export const getSongRadioQueue = async (
     return false
   }
 
+  const isJunkOrCover = (title: string): boolean => {
+    const low = (title || '').toLowerCase()
+    const seedLow = (seedSong.title || '').toLowerCase()
+
+    const junkPatterns = [
+      /\bcover\b/i,
+      /\btribute\b/i,
+      /\bkaraoke\b/i,
+      /\blive\s*(at|in|from|version|performance|concert)?\b/i,
+      /\b1\s*hour\b/i,
+      /\b10\s*hours?\b/i,
+      /\bloop\b/i,
+      /\bslowed\s*(\+?\s*reverb)?\b/i,
+      /\bbass\s*boosted\b/i,
+      /\bnightcore\b/i,
+      /\bpiano\s*tutorial\b/i,
+      /\blyric\s*video\b/i,
+      /\breaction\b/i
+    ]
+    for (const pattern of junkPatterns) {
+      if (pattern.test(low) && !pattern.test(seedLow)) {
+        return true
+      }
+    }
+    return false
+  }
+
   const candidatePool: Song[] = []
   const seenKeys = new Set<string>()
+  const seenTitles = new Set<string>()
 
-  // 1. Add local candidate pool first (filtering out same-title songs)
+  // 1. Add local candidate pool first (filtering out duplicates and covers)
   for (const s of localCandidatePool) {
     if (!s || s.id === seedSong.id) continue
-    if (isDuplicateOfSeed(s.title)) continue
-    
+    if (isDuplicateOfSeed(s.title) || isJunkOrCover(s.title)) continue
+
     const norm = normalizeTitle(s.title)
     const key = `${norm}_${normalizeTitle(s.artist)}`
-    if (!seenKeys.has(key)) {
+    if (!seenKeys.has(key) && !seenTitles.has(norm)) {
       seenKeys.add(key)
+      seenTitles.add(norm)
       candidatePool.push(s)
     }
   }
 
-  // 2. Fetch similar vibe songs from online music catalog
+  // 2. Fetch genuine YouTube Music UpNext Radio tracks
   try {
-    const seedYoutubeId = extractYoutubeVideoId(seedSong.id) || 
-                          extractYoutubeVideoId((seedSong as any).youtubeId) || 
-                          extractYoutubeVideoId(seedSong.youtubeUrl);
-                          
+    let seedYoutubeId = extractYoutubeVideoId(seedSong.id) ||
+                        extractYoutubeVideoId((seedSong as any).youtubeId) ||
+                        extractYoutubeVideoId(seedSong.youtubeUrl) ||
+                        extractYoutubeVideoId(seedSong.url)
+
+    if (!seedYoutubeId) {
+      try {
+        seedYoutubeId = await findYouTubeVideoId(seedSong.title, seedSong.artist)
+      } catch {}
+    }
+
     if (seedYoutubeId) {
       try {
-        const res = await fetch(`/api/yt-upnext?id=${seedYoutubeId}`, { signal: AbortSignal.timeout(15000) });
+        const res = await fetch(`/api/yt-upnext?id=${seedYoutubeId}`, { signal: AbortSignal.timeout(10000) })
         if (res.ok) {
-          const upnextSongs = await res.json();
+          const upnextSongs = await res.json()
           if (Array.isArray(upnextSongs) && upnextSongs.length > 0) {
             for (const s of upnextSongs) {
-              if (isDuplicateOfSeed(s.title)) continue;
-              const key = `${normalizeTitle(s.title)}_${normalizeTitle(s.artist)}`;
-              if (!seenKeys.has(key)) {
-                seenKeys.add(key);
-                candidatePool.push(s);
+              if (!s || !s.title || isDuplicateOfSeed(s.title) || isJunkOrCover(s.title)) continue
+              const norm = normalizeTitle(s.title)
+              const key = `${norm}_${normalizeTitle(s.artist)}`
+              if (!seenKeys.has(key) && !seenTitles.has(norm)) {
+                seenKeys.add(key)
+                seenTitles.add(norm)
+                candidatePool.push(s)
               }
             }
-            return candidatePool.slice(0, limit);
           }
         }
       } catch (err) {
-        console.warn('Failed to fetch yt-upnext:', err);
+        console.warn('Failed to fetch yt-upnext:', err)
       }
     }
+  } catch {}
 
-    const fetchPromises: Promise<any>[] = []
-    
-    // Fallback A. Fetch distinct songs from the same artist
-    const cleanArtist = normalizeArtist(seedSong.artist)
-    if (cleanArtist && cleanArtist !== 'Unknown Artist' && cleanArtist !== 'Unknown') {
+  // 3. Fallback / Augment with related artist and mood-matching acoustic tracks
+  if (candidatePool.length < 15) {
+    try {
+      const fetchPromises: Promise<any>[] = []
+      const cleanArtist = normalizeArtist(seedSong.artist)
+
+      // Fallback A: Distinct top hits from the same artist
+      if (cleanArtist && cleanArtist !== 'Unknown Artist' && cleanArtist !== 'Unknown') {
+        fetchPromises.push(
+          fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(cleanArtist)}&media=music&entity=song&limit=25`)
+            .then(r => r.json())
+            .catch(() => ({ results: [] }))
+        )
+      }
+
+      // Fallback B: Detect dominant mood vector and query related vibe tracks
+      const moodVector = extractMoodVector(seedSong)
+      let maxIdx = 0
+      let maxVal = -1
+      moodVector.forEach((v, idx) => {
+        if (v > maxVal) {
+          maxVal = v
+          maxIdx = idx
+        }
+      })
+      const dominantMood = MOOD_KEYS[maxIdx] || 'chill'
+
+      if (cleanArtist) {
+        fetchPromises.push(
+          fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(`${cleanArtist} ${dominantMood}`)}&media=music&entity=song&limit=15`)
+            .then(r => r.json())
+            .catch(() => ({ results: [] }))
+        )
+      }
+
       fetchPromises.push(
-        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(cleanArtist)}&media=music&entity=song&limit=15`)
+        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(`${dominantMood} hits`)}&media=music&entity=song&limit=20`)
           .then(r => r.json())
           .catch(() => ({ results: [] }))
       )
-    }
 
-    // Fallback B. Detect dominant mood vector and query related vibe tracks
-    const moodVector = extractMoodVector(seedSong)
-    let maxIdx = 0
-    let maxVal = -1
-    moodVector.forEach((v, idx) => {
-      if (v > maxVal) {
-        maxVal = v
-        maxIdx = idx
-      }
-    })
-    const dominantMood = MOOD_KEYS[maxIdx] || 'chill'
+      const responses = await Promise.all(fetchPromises)
+      for (const res of responses) {
+        if (res?.results && Array.isArray(res.results)) {
+          for (const item of res.results) {
+            const title = item.trackName || ''
+            if (!title || isDuplicateOfSeed(title) || isJunkOrCover(title)) continue
 
-    if (cleanArtist) {
-      fetchPromises.push(
-        fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(`${cleanArtist} ${dominantMood}`)}&media=music&entity=song&limit=10`)
-          .then(r => r.json())
-          .catch(() => ({ results: [] }))
-      )
-    }
-
-    fetchPromises.push(
-      fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(`${dominantMood} pop hits`)}&media=music&entity=song&limit=10`)
-        .then(r => r.json())
-        .catch(() => ({ results: [] }))
-    )
-
-    const responses = await Promise.all(fetchPromises)
-    for (const res of responses) {
-      if (res?.results && Array.isArray(res.results)) {
-        for (const item of res.results) {
-          const title = item.trackName || ''
-          if (!title || isDuplicateOfSeed(title)) continue
-
-          const norm = normalizeTitle(title)
-          const artistNorm = normalizeTitle(item.artistName || '')
-          const key = `${norm}_${artistNorm}`
-          if (!seenKeys.has(key)) {
-            seenKeys.add(key)
-            const highResCover = item.artworkUrl100
-              ? item.artworkUrl100.replace('100x100bb.jpg', '600x600bb.jpg').replace('100x100bb', '600x600bb')
-              : item.artworkUrl60
-            candidatePool.push({
-              id: `radio_${item.trackId}`,
-              title: item.trackName || 'Unknown Title',
-              artist: item.artistName || 'Unknown Artist',
-              duration: Math.floor((item.trackTimeMillis || 0) / 1000) || 210,
-              url: item.previewUrl || `yt_online://${item.trackId}`,
-              previewUrl: item.previewUrl || '',
-              playlistId: 'radio',
-              coverArtBase64: highResCover,
-              youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent((item.trackName || '') + ' ' + (item.artistName || ''))}`
-            })
+            const norm = normalizeTitle(title)
+            const artistNorm = normalizeTitle(item.artistName || '')
+            const key = `${norm}_${artistNorm}`
+            if (!seenKeys.has(key) && !seenTitles.has(norm)) {
+              seenKeys.add(key)
+              seenTitles.add(norm)
+              const highResCover = item.artworkUrl100
+                ? item.artworkUrl100.replace('100x100bb.jpg', '600x600bb.jpg').replace('100x100bb', '600x600bb')
+                : item.artworkUrl60
+              candidatePool.push({
+                id: `radio_${item.trackId}`,
+                title: item.trackName || 'Unknown Title',
+                artist: item.artistName || 'Unknown Artist',
+                duration: Math.floor((item.trackTimeMillis || 0) / 1000) || 210,
+                url: item.previewUrl || `yt_online://${item.trackId}`,
+                previewUrl: item.previewUrl || '',
+                playlistId: 'radio',
+                coverArtBase64: highResCover,
+                youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent((item.trackName || '') + ' ' + (item.artistName || ''))}`
+              })
+            }
           }
         }
       }
+    } catch (err) {
+      console.warn('Error fetching online radio tracks:', err)
     }
-  } catch (err) {
-    console.warn('Error fetching online radio tracks:', err)
   }
 
-  // 3. Run ML mood coherence re-ranking on the diverse candidate pool
+  // 4. Run ML mood coherence & tempo transition re-ranking on the diverse candidate pool
   const finalQueue = getMoodCoherentQueue(seedSong, candidatePool, history, limit)
   if (finalQueue.length === 0) {
     try {
-      const tr = await fetch('/api/yt-trending').then(r => r.json());
+      const tr = await fetch('/api/yt-trending').then(r => r.json())
       if (Array.isArray(tr)) {
-        return tr.filter((t: any) => t.id !== seedSong.id).slice(0, limit);
+        return tr
+          .filter((t: any) => t.id !== seedSong.id && !isDuplicateOfSeed(t.title) && !isJunkOrCover(t.title))
+          .slice(0, limit)
       }
     } catch(e) {}
   }
-  return finalQueue;
+  return finalQueue
 }
 
 export interface UserTasteProfile {
