@@ -385,38 +385,52 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [currentDeviceId])
 
   // ── PERIODIC POSITION BROADCAST WHILE ACTIVE HOST IS PLAYING ──
-  useEffect(() => {
-    let syncTimer: any = null
-    const currentUser = auth.currentUser
+  // ── PERIODIC POSITION BROADCAST WHILE ACTIVE HOST IS PLAYING ──
+useEffect(() => {
+  let syncTimer: any = null
+  const currentUser = auth.currentUser
 
-    if (currentUser && isPlaying && !isRemotePlayback && !isInJam && !isSyncingFromRemoteRef.current) {
-      syncTimer = setInterval(() => {
-        let livePos = currentTime
-        if (activeEngineRef.current === 'html5' && audioRef.current && !isNaN(audioRef.current.currentTime) && audioRef.current.currentTime > 0) {
-          livePos = audioRef.current.currentTime
-        } else if (activeEngineRef.current === 'youtube' && ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function') {
-          try {
-            const ytCur = ytPlayerRef.current.getCurrentTime()
-            if (typeof ytCur === 'number' && !isNaN(ytCur) && ytCur > 0) livePos = ytCur
-          } catch {}
-        }
+  if (currentUser && isPlaying && !isRemotePlayback && !isInJam && !isSyncingFromRemoteRef.current) {
+    syncTimer = setInterval(() => {
+      let livePos = currentTime
+      if (activeEngineRef.current === 'html5' && audioRef.current && !isNaN(audioRef.current.currentTime) && audioRef.current.currentTime > 0) {
+        livePos = audioRef.current.currentTime
+      } else if (activeEngineRef.current === 'youtube' && ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function') {
+        try {
+          const ytCur = ytPlayerRef.current.getCurrentTime()
+          if (typeof ytCur === 'number' && !isNaN(ytCur) && ytCur > 0) livePos = ytCur
+        } catch {}
+      }
 
-        if (livePos > 0) {
-          syncPlaybackState(currentUser.uid, {
-            activeDeviceId: currentDeviceId,
-            activeDeviceName: localDeviceInfo.name,
-            senderDeviceId: currentDeviceId,
-            position: livePos,
-            updatedAt: Date.now()
+      if (livePos > 0) {
+        syncPlaybackState(currentUser.uid, {
+          activeDeviceId: currentDeviceId,
+          activeDeviceName: localDeviceInfo.name,
+          senderDeviceId: currentDeviceId,
+          position: livePos,
+          updatedAt: Date.now()
+        })
+      }
+
+      // ── MEDIASESSION KEEP-ALIVE PING ──
+      // Tells Chromium this is an active media player so it won't throttle the background tab
+      try {
+        if ('mediaSession' in navigator && durationRef.current > 0) {
+          navigator.mediaSession.setPositionState({
+            duration: durationRef.current,
+            playbackRate: 1,
+            position: livePos
           })
         }
-      }, 2500)
-    }
+      } catch {}
 
-    return () => {
-      if (syncTimer) clearInterval(syncTimer)
-    }
-  }, [isPlaying, isRemotePlayback, isInJam, currentDeviceId, localDeviceInfo.name, currentTime])
+    }, 1000) // changed from 2500 → 1000 so the ping is frequent enough to hold the session
+  }
+
+  return () => {
+    if (syncTimer) clearInterval(syncTimer)
+  }
+}, [isPlaying, isRemotePlayback, isInJam, currentDeviceId, localDeviceInfo.name, currentTime])
 
   // ── SPOTIFY CONNECT TRANSFER FUNCTION ──
   const transferPlaybackToDevice = async (targetDeviceId: string, targetDeviceName: string) => {
