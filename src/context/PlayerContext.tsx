@@ -1156,13 +1156,17 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       } catch {}
     }
 
-    const isUploadedSong = song.url?.startsWith('blob:') ||
+    const isRawYoutubeUrl = !!song.url && (song.url.includes('youtube.com/watch') || song.url.includes('youtu.be/'))
+
+    const isUploadedSong = !isRawYoutubeUrl && (
+      song.url?.startsWith('blob:') ||
       song.url?.startsWith('data:') ||
       song.playlistId === 'global' ||
       song.playlistId === 'offline' ||
       song.isOffline === true ||
       song.url?.includes('cloudinary') ||
       song.url?.includes('firebasestorage')
+    )
 
     const cfSec = crossfadeRef.current || 0
 
