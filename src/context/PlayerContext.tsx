@@ -1265,24 +1265,33 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
+    // Only trust sequential queue order if it's an explicit user-built queue (not the raw library)
+    const hasExplicitQueue = queue.length > 1;
     const currentIndex = effectiveQueue.findIndex(s => s.id === currentSong?.id || s.title === currentSong?.title);
-    if (currentIndex !== -1 && currentIndex < effectiveQueue.length - 1) {
+
+    if (hasExplicitQueue && currentIndex !== -1 && currentIndex < effectiveQueue.length - 1) {
       playSong(effectiveQueue[currentIndex + 1], false);
-    } else if (repeatMode === 'all') {
+      return;
+    }
+    if (hasExplicitQueue && repeatMode === 'all') {
       playSong(effectiveQueue[0], false);
-    } else {
-      if (currentSong) {
-        try {
-          const moodQueue = await getSongRadioQueue(currentSong, [], playedHistory, 15);
-          if (moodQueue.length > 0) {
-            setQueue(moodQueue);
-            playSong(moodQueue[0], false);
-            return;
-          }
-        } catch (e) {
-          console.warn('Continuous mood queue resolution error:', e);
+      return;
+    }
+
+    // No real queue — always chase ML-similar vibe instead of falling through the library
+    if (currentSong) {
+      try {
+        const moodQueue = await getSongRadioQueue(currentSong, [], playedHistory, 15);
+        if (moodQueue.length > 0) {
+          setQueue(moodQueue);
+          playSong(moodQueue[0], false);
+          return;
         }
+      } catch (e) {
+        console.warn('Continuous mood queue resolution error:', e);
       }
+    }
+    if (effectiveQueue.length > 0) {
       playSong(effectiveQueue[0], false);
     }
   }
