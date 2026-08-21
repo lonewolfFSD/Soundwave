@@ -8,7 +8,7 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import Header from '../components/Header'
 import Sidebar from '../components/Sidebar'
 import Player from '../components/Player'
-import { Plus, Music, Music2, Play, Pause, Dices, ChevronLeft, ChevronRight, Sparkles, Youtube, ListPlus, DownloadCloud, Radio, Flame, Zap, Compass, Heart } from 'lucide-react'
+import { Plus, Music, Music2, Play, Pause, Dices, ChevronLeft, ChevronRight, Sparkles, Youtube, ListPlus, ListMusic, DownloadCloud, Radio, Flame, Zap, Compass, Heart, Check } from 'lucide-react'
 import PlaylistWindow from '@/components/PlaylistDetail'
 import Library from '../components/Library.'
 import SoundieAssistant from '../components/SoundAssistant';
@@ -47,8 +47,17 @@ const Dashboard = () => {
   const settingsQueryParam = searchParams.get('settings') || ''
   const jamQueryParam = searchParams.get('jam') || ''
 
-  const { user } = useAuth()
-  const { currentSong, isPlaying, playSong, pauseSong, resumeSong, setQueue, playedHistory, likedSongs, isSongLiked, toggleLikeSong } = usePlayer()
+  const { currentSong, isPlaying, playSong, pauseSong, resumeSong, setQueue, playedHistory, likedSongs, isSongLiked, toggleLikeSong, addToQueue, upNextQueue } = usePlayer()
+  const [queueToast, setQueueToast] = useState<string | null>(null)
+
+  const handleQueueSong = (e: React.MouseEvent, song: any) => {
+    e.stopPropagation()
+    if (addToQueue && song) {
+      addToQueue(song)
+      setQueueToast(`Added "${song.title}" to Up Next (Priority Queue)`)
+      setTimeout(() => setQueueToast(null), 2500)
+    }
+  }
 
   const [activeArtistName, setActiveArtistName] = useState<string | null>(artistQueryParam || null)
   const [showSettings, setShowSettings] = useState(settingsQueryParam === 'true')
@@ -1244,6 +1253,13 @@ const Dashboard = () => {
                                     <div className="w-11 h-11 rounded-xl bg-black/40 flex items-center justify-center backdrop-blur-sm border border-white/20 hover:scale-110 transition-transform">
                                       {isActive && isPlaying ? <Pause className="w-6 h-6 text-white fill-white" /> : <Play className="w-6 h-6 text-white fill-white ml-0.5" />}
                                     </div>
+                                    <button
+                                      onClick={(e) => handleQueueSong(e, song)}
+                                      title="Add to Priority Queue (Play Next)"
+                                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 backdrop-blur-sm border border-white/20 text-white/90 hover:text-white hover:scale-110 active:scale-95 transition-all shadow-md"
+                                    >
+                                      <Plus size={14} />
+                                    </button>
                                   </div>
                                 </div>
                                 <h4 className={`font-medium truncate text-[14px] sw-font-display ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.title}</h4>
@@ -1345,6 +1361,13 @@ const Dashboard = () => {
                                         className={`p-2 rounded-lg bg-black/60 hover:bg-black/90 border border-white/20 ${isSongLiked(song) ? 'text-pink-500' : 'text-white'}`}
                                       >
                                         <Heart size={14} fill={isSongLiked(song) ? 'currentColor' : 'none'} />
+                                      </button>
+                                      <button
+                                        onClick={(e) => handleQueueSong(e, song)}
+                                        title="Add to Priority Queue (Play Next)"
+                                        className={`p-2 rounded-lg bg-black/60 hover:bg-black/90 border border-white/20 ${upNextQueue?.some(s => s.id === song.id) ? 'text-indigo-400' : 'text-white'}`}
+                                      >
+                                        <Plus size={14} />
                                       </button>
                                       <button
                                         onClick={(e) => { e.stopPropagation(); setSelectedSongForPlaylist(song); }}
@@ -1457,6 +1480,13 @@ const Dashboard = () => {
                                         className={`p-2 rounded-lg bg-black/60 hover:bg-black/90 ${accentColor} border border-white/20`}
                                       >
                                         <Heart size={14} fill="currentColor" />
+                                      </button>
+                                      <button
+                                        onClick={(e) => handleQueueSong(e, song)}
+                                        title="Add to Priority Queue (Play Next)"
+                                        className={`p-2 rounded-lg bg-black/60 hover:bg-black/90 border border-white/20 ${upNextQueue?.some(s => s.id === song.id) ? 'text-indigo-400' : 'text-white'}`}
+                                      >
+                                        <Plus size={14} />
                                       </button>
                                       <button
                                         onClick={(e) => {
@@ -1667,6 +1697,13 @@ const Dashboard = () => {
                                     </div>
                                     <div className="hidden md:flex items-center gap-2">
                                       <button
+                                        onClick={(e) => handleQueueSong(e, song)}
+                                        title="Add to Priority Queue (Play Next)"
+                                        className={`p-2 rounded-lg bg-black/60 hover:bg-black/90 border border-white/20 ${upNextQueue?.some(s => s.id === song.id) ? 'text-indigo-400' : 'text-white'}`}
+                                      >
+                                        <Plus size={14} />
+                                      </button>
+                                      <button
                                         onClick={(e) => { e.stopPropagation(); setSelectedSongForPlaylist(song); }}
                                         title="Add to Playlist"
                                         className="p-2 rounded-lg bg-black/60 hover:bg-black/90 text-white border border-white/20"
@@ -1770,6 +1807,13 @@ const Dashboard = () => {
                                       {isActive && isPlaying ? <Pause className="w-6 h-6 text-white fill-white" /> : <Play className="w-6 h-6 text-white fill-white ml-0.5" />}
                                     </div>
                                     <div className="hidden md:flex items-center gap-2">
+                                      <button
+                                        onClick={(e) => handleQueueSong(e, song)}
+                                        title="Add to Priority Queue (Play Next)"
+                                        className={`p-2 rounded-lg bg-black/60 hover:bg-black/90 border border-white/20 ${upNextQueue?.some(s => s.id === song.id) ? 'text-indigo-400' : 'text-white'}`}
+                                      >
+                                        <Plus size={14} />
+                                      </button>
                                       <button
                                         onClick={(e) => { e.stopPropagation(); setSelectedSongForPlaylist(song); }}
                                         title="Add to Playlist"
@@ -1954,6 +1998,13 @@ const Dashboard = () => {
                                             <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-lg">
                                               {isActive && isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-0.5" />}
                                             </div>
+                                            <button
+                                              onClick={(e) => handleQueueSong(e, song)}
+                                              title="Add to Priority Queue (Play Next)"
+                                              className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 backdrop-blur-sm border border-white/20 text-white/90 hover:text-white hover:scale-110 active:scale-95 transition-all shadow-md"
+                                            >
+                                              <Plus size={14} />
+                                            </button>
                                           </div>
                                         </div>
                                         <h4 className="font-bold truncate text-sm text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.title}</h4>
@@ -2047,6 +2098,13 @@ const Dashboard = () => {
                                           </div>
                                           <div className="hidden md:flex items-center gap-2">
                                             <button
+                                              onClick={(e) => handleQueueSong(e, song)}
+                                              title="Add to Priority Queue (Play Next)"
+                                              className={`p-2 rounded-lg bg-black/60 hover:bg-black/90 border border-white/20 ${upNextQueue?.some(s => s.id === song.id) ? 'text-indigo-400' : 'text-white'}`}
+                                            >
+                                              <Plus size={14} />
+                                            </button>
+                                            <button
                                               onClick={(e) => { e.stopPropagation(); setSelectedSongForPlaylist(song); }}
                                               title="Add to Playlist"
                                               className="p-2 rounded-lg bg-black/60 hover:bg-black/90 text-white border border-white/20"
@@ -2111,6 +2169,18 @@ const Dashboard = () => {
           song={selectedSongForPlaylist}
           onClose={() => setSelectedSongForPlaylist(null)}
         />
+      )}
+
+      {/* Floating Queue Toast Feedback */}
+      {queueToast && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-zinc-900/95 border border-indigo-500/40 text-white px-4 py-2.5 rounded-full shadow-2xl backdrop-blur-xl flex items-center gap-2.5 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center text-white">
+            <Check size={12} strokeWidth={3} />
+          </div>
+          <span className="text-xs font-bold truncate max-w-xs sm:max-w-md" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+            {queueToast}
+          </span>
+        </div>
       )}
     </div>
   )

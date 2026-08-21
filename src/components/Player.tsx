@@ -1392,15 +1392,19 @@ useEffect(() => {
             </button>
 
             <div className="flex items-center gap-1.5">
-              {/* CONNECT DEVICE BUTTON */}
+              {/* QUEUE LIST BUTTON */}
               <button
-                onClick={() => { triggerHaptic(); setShowDevicePicker(true); }}
-                className={`p-2 rounded-xl transition-colors relative ${isRemotePlayback ? 'text-emerald-400 bg-emerald-500/10 animate-pulse' : `${textMuted} hover:bg-white/5`}`}
-                title="Connect to a device"
+                onClick={() => {
+                  triggerHaptic();
+                  setShowMobileQueue(!showMobileQueue);
+                  if (!showMobileQueue) setShowLyrics(false);
+                }}
+                className={`p-2 rounded-xl transition-colors relative ${showMobileQueue ? `${activeColor} bg-white/10` : `${textMuted} hover:bg-white/5`}`}
+                title="Queue List"
               >
-                <Cast size={20} />
-                {isRemotePlayback && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-400" />
+                <ListMusic size={20} />
+                {upNextQueue && upNextQueue.length > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
                 )}
               </button>
 
@@ -1437,64 +1441,73 @@ useEffect(() => {
           <div className="flex-1 flex items-center justify-center mb-8 overflow-hidden relative">
             {showMobileQueue ? (
               // --- MOBILE QUEUE UI ---
-              <div className="w-full h-full overflow-y-auto scrollbar-hide flex flex-col gap-6 pt-4 pb-[20vh]">
+              <div className="w-full h-full overflow-y-auto scrollbar-hide flex flex-col gap-6 pt-4 pb-[20vh] px-1">
                 
-                {/* UP NEXT (Custom Queue) */}
+                {/* UP NEXT (Priority Queue) */}
                 {upNextQueue && upNextQueue.length > 0 && (
                   <div className="flex flex-col gap-2">
-                    <h4 className={`text-xs uppercase tracking-wider font-bold px-2 ${textMuted}`}>Up Next</h4>
+                    <div className="flex items-center justify-between px-2">
+                      <h4 className={`text-xs uppercase tracking-wider font-bold ${textMuted}`}>Up Next (Priority Queue)</h4>
+                      <span className="text-[11px] text-indigo-400 font-bold">{upNextQueue.length} {upNextQueue.length === 1 ? 'track' : 'tracks'}</span>
+                    </div>
                     {upNextQueue.map((song, idx) => (
                       <div 
                         key={`mob-upnext-${song.id}-${idx}`}
                         onClick={() => { removeFromQueue(idx); playSong(song); }}
-                        className="flex items-center gap-4 p-2 rounded-xl bg-white/5 border border-white/10 cursor-pointer active:scale-[0.98] transition-all"
+                        className="flex items-center gap-3.5 p-2.5 rounded-xl bg-white/[0.08] border border-white/15 cursor-pointer active:scale-[0.98] transition-all shadow-md"
                       >
-                        <div className="w-14 h-14 rounded-lg overflow-hidden shrink-0 bg-black/50">
-                          {song.coverArtBase64 ? <img src={song.coverArtBase64} alt="" className="w-full h-full object-cover" /> : <Music className="m-auto mt-4 text-white/50" />}
+                        <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 bg-black/50 border border-white/10">
+                          {song.coverArtBase64 ? <img src={song.coverArtBase64} alt="" className="w-full h-full object-cover" /> : <Music className="m-auto mt-3 text-white/50" />}
                         </div>
                         <div className="flex flex-col flex-1 min-w-0">
-                          <p className={`font-bold text-base truncate ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.title}</p>
-                          <p className={`text-sm truncate opacity-70 ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.artist || 'Unknown Artist'}</p>
+                          <p className={`font-bold text-sm truncate ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.title}</p>
+                          <p className={`text-xs truncate opacity-70 ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.artist || 'Unknown Artist'}</p>
                         </div>
                         <button 
                           onClick={(e) => { e.stopPropagation(); removeFromQueue(idx); }}
-                          className={`p-3 rounded-lg bg-white/5 ${textMuted} active:text-white`}
+                          className={`p-2.5 rounded-lg bg-white/5 hover:bg-white/10 ${textMuted} active:text-white transition-colors`}
+                          title="Remove from queue"
                         >
-                          <X size={20} />
+                          <X size={18} />
                         </button>
                       </div>
                     ))}
                   </div>
                 )}
 
-                {/* BASE PLAYLIST (MOBILE) */}
+                {/* CURRENT QUEUE (MOBILE) */}
                 <div className="flex flex-col gap-2">
-                  <h4 className={`text-xs uppercase tracking-wider font-bold px-2 ${textMuted}`}>Current Playlist</h4>
+                  <div className="flex items-center justify-between px-2">
+                    <h4 className={`text-xs uppercase tracking-wider font-bold ${textMuted}`}>Queue List</h4>
+                    <span className="text-[11px] text-zinc-500">{queue.length} tracks</span>
+                  </div>
                   {queue.map((song, idx) => {
-                    const isCurrent = song.id === currentSong.id;
+                    const isCurrent = song.id === currentSong?.id || (song.title === currentSong?.title && song.artist === currentSong?.artist);
+                    const isInUpNext = upNextQueue?.some(s => s.id === song.id || s.title === song.title);
                     return (
                       <div 
                         key={`mob-base-${song.id}-${idx}`}
                         onClick={() => playSong(song)}
-                        className={`flex items-center gap-4 p-2 rounded-xl border transition-all ${isCurrent ? 'border-white/30 bg-white/10' : 'border-transparent active:bg-white/5'}`}
+                        className={`flex items-center gap-3.5 p-2.5 rounded-xl border transition-all ${isCurrent ? 'border-indigo-500/40 bg-indigo-500/10' : 'border-transparent active:bg-white/5'}`}
                       >
-                        <div className="w-14 h-14 rounded-lg overflow-hidden shrink-0 bg-black/50">
-                          {song.coverArtBase64 ? <img src={song.coverArtBase64} alt="" className="w-full h-full object-cover" /> : <Music className="m-auto mt-4 text-white/50" />}
+                        <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 bg-black/50 border border-white/10">
+                          {song.coverArtBase64 ? <img src={song.coverArtBase64} alt="" className="w-full h-full object-cover" /> : <Music className="m-auto mt-3 text-white/50" />}
                         </div>
                         <div className="flex flex-col flex-1 min-w-0">
-                          <p className={`font-bold text-base truncate ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.title}</p>
-                          <p className={`text-sm truncate opacity-70 ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.artist || 'Unknown Artist'}</p>
+                          <p className={`font-bold text-sm truncate ${isCurrent ? 'text-indigo-400' : textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.title}</p>
+                          <p className={`text-xs truncate opacity-70 ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.artist || 'Unknown Artist'}</p>
                         </div>
-                        {upNextQueue.some(s => s.id === song.id) ? (
-                          <div className={`p-3 rounded-lg ${activeColor} bg-white/5`}>
-                            <Check size={20} />
+                        {isInUpNext ? (
+                          <div className={`p-2.5 rounded-lg text-indigo-400 bg-white/5`} title="In Priority Queue">
+                            <Check size={18} />
                           </div>
                         ) : (
                           <button 
                             onClick={(e) => { e.stopPropagation(); addToQueue(song); }}
-                            className={`p-3 rounded-lg text-white bg-white/5 active:bg-white/10 transition-colors`}
+                            className={`p-2.5 rounded-lg text-white/80 hover:text-white bg-white/5 active:bg-white/10 transition-colors`}
+                            title="Add to Priority Queue (Play Next)"
                           >
-                            <Plus size={20} />
+                            <ListPlus size={18} />
                           </button>
                         )}
                       </div>

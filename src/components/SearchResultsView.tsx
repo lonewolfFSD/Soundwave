@@ -19,7 +19,9 @@ import {
   Youtube,
   Radio,
   Heart,
-  Shuffle
+  Shuffle,
+  Plus,
+  Check
 } from 'lucide-react'
 
 interface SearchResultsViewProps {
@@ -30,8 +32,9 @@ interface SearchResultsViewProps {
 }
 
 export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText, user, onBack, onSelectArtist }) => {
-  const { currentSong, isPlaying, playSong, pauseSong, resumeSong, setQueue, playedHistory, isSongLiked, toggleLikeSong } = usePlayer()
+  const { currentSong, isPlaying, playSong, pauseSong, resumeSong, setQueue, playedHistory, isSongLiked, toggleLikeSong, addToQueue, upNextQueue } = usePlayer()
   const [loading, setLoading] = useState(true)
+  const [queueToast, setQueueToast] = useState<string | null>(null)
   const [searchResults, setSearchResults] = useState<{
     songs: any[]
     playlists: any[]
@@ -42,6 +45,15 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
     youtube: []
   })
   const [selectedSongForPlaylist, setSelectedSongForPlaylist] = useState<any | null>(null)
+
+  const handleQueueSong = (e: React.MouseEvent, song: Song) => {
+    e.stopPropagation()
+    if (addToQueue) {
+      addToQueue(song)
+      setQueueToast(`Added "${song.title}" to Up Next (Priority Queue)`)
+      setTimeout(() => setQueueToast(null), 2500)
+    }
+  }
 
   useEffect(() => {
     let isMounted = true
@@ -316,6 +328,18 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
                         </button>
 
                         <button
+                          onClick={(e) => handleQueueSong(e, topTrack)}
+                          title="Add to Priority Queue (Play Next)"
+                          className={`p-2.5 rounded-full transition-colors ${
+                            upNextQueue?.some(s => s.id === topTrack.id || s.title === topTrack.title)
+                              ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
+                              : 'bg-white/5 hover:bg-white/10 text-white/80 hover:text-white'
+                          }`}
+                        >
+                          <Plus size={16} />
+                        </button>
+
+                        <button
                           onClick={(e) => {
                             e.stopPropagation()
                             setSelectedSongForPlaylist(topTrack)
@@ -429,6 +453,17 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
                               <Heart size={16} fill={isSongLiked(song) ? 'currentColor' : 'none'} />
                             </button>
                             <button
+                              onClick={(e) => handleQueueSong(e, song)}
+                              title="Add to Priority Queue (Play Next)"
+                              className={`p-1.5 rounded-lg hover:bg-white/10 transition-colors ${
+                                upNextQueue?.some(s => s.id === song.id || s.title === song.title)
+                                  ? 'text-indigo-400'
+                                  : 'text-white/70 hover:text-white'
+                              }`}
+                            >
+                              <Plus size={16} />
+                            </button>
+                            <button
                               onClick={(e) => {
                                 e.stopPropagation()
                                 setSelectedSongForPlaylist(song)
@@ -526,6 +561,13 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
                           <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-lg">
                             {isActive && isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-0.5" />}
                           </div>
+                          <button
+                            onClick={(e) => handleQueueSong(e, song)}
+                            title="Add to Priority Queue (Play Next)"
+                            className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 backdrop-blur-sm border border-white/20 text-white/90 hover:text-white hover:scale-110 active:scale-95 transition-all shadow-md"
+                          >
+                            <Plus size={14} />
+                          </button>
                         </div>
                       </div>
                       <h4 className="font-bold truncate text-sm text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
@@ -540,6 +582,18 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Floating Queue Toast Feedback */}
+      {queueToast && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-zinc-900/95 border border-indigo-500/40 text-white px-4 py-2.5 rounded-full shadow-2xl backdrop-blur-xl flex items-center gap-2.5 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center text-white">
+            <Check size={12} strokeWidth={3} />
+          </div>
+          <span className="text-xs font-bold truncate max-w-xs sm:max-w-md" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+            {queueToast}
+          </span>
         </div>
       )}
 
