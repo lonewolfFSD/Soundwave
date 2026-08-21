@@ -324,7 +324,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               await playSong(remoteState.currentSong, false, targetPos, true)
               setTimeout(() => { isSyncingFromRemoteRef.current = false }, 500)
             } else {
-              if (Math.abs(currentTime - targetPos) > 3) {
+              if (Math.abs(currentTimeRef.current - targetPos) > 3) {
                 if (activeEngineRef.current === 'youtube') {
                   try { ytPlayerRef.current?.seekTo(targetPos, true) } catch {}
                 } else if (audioRef.current) {
@@ -1291,17 +1291,17 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }
 
   const pauseSong = () => {
-    if (isRemotePlayback) {
+    if (isRemotePlaybackRef.current) {
       // Remote Mode: send command to active host without touching local audio hardware
       setIsPlaying(false)
       const user = auth.currentUser
       if (user && !isInJam) {
         syncPlaybackState(user.uid, {
-          activeDeviceId,
+          activeDeviceId: activeDeviceIdRef.current || activeDeviceId,
           activeDeviceName,
           senderDeviceId: currentDeviceId,
           isPlaying: false,
-          position: currentTime,
+          position: currentTimeRef.current,
           updatedAt: Date.now()
         })
       }
@@ -1326,24 +1326,24 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         activeDeviceName: localDeviceInfo.name,
         senderDeviceId: currentDeviceId,
         isPlaying: false,
-        position: currentTime,
+        position: currentTimeRef.current,
         updatedAt: Date.now()
       })
     }
   }
 
   const resumeSong = () => {
-    if (isRemotePlayback) {
+    if (isRemotePlaybackRef.current) {
       // Remote Mode: send resume to active host without local sound output
       setIsPlaying(true)
       const user = auth.currentUser
       if (user && !isInJam) {
         syncPlaybackState(user.uid, {
-          activeDeviceId,
+          activeDeviceId: activeDeviceIdRef.current || activeDeviceId,
           activeDeviceName,
           senderDeviceId: currentDeviceId,
           isPlaying: true,
-          position: currentTime,
+          position: currentTimeRef.current,
           updatedAt: Date.now()
         })
       }
@@ -1377,7 +1377,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         activeDeviceName: localDeviceInfo.name,
         senderDeviceId: currentDeviceId,
         isPlaying: true,
-        position: currentTime,
+        position: currentTimeRef.current,
         updatedAt: Date.now()
       })
     }
@@ -1530,12 +1530,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const setCurrentTimeHandler = (time: number) => {
     setCurrentTime(time)
 
-    if (isRemotePlayback) {
+    if (isRemotePlaybackRef.current) {
       // Remote Mode: send seek command to active host
       const user = auth.currentUser
       if (user && !isInJam) {
         syncPlaybackState(user.uid, {
-          activeDeviceId,
+          activeDeviceId: activeDeviceIdRef.current || activeDeviceId,
           activeDeviceName,
           senderDeviceId: currentDeviceId,
           position: time,
