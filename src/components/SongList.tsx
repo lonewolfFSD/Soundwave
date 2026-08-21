@@ -10,6 +10,8 @@ import {
   getDoc, 
   updateDoc, 
   deleteDoc,
+  setDoc,
+  increment,
   orderBy,
 } from 'firebase/firestore'
 import { 
@@ -22,9 +24,14 @@ import {
   XCircle,
   Edit3,
   Loader2,
-  Trash2
+  Trash2,
+  Search,
+  RefreshCw,
+  Check,
+  UploadCloud
 } from 'lucide-react'
 import type { Song } from '../context/PlayerContext'
+import { searchYouTubeMusic, getTrendingYouTubeMusic } from '../utils/ytMusic'
 
 import SongUpload from './SongUpload'
 import { Capacitor } from '@capacitor/core';
@@ -57,8 +64,19 @@ const SongList: React.FC<SongListProps> = ({ playlistId }) => {
   const [editName, setEditName] = useState('')
   const [editDesc, setEditDesc] = useState('')
 
+  // Spotify-style Playlist Recommendations & Search State
+  const [recommendedSongs, setRecommendedSongs] = useState<Song[]>([])
+  const [loadingRecs, setLoadingRecs] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<Song[]>([])
+  const [searching, setSearching] = useState(false)
+  const [addingSongId, setAddingSongId] = useState<string | null>(null)
+  const [addedSongIds, setAddedSongIds] = useState<Set<string>>(new Set())
+
   const menuRef = useRef<HTMLDivElement>(null)
   const songMenuRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const recSectionRef = useRef<HTMLDivElement>(null)
 
   // --- PREFERENCES & THEME STATE ---
   const [theme, setTheme] = useState(() => {
@@ -229,6 +247,8 @@ const SongList: React.FC<SongListProps> = ({ playlistId }) => {
   try {
     const songDocRef = doc(db, 'playlists', playlistId, 'songs', songId);
     await deleteDoc(songDocRef);
+    const playlistRef = doc(db, 'playlists', playlistId);
+    await updateDoc(playlistRef, { songCount: increment(-1) });
     console.log("Delete successful!");
   } catch (err: any) { 
     console.error("FIREBASE ERROR:", err.code, err.message);
@@ -237,6 +257,110 @@ const SongList: React.FC<SongListProps> = ({ playlistId }) => {
     setProcessing(false);
   }
 }
+  // --- FETCH SPOTIFY-STYLE PLAYLIST RECOMMENDATIONS ---
+  const fetchRecommendations = async () => {
+    if (!playlistId) return;
+    setLoadingRecs(true);
+    try {
+      let recs: Song[] = [];
+      if (songs.length > 0) {
+        const uniqueArtists = Array.from(new Set(songs.map(s => s.artist).filter(Boolean)));
+        const shuffledArtists = [...uniqueArtists].sort(() => 0.5 - Math.random());
+        const queryArtist = shuffledArtists[0] || 'Top Songs';
+        const fetched = await searchYouTubeMusic(`${queryArtist} songs`);
+        recs = fetched;
+      } else {
+        recs = await getTrendingYouTubeMusic();
+      }
+
+      // Filter out songs already in the playlist
+      const existingIds = new Set(songs.map(s => s.id));
+      const existingTitles = new Set(songs.map(s => `${s.title.toLowerCase().trim()}_${(s.artist || '').toLowerCase().trim()}`));
+
+      const filtered = recs.filter(r => 
+        !existingIds.has(r.id) && 
+        !existingTitles.has(`${r.title.toLowerCase().trim()}_${(r.artist || '').toLowerCase().trim()}`)
+      );
+
+      setRecommendedSongs(filtered.slice(0, 10));
+    } catch (err) {
+      console.error('Failed to fetch recommendations:', err);
+    } finally {
+      setLoadingRecs(false);
+    }
+  };
+
+  // Auto-fetch recommendations on mount / when playlist loads
+  useEffect(() => {
+    if (!loading && playlistId) {
+      fetchRecommendations();
+    }
+  }, [playlistId, loading, songs.length === 0]);
+
+  // --- LIVE YOUTUBE MUSIC SEARCH FOR PLAYLIST ---
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const results = await searchYouTubeMusic(searchQuery);
+        setSearchResults(results);
+      } catch (err) {
+        console.error('Search error in playlist:', err);
+      } finally {
+        setSearching(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // --- ADD SONG TO PLAYLIST DIRECTLY ---
+  const handleAddSongToPlaylist = async (song: Song) => {
+    if (!playlistId || !user?.id) return;
+    const songId = song.id || `yt_${Date.now()}`;
+    setAddingSongId(songId);
+
+    try {
+      const songRef = doc(db, 'playlists', playlistId, 'songs', songId);
+      await setDoc(songRef, {
+        id: songId,
+        title: song.title,
+        artist: song.artist || 'Unknown Artist',
+        duration: song.duration || 210,
+        url: song.url || '',
+        coverArtBase64: song.coverArtBase64 || '',
+        lyrics: song.lyrics || '',
+        youtubeUrl: (song as any).youtubeUrl || '',
+        addedAt: new Date().toISOString()
+      });
+
+      const playlistRef = doc(db, 'playlists', playlistId);
+      await updateDoc(playlistRef, {
+        songCount: increment(1),
+        ...(playlist?.coverArtBase64 ? {} : { coverArtBase64: song.coverArtBase64 || null })
+      });
+
+      setAddedSongIds(prev => new Set([...prev, songId]));
+    } catch (err: any) {
+      console.error('Failed to add song to playlist:', err);
+      alert(`Could not add song: ${err?.message || err}`);
+    } finally {
+      setAddingSongId(null);
+    }
+  };
+
+  const handleFocusAddSongs = () => {
+    recSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 300);
+  };
 
   const handleRowClick = (song: Song) => {
     if (currentSong?.id === song.id) {
@@ -374,11 +498,7 @@ const SongList: React.FC<SongListProps> = ({ playlistId }) => {
             </button>
 
             <button 
-              
-              onClick={() => {
-                console.log("Add Songs clicked! playlistId:", playlistId, "showUploadModal:", showUploadModal);
-                setShowUploadModal(true);
-              }}
+              onClick={handleFocusAddSongs}
               className={`flex items-center gap-2 px-6 py-2.5 rounded-2xl border text-xs font-bold uppercase tracking-wider ${reduceMotion ? '' : 'transition-colors'} ${btnOutline}`}
               style={{ fontFamily: 'Space Grotesk, sans-serif' }}
             >
@@ -394,6 +514,9 @@ const SongList: React.FC<SongListProps> = ({ playlistId }) => {
                   <button onClick={() => { setIsEditing(true); setShowMenu(false); }} style={{ fontFamily: 'Space Grotesk, sans-serif' }} className={`w-full text-left px-4 py-3 text-xs flex items-center gap-3 ${reduceMotion ? '' : 'transition-colors'} ${textMain} ${menuHover}`}>
                     <Edit3 size={14} /> Edit Details
                   </button>
+                  <button onClick={() => { setShowUploadModal(true); setShowMenu(false); }} style={{ fontFamily: 'Space Grotesk, sans-serif' }} className={`w-full text-left px-4 py-3 text-xs flex items-center gap-3 ${reduceMotion ? '' : 'transition-colors'} ${textMain} ${menuHover}`}>
+                    <UploadCloud size={14} /> Upload Audio File
+                  </button>
                   <button onClick={handleDeletePlaylist} style={{ fontFamily: 'Space Grotesk, sans-serif' }} className={`w-full text-left px-4 py-3 text-xs text-red-400 flex items-center gap-3 border-t ${reduceMotion ? '' : 'transition-colors'} ${menuHover} ${editBg.split(' ')[1]}`}>
                     <Trash2 size={14} /> Delete Playlist
                   </button>
@@ -406,10 +529,20 @@ const SongList: React.FC<SongListProps> = ({ playlistId }) => {
         {/* SONGS TABLE */}
         <div className={`flex-1 px-4 md:px-8 pb-32 ${animClass}`} style={{ animationDelay: getDelay('300ms') }}>
           {songs.length === 0 ? (
-            <div className={`flex flex-col items-center justify-center py-24 text-center opacity-70`}>
-              <Music className={`w-16 h-16 mb-6 ${emptyIconColor}`} />
+            <div className={`flex flex-col items-center justify-center py-20 text-center opacity-80`}>
+              <Music className={`w-16 h-16 mb-4 ${emptyIconColor}`} />
               <h3 className={`text-2xl font-bold mb-2 ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Your playlist is empty</h3>
-              <button onClick={() => setShowUploadModal(true)} className={`mt-6 px-8 py-3 rounded-full font-bold ${reduceMotion ? '' : 'transition-all hover:scale-105'} ${primaryBtn}`}>Add Songs</button>
+              <p className={`text-sm max-w-sm ${textMuted} mb-6`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                Search for songs on YouTube Music or check out the recommendations below to add tracks.
+              </p>
+              <div className="flex items-center gap-3">
+                <button onClick={handleFocusAddSongs} className={`px-6 py-2.5 rounded-full font-bold text-xs flex items-center gap-2 ${reduceMotion ? '' : 'transition-all hover:scale-105'} ${primaryBtn}`}>
+                  <Search size={14} /> Find Songs
+                </button>
+                <button onClick={() => setShowUploadModal(true)} className={`px-5 py-2.5 rounded-full font-bold text-xs border border-white/20 hover:border-white text-white ${reduceMotion ? '' : 'transition-all'}`}>
+                  <UploadCloud size={14} /> Upload MP3
+                </button>
+              </div>
             </div>
           ) : (
             <table className="w-full text-left border-collapse mt-4">
@@ -529,6 +662,156 @@ const SongList: React.FC<SongListProps> = ({ playlistId }) => {
               </tbody>
             </table>
           )}
+          {/* ── SPOTIFY-STYLE RECOMMENDED & YOUTUBE SEARCH SECTION ── */}
+          <div ref={recSectionRef} id="playlist-recommended-section" className="mt-12 pt-8 border-t border-white/10 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                  {searchQuery.trim() ? 'Search Results' : 'Recommended'}
+                </h3>
+                <p className="text-xs text-zinc-400 font-medium mt-1" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                  {searchQuery.trim() 
+                    ? `Searching YouTube Music for "${searchQuery}"`
+                    : songs.length > 0 
+                      ? "Based on what's in this playlist" 
+                      : "Popular songs to get your playlist started"}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {!searchQuery.trim() && (
+                  <button
+                    onClick={fetchRecommendations}
+                    disabled={loadingRecs}
+                    className="px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/15 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                    style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+                  >
+                    <RefreshCw size={13} className={loadingRecs ? 'animate-spin' : ''} /> Refresh
+                  </button>
+                )}
+
+                <button
+                  onClick={() => setShowUploadModal(true)}
+                  className="px-3.5 py-1.5 rounded-full border border-white/15 hover:border-white/30 text-zinc-300 hover:text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                  style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+                >
+                  <UploadCloud size={13} /> Upload File
+                </button>
+              </div>
+            </div>
+
+            {/* Search Bar */}
+            <div className="relative max-w-xl">
+              <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search for songs or artists on YouTube Music..."
+                className="w-full pl-11 pr-10 py-3 rounded-xl bg-white/[0.06] border border-white/10 focus:border-white/30 text-white placeholder-zinc-500 text-sm outline-none transition-all"
+                style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white p-1"
+                >
+                  <XCircle size={16} />
+                </button>
+              )}
+            </div>
+
+            {/* Recommendations / Search Results List */}
+            {searching || (loadingRecs && !searchQuery.trim()) ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-2">
+                <Loader2 size={24} className="animate-spin text-zinc-400" />
+                <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                  {searching ? 'Searching music catalog...' : 'Finding recommendations...'}
+                </span>
+              </div>
+            ) : (
+              <div className="divide-y divide-white/[0.04] rounded-2xl bg-white/[0.02] border border-white/[0.06] overflow-hidden">
+                {(searchQuery.trim() ? searchResults : recommendedSongs).length === 0 ? (
+                  <div className="py-10 text-center text-xs text-zinc-500 font-medium">
+                    {searchQuery.trim() ? 'No songs found. Try a different search.' : 'No recommendations available right now.'}
+                  </div>
+                ) : (
+                  (searchQuery.trim() ? searchResults : recommendedSongs).slice(0, 10).map((item) => {
+                    const isAdded = addedSongIds.has(item.id) || songs.some(s => s.id === item.id || (s.title.toLowerCase() === item.title.toLowerCase() && s.artist.toLowerCase() === item.artist.toLowerCase()))
+                    const isAdding = addingSongId === item.id
+                    const isPlayingThis = currentSong?.id === item.id && isPlaying
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between gap-4 p-3 hover:bg-white/[0.04] transition-colors group"
+                      >
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <div
+                            onClick={() => handleRowClick(item)}
+                            className="w-11 h-11 rounded-lg overflow-hidden bg-black/50 shrink-0 border border-white/10 relative cursor-pointer group/thumb"
+                          >
+                            {item.coverArtBase64 ? (
+                              <img src={item.coverArtBase64} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Music size={16} className="text-zinc-600" />
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity">
+                              {isPlayingThis ? (
+                                <Pause size={14} className="text-white fill-white" />
+                              ) : (
+                                <Play size={14} className="text-white fill-white ml-0.5" />
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-bold text-white/90 group-hover:text-white truncate" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                              {item.title}
+                            </h4>
+                            <p className="text-xs text-zinc-400 font-medium truncate mt-0.5" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                              {item.artist || 'Unknown Artist'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Add Button */}
+                        <div className="shrink-0 flex items-center gap-2">
+                          <button
+                            onClick={() => !isAdded && handleAddSongToPlaylist(item)}
+                            disabled={isAdded || isAdding}
+                            className={`px-4 py-1.5 rounded-full font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                              isAdded
+                                ? 'bg-white/10 text-zinc-400 cursor-default'
+                                : 'bg-white text-black hover:scale-105 active:scale-95 shadow-md'
+                            }`}
+                            style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+                          >
+                            {isAdding ? (
+                              <>
+                                <Loader2 size={12} className="animate-spin" /> Adding...
+                              </>
+                            ) : isAdded ? (
+                              <>
+                                <Check size={13} strokeWidth={3} className="text-green-400" /> Added
+                              </>
+                            ) : (
+                              <>
+                                <Plus size={13} strokeWidth={3} /> Add
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            )}
+          </div>
         </div>
       <br /> <br /> <br />
       </div>
