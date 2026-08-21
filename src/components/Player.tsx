@@ -58,6 +58,7 @@ import { downloadSongForOffline, isSongOffline, deleteOfflineSong } from '../uti
 import { findYouTubeVideoId, resolveFullLengthSong } from '../utils/ytMusic';
 import { getSongRadioQueue } from '../utils/aiRecommender';
 import { updateJamPlayback } from '../utils/jamRoomService';
+import { setSongAsDeviceRingtone, isNativeAndroid } from '../utils/ringtone';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import { DevicePickerModal } from './DevicePickerModal';
 import { AppleLyricsLine } from './AppleLyricsLine';
@@ -407,18 +408,9 @@ const Player: React.FC = () => {
     if (!currentSong) return;
     triggerHaptic(ImpactStyle.Medium);
     setShowMobileOptionsMenu(false);
-    if (currentSong.url) {
-      const link = document.createElement('a');
-      link.href = currentSong.url;
-      link.download = `${currentSong.title} - Ringtone.mp3`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } else {
-      const videoId = extractYouTubeId(currentSong) || (currentSong.id || '').replace('yt_', '');
-      if (videoId && videoId.length === 11) {
-        window.open(`https://www.y2mate.com/youtube/${videoId}`, '_blank');
-      }
+
+    if (isNativeAndroid()) {
+      await setSongAsDeviceRingtone(currentSong);
     }
   };
 
@@ -1912,10 +1904,16 @@ useEffect(() => {
               {/* 10. Set as Ringtone */}
               <button
                 onClick={handleSetTrackAsRingtone}
-                className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.99] border border-white/[0.04] ${textMain} transition-all text-left`}
+                disabled={!isNativeAndroid()}
+                className={`w-full flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.04] ${isNativeAndroid() ? 'hover:bg-white/[0.08] active:scale-[0.99] cursor-pointer' : 'opacity-40 cursor-not-allowed'} border border-white/[0.04] ${textMain} transition-all text-left`}
               >
-                <Bell size={20} className={`${textMuted} shrink-0`} />
+                <Bell size={20} className={`${isNativeAndroid() ? textMain : textMuted} shrink-0`} />
                 <span className="text-[14.5px] font-medium flex-1">Set as Ringtone</span>
+                {!isNativeAndroid() && (
+                  <span className="text-[9px] font-black uppercase tracking-wider bg-white/10 text-white/50 border border-white/15 px-2 py-0.5 rounded-full">
+                    Android App Only
+                  </span>
+                )}
               </button>
 
               {/* 11. Listen Together */}

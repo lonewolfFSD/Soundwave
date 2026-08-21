@@ -211,7 +211,9 @@ const Login = () => {
     setError('');
     try {
       if (Capacitor.isNativePlatform()) {
-        const result = await FirebaseAuthentication.signInWithGoogle();
+        const result = await FirebaseAuthentication.signInWithGoogle({
+          useCredentialManager: false
+        });
         const credential = GoogleAuthProvider.credential(result.credential?.idToken);
         const userCredential = await signInWithCredential(auth, credential);
         await ensureUserInFirestore(userCredential.user);
