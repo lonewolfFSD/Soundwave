@@ -303,7 +303,7 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
                       )}
                     </div>
 
-                    {/* Artist Name & Tag */}
+                    {/* Artist Name, Tag & Short Truncated Description */}
                     <div className="min-w-0 flex-1">
                       <h3
                         className="text-xl sm:text-2xl md:text-3xl font-black text-white truncate tracking-tight"
@@ -321,6 +321,11 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
                           </span>
                         )}
                       </div>
+                      {matchedArtist.description && (
+                        <p className="text-xs text-zinc-400/90 leading-relaxed mt-2 line-clamp-2 max-w-xl font-normal">
+                          {matchedArtist.description}
+                        </p>
+                      )}
                     </div>
                   </div>
 
