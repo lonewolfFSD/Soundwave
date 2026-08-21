@@ -196,7 +196,11 @@ export const AccountSettingsPage: React.FC<AccountSettingsPageProps> = ({ onBack
 
   // Setting updater
   const updateSetting = (key: string, value: any, callback?: () => void) => {
-    localStorage.setItem(key, typeof value === 'boolean' ? String(value) : value)
+    const strVal = typeof value === 'boolean' ? String(value) : String(value)
+    localStorage.setItem(key, strVal)
+    if (key === 'sw_crossfade') {
+      localStorage.setItem('sw_crossfade_duration', strVal)
+    }
     window.dispatchEvent(new Event('sw-settings-updated'))
     triggerHaptic()
     if (callback) callback()

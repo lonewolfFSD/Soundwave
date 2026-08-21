@@ -94,6 +94,8 @@ interface PlayerContextType {
   transferPlaybackToDevice: (targetDeviceId: string, targetDeviceName: string) => Promise<void>
   showDevicePicker: boolean
   setShowDevicePicker: (show: boolean) => void
+  crossfadeDuration: number
+  setCrossfadeDuration: (duration: number) => void
 }
 
 const PlayerContext = createContext<PlayerContextType | null>(null)
@@ -132,6 +134,42 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const saved = localStorage.getItem('player_repeat')
     return (saved as 'none' | 'one' | 'all') || 'none'
   })
+
+  const [crossfadeDuration, setCrossfadeDurationState] = useState<number>(() => {
+    return Number(localStorage.getItem('sw_crossfade') || localStorage.getItem('sw_crossfade_duration') || 0)
+  })
+  const crossfadeRef = useRef<number>(crossfadeDuration)
+  const volumeRef = useRef<number>(volume)
+
+  const setCrossfadeDuration = (durationSecs: number) => {
+    setCrossfadeDurationState(durationSecs)
+    crossfadeRef.current = durationSecs
+    localStorage.setItem('sw_crossfade', String(durationSecs))
+    localStorage.setItem('sw_crossfade_duration', String(durationSecs))
+    window.dispatchEvent(new Event('sw-settings-updated'))
+  }
+
+  useEffect(() => {
+    crossfadeRef.current = crossfadeDuration
+  }, [crossfadeDuration])
+
+  useEffect(() => {
+    volumeRef.current = volume
+  }, [volume])
+
+  useEffect(() => {
+    const handleSettingsUpdate = () => {
+      const cf = Number(localStorage.getItem('sw_crossfade') || localStorage.getItem('sw_crossfade_duration') || 0)
+      setCrossfadeDurationState(cf)
+      crossfadeRef.current = cf
+    }
+    window.addEventListener('sw-settings-updated', handleSettingsUpdate)
+    window.addEventListener('storage', handleSettingsUpdate)
+    return () => {
+      window.removeEventListener('sw-settings-updated', handleSettingsUpdate)
+      window.removeEventListener('storage', handleSettingsUpdate)
+    }
+  }, [])
 
   const [isDragging, setIsDragging] = useState(false)
 
@@ -516,8 +554,28 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               if (typeof dur === 'number' && !isNaN(dur) && dur > 0) {
                 setDuration(dur)
               }
-              // Manual fallback for YouTube track ending in case event.data === 0 fails
-              if (dur > 2 && cur >= dur - 0.5 && !isAdvancingRef.current) {
+              const cfSec = crossfadeRef.current || 0
+              if (cfSec > 0 && dur > cfSec + 3) {
+                const timeLeft = dur - cur
+                if (timeLeft <= cfSec && timeLeft > 0) {
+                  const factor = Math.max(0, Math.min(1, timeLeft / cfSec))
+                  try {
+                    ytPlayerRef.current.setVolume(Math.round(volumeRef.current * 100 * factor))
+                  } catch {}
+                }
+                if (cur >= dur - Math.min(cfSec, 3) && !isAdvancingRef.current) {
+                  isAdvancingRef.current = true;
+                  setTimeout(() => { isAdvancingRef.current = false; }, 2000);
+                  if (repeatModeRef.current === 'one') {
+                    try {
+                      ytPlayerRef.current.seekTo(0, true);
+                      ytPlayerRef.current.playVideo();
+                    } catch {}
+                  } else {
+                    nextSongRef.current();
+                  }
+                }
+              } else if (dur > 2 && cur >= dur - 0.5 && !isAdvancingRef.current) {
                 isAdvancingRef.current = true;
                 setTimeout(() => { isAdvancingRef.current = false; }, 1500);
                 if (repeatModeRef.current === 'one') {
@@ -1066,6 +1124,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       song.url?.includes('cloudinary') ||
       song.url?.includes('firebasestorage')
 
+    const cfSec = crossfadeRef.current || 0
+
     if (isUploadedSong) {
       activeEngineRef.current = 'html5'
       try { ytPlayerRef.current?.pauseVideo() } catch {}
@@ -1074,7 +1134,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         audioRef.current.loop = false
         audioRef.current.crossOrigin = 'anonymous'
         audioRef.current.src = song.url
-        audioRef.current.volume = volume
+        audioRef.current.volume = cfSec > 0 && startPosition === 0 ? 0.01 : volume
         audioRef.current.muted = false
         if (startPosition > 0) {
           audioRef.current.currentTime = startPosition
@@ -1084,6 +1144,17 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             setIsPlaying(true)
             if (startPosition > 0 && audioRef.current) {
               audioRef.current.currentTime = startPosition
+            }
+            if (cfSec > 0 && startPosition === 0 && audioRef.current) {
+              const startFade = performance.now()
+              const fadeInterval = setInterval(() => {
+                const elapsed = (performance.now() - startFade) / 1000
+                const factor = Math.min(1, elapsed / cfSec)
+                if (audioRef.current) {
+                  audioRef.current.volume = Math.max(0.01, volumeRef.current * factor)
+                }
+                if (factor >= 1) clearInterval(fadeInterval)
+              }, 80)
             }
           })
           .catch(e => console.error("Audio playback error:", e))
@@ -1108,9 +1179,26 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             try {
               ytPlayerRef.current.loadVideoById({ videoId, startSeconds: startPosition })
               ytPlayerRef.current.unMute()
-              ytPlayerRef.current.setVolume(volume * 100)
-              ytPlayerRef.current.playVideo()
-              setIsPlaying(true)
+
+              if (cfSec > 0 && startPosition === 0) {
+                ytPlayerRef.current.setVolume(1)
+                ytPlayerRef.current.playVideo()
+                setIsPlaying(true)
+                const startFade = performance.now()
+                const fadeInterval = setInterval(() => {
+                  const elapsed = (performance.now() - startFade) / 1000
+                  const factor = Math.min(1, elapsed / cfSec)
+                  try {
+                    ytPlayerRef.current?.setVolume(Math.max(1, Math.round(volumeRef.current * 100 * factor)))
+                  } catch {}
+                  if (factor >= 1) clearInterval(fadeInterval)
+                }, 80)
+              } else {
+                ytPlayerRef.current.setVolume(volume * 100)
+                ytPlayerRef.current.playVideo()
+                setIsPlaying(true)
+              }
+
               if (startPosition > 0) {
                 setTimeout(() => { try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {} }, 300)
                 setTimeout(() => { try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {} }, 700)
@@ -1412,6 +1500,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const setVolume = (newVol: number) => {
     setVolumeState(newVol)
+    volumeRef.current = newVol
     localStorage.setItem('player_volume', String(newVol))
     if (audioRef.current) {
       audioRef.current.volume = newVol
@@ -1444,18 +1533,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       setCurrentTime(audio.currentTime)
 
-      // Seamless track transition when audio reaches the end
-      if (audio.duration && !isNaN(audio.duration) && audio.duration > 2) {
-        if (audio.currentTime >= audio.duration - 0.4 && !isAdvancingRef.current) {
+      // Seamless track transition with crossfade when audio approaches end
+      const cfSec = crossfadeRef.current || 0
+      if (cfSec > 0 && audio.duration && !isNaN(audio.duration) && audio.duration > cfSec + 3) {
+        const timeLeft = audio.duration - audio.currentTime
+        if (timeLeft <= cfSec && timeLeft > 0) {
+          const factor = Math.max(0.01, Math.min(1, timeLeft / cfSec))
+          audio.volume = Math.max(0.01, volumeRef.current * factor)
+          if (gainNodeRef.current && audioCtxRef.current) {
+            gainNodeRef.current.gain.setTargetAtTime(0.01, audioCtxRef.current.currentTime, cfSec / 3)
+          }
+        }
+        if (audio.currentTime >= audio.duration - Math.min(cfSec, 3) && !isAdvancingRef.current) {
           handleEnded()
         }
-      }
-
-      const crossfadeSec = Number(localStorage.getItem('sw_crossfade_duration') || 0)
-      if (crossfadeSec > 0 && audio.duration && !isNaN(audio.duration) && gainNodeRef.current && audioCtxRef.current) {
-        const timeLeft = audio.duration - audio.currentTime
-        if (timeLeft <= crossfadeSec && timeLeft > 0) {
-          gainNodeRef.current.gain.setTargetAtTime(0.05, audioCtxRef.current.currentTime, crossfadeSec / 2)
+      } else if (audio.duration && !isNaN(audio.duration) && audio.duration > 2) {
+        if (audio.currentTime >= audio.duration - 0.4 && !isAdvancingRef.current) {
+          handleEnded()
         }
       }
     }
@@ -1566,6 +1660,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         transferPlaybackToDevice,
         showDevicePicker,
         setShowDevicePicker,
+        crossfadeDuration,
+        setCrossfadeDuration,
       }}
     >
       {children}

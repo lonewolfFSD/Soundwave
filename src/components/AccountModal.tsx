@@ -1052,6 +1052,32 @@ useEffect(() => {
                   {/* Toggles */}
                   <div className="space-y-2">
                     
+                    {/* Crossfade Duration Slider */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 bg-black/20 rounded-2xl border border-white/5 gap-4">
+                      <div className="pr-4">
+                        <h4 className="text-slate-200 text-sm font-bold">Crossfade Duration</h4>
+                        <p className="text-xs text-zinc-500 mt-1">Seamlessly blend tracks into one another (0s to 12s).</p>
+                      </div>
+                      <div className="flex items-center gap-3 w-48 shrink-0">
+                        <input
+                          type="range"
+                          min={0}
+                          max={12}
+                          step={1}
+                          value={crossfade}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setCrossfade(val);
+                            localStorage.setItem('sw_crossfade', String(val));
+                            localStorage.setItem('sw_crossfade_duration', String(val));
+                            window.dispatchEvent(new Event('sw-settings-updated'));
+                          }}
+                          className="w-full accent-white cursor-pointer"
+                        />
+                        <span className="text-xs font-mono text-white/80 w-8 text-right">{crossfade === 0 ? 'Off' : `${crossfade}s`}</span>
+                      </div>
+                    </div>
+                    
                     {isNative ? (
                       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 bg-black/20 rounded-2xl border border-white/5 gap-4">
                         <div className="pr-4">

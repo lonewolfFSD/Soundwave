@@ -160,13 +160,26 @@ export const searchYouTubeMusic = async (query: string): Promise<Song[]> => {
   if (!query || query.trim().length === 0) return []
   const cleanQ = query.trim()
 
+  const isNonMusicJunk = (title: string, artist: string, durationSecs: number) => {
+    const text = `${title} ${artist}`.toLowerCase()
+    const nonMusicRegex = /\b(how to|tutorial|origami|step by step|diy|craft|sound effect|sfx|asmr|sleep sounds|rain sounds|white noise|anxiety control|stress relief sounds|guided meditation|meditation guide|binaural beats for sleep|documentary|podcast|audiobook|lecture|vlog|reaction|gameplay|walkthrough|unboxing|review|lesson|speech|news report)\b/i
+    if (nonMusicRegex.test(text)) {
+      const isExplicitSong = /\b(official video|official music video|official audio|audio track|song|lyric video|music video)\b/i.test(text)
+      if (!isExplicitSong) return true
+    }
+    if (durationSecs > 900 || durationSecs < 45) {
+      if (!/\b(album|full album|ep|discography)\b/i.test(text)) return true
+    }
+    return false
+  }
+
   // 1. Primary: Search YouTube directly via /api/yt-search
   try {
     const res = await fetch(`/api/yt-search?q=${encodeURIComponent(cleanQ)}`, { signal: AbortSignal.timeout(15000) })
     if (res.ok) {
       const items = await res.json()
       if (Array.isArray(items) && items.length > 0) {
-        return items
+        return items.filter((song: any) => !isNonMusicJunk(song.title || '', song.artist || '', song.duration || 210))
       }
     }
   } catch (err) {
