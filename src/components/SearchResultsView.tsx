@@ -279,242 +279,156 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
             {/* ── TOP RESULT HERO CARD (Left Column) ── */}
             {matchedArtist ? (
               <div className="lg:col-span-5 space-y-3">
-                <h2
-                  className="text-[14px] font-bold uppercase tracking-widest flex items-center gap-2"
-                  style={{ color: accentColor, fontFamily: 'Space Grotesk, sans-serif' }}
-                >
-                  <Sparkles size={14} style={{ color: accentColor }} /> Top Result • Artist
+                <h2 className="text-xl font-bold text-white tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                  Top result
                 </h2>
 
                 <div
                   onClick={() => onSelectArtist && onSelectArtist(matchedArtist.name)}
-                  className="relative p-6 rounded-2xl bg-white/[0.03] border transition-all cursor-pointer group shadow-2xl overflow-hidden backdrop-blur-md"
-                  style={{
-                    borderColor: `${accentColor}25`,
-                    backgroundImage: `radial-gradient(circle at 10% 20%, ${accentColor}12, transparent 65%)`
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = `${accentColor}60`
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = `${accentColor}25`
-                  }}
+                  className="relative p-6 rounded-2xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.06] hover:border-white/[0.12] transition-all duration-300 cursor-pointer group shadow-xl overflow-hidden flex flex-col justify-between min-h-[220px]"
                 >
-                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
-                    {/* Artist Circular Avatar with Theme Glow */}
-                    <div
-                      className="w-32 h-32 md:w-36 md:h-36 rounded-full overflow-hidden shadow-2xl shrink-0 group-hover:scale-105 transition-all duration-300 relative border-2"
-                      style={{
-                        borderColor: accentColor,
-                        boxShadow: `0 0 24px ${accentGlow}`
-                      }}
-                    >
+                  <div className="space-y-4">
+                    {/* Natural Circular Artist Avatar */}
+                    <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden shadow-2xl shrink-0 bg-zinc-900 border border-white/10">
                       {matchedArtist.pictureUrl ? (
                         <img
                           src={matchedArtist.pictureUrl}
                           alt={matchedArtist.name}
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         />
                       ) : (
-                        <div className="w-full h-full bg-zinc-900 flex items-center justify-center">
-                          <User size={40} className="text-zinc-600" />
+                        <div className="w-full h-full flex items-center justify-center">
+                          <User size={36} className="text-zinc-500" />
                         </div>
                       )}
                     </div>
 
-                    {/* Meta */}
-                    <div className="flex-1 min-w-0 text-center sm:text-left">
-                      <span
-                        className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider mb-2 border"
-                        style={{
-                          background: `${accentColor}15`,
-                          borderColor: `${accentColor}30`,
-                          color: accentColor
-                        }}
-                      >
-                        Artist
-                      </span>
+                    {/* Artist Name & Tag */}
+                    <div>
                       <h3
-                        className="text-xl md:text-2xl font-extrabold text-white truncate flex items-center justify-center sm:justify-start gap-2 transition-colors"
+                        className="text-2xl sm:text-3xl font-black text-white truncate tracking-tight"
                         style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                       >
                         {matchedArtist.name}
-                        <CheckCircle2 size={18} style={{ color: accentColor }} className="shrink-0" />
                       </h3>
-                      {matchedArtist.monthlyListeners ? (
-                        <p className="text-xs text-zinc-400 font-medium truncate mt-1" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-                          {matchedArtist.monthlyListeners}
-                        </p>
-                      ) : matchedArtist.genres && matchedArtist.genres.length > 0 ? (
-                        <p className="text-xs text-zinc-400 font-medium truncate mt-1" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-                          {matchedArtist.genres.slice(0, 2).join(' • ')}
-                        </p>
-                      ) : null}
-
-                      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 mt-5">
-                        {matchedArtist.topSongs && matchedArtist.topSongs.length > 0 && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handlePlaySong(matchedArtist.topSongs[0])
-                              if (setQueue) setQueue(matchedArtist.topSongs)
-                            }}
-                            className="px-5 py-2.5 rounded-full bg-white text-black font-extrabold text-xs flex items-center gap-2 shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer"
-                            style={{ fontFamily: 'Space Grotesk, sans-serif' }}
-                          >
-                            <Play size={15} fill="currentColor" className="ml-0.5" /> Play Top Hits
-                          </button>
-                        )}
-
-                        {onSelectArtist && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              onSelectArtist(matchedArtist.name)
-                            }}
-                            className="px-4 py-2.5 rounded-full border font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer hover:brightness-125"
-                            style={{
-                              background: `${accentColor}18`,
-                              borderColor: `${accentColor}35`,
-                              color: accentColor,
-                              fontFamily: 'Space Grotesk, sans-serif'
-                            }}
-                          >
-                            View Profile
-                          </button>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-white/10 text-white/90">
+                          Artist
+                        </span>
+                        {matchedArtist.monthlyListeners && (
+                          <span className="text-xs text-zinc-400 font-medium truncate">
+                            • {matchedArtist.monthlyListeners}
+                          </span>
                         )}
                       </div>
                     </div>
                   </div>
+
+                  {/* Floating Play Button */}
+                  {matchedArtist.topSongs && matchedArtist.topSongs.length > 0 && (
+                    <div className="absolute right-6 bottom-6">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handlePlaySong(matchedArtist.topSongs[0])
+                          if (setQueue) setQueue(matchedArtist.topSongs)
+                        }}
+                        className="w-12 h-12 rounded-full bg-white text-black flex items-center justify-center shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
+                        title="Play Top Hits"
+                      >
+                        <Play size={18} fill="currentColor" className="ml-0.5 text-black" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : topTrack ? (
               <div className="lg:col-span-5 space-y-3">
-                <h2 className="text-[14px] font-bold uppercase tracking-widest text-zinc-400 flex items-center gap-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-                  <Sparkles size={14} style={{ color: accentColor }} /> Top Result
+                <h2 className="text-xl font-bold text-white tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                  Top result
                 </h2>
 
                 <div
                   onClick={() => handlePlaySong(topTrack)}
-                  className="relative p-6 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-all cursor-pointer group shadow-xl overflow-hidden backdrop-blur-md"
+                  className="relative p-6 rounded-2xl bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.06] hover:border-white/[0.12] transition-all duration-300 cursor-pointer group shadow-xl overflow-hidden flex flex-col justify-between min-h-[220px]"
                 >
-                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
+                  <div className="space-y-4">
                     {/* Artwork */}
-                    <div className="w-32 h-32 md:w-36 md:h-36 rounded-xl overflow-hidden shadow-2xl shrink-0 border border-white/10 relative">
+                    <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden shadow-2xl shrink-0 bg-zinc-900 border border-white/10 relative">
                       {topTrack.coverArtBase64 ? (
                         <img
                           src={topTrack.coverArtBase64}
                           alt={topTrack.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         />
                       ) : (
-                        <div className="w-full h-full bg-zinc-900 flex items-center justify-center">
-                          <Music size={32} className="text-zinc-600" />
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Music size={36} className="text-zinc-500" />
                         </div>
                       )}
                     </div>
 
                     {/* Meta */}
-                    <div className="flex-1 min-w-0 text-center sm:text-left">
-                      <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/10 text-white/90 border border-white/10 mb-2">
-                        Song
-                      </span>
+                    <div>
                       <h3
-                        className="text-xl md:text-2xl font-extrabold text-white truncate group-hover:text-indigo-300 transition-colors"
+                        className="text-2xl sm:text-3xl font-black text-white truncate tracking-tight"
                         style={{ fontFamily: 'Space Grotesk, sans-serif' }}
                       >
                         {topTrack.title}
                       </h3>
-                      <p
-                        onClick={(e) => {
-                          if (onSelectArtist) {
-                            e.stopPropagation()
-                            onSelectArtist(topTrack.artist)
-                          }
-                        }}
-                        className={`text-sm text-zinc-400 font-medium truncate mt-1 ${
-                          onSelectArtist ? 'hover:text-white hover:underline cursor-pointer' : ''
-                        }`}
-                        style={{ fontFamily: 'Space Grotesk, sans-serif' }}
-                      >
-                        {topTrack.artist}
-                      </p>
-
-                      <div className="flex items-center justify-center sm:justify-start gap-3 mt-5">
-                        <button
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-white/10 text-white/90">
+                          Song
+                        </span>
+                        <span
                           onClick={(e) => {
-                            e.stopPropagation()
-                            handlePlaySong(topTrack)
-                          }}
-                          className="px-5 py-2.5 rounded-full bg-white text-black font-extrabold text-xs flex items-center gap-2 shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer"
-                          style={{ fontFamily: 'Space Grotesk, sans-serif' }}
-                        >
-                          {currentSong?.id === topTrack.id && isPlaying ? (
-                            <>
-                              <Pause size={15} fill="currentColor" /> Pause
-                            </>
-                          ) : (
-                            <>
-                              <Play size={15} fill="currentColor" className="ml-0.5" /> Play
-                            </>
-                          )}
-                        </button>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            toggleLikeSong(topTrack)
-                          }}
-                          title={isSongLiked(topTrack) ? 'Liked' : 'Like'}
-                          className={`p-2.5 rounded-full transition-colors ${
-                            isSongLiked(topTrack)
-                              ? 'bg-white/20 text-white fill-white shadow-lg'
-                              : 'bg-white/5 hover:bg-white/10 text-white/80 hover:text-white'
-                          }`}
-                        >
-                          <Heart size={16} fill={isSongLiked(topTrack) ? 'currentColor' : 'none'} />
-                        </button>
-
-                        <button
-                          onClick={(e) => handleQueueSong(e, topTrack)}
-                          title="Add to Priority Queue (Play Next)"
-                          className={`p-2.5 rounded-full transition-colors ${
-                            upNextQueue?.some(s => s.id === topTrack.id || s.title === topTrack.title)
-                              ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
-                              : 'bg-white/5 hover:bg-white/10 text-white/80 hover:text-white'
-                          }`}
-                        >
-                          <Plus size={16} />
-                        </button>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setSelectedSongForPlaylist(topTrack)
-                          }}
-                          title="Add to Playlist"
-                          className="p-2.5 rounded-full bg-white/5 hover:bg-white/10 text-white/80 hover:text-white transition-colors"
-                        >
-                          <ListPlus size={16} />
-                        </button>
-
-                        <button
-                          onClick={async (e) => {
-                            e.stopPropagation()
-                            try {
-                              await downloadSongForOffline(topTrack)
-                              alert(`Downloaded "${topTrack.title}" for offline playback!`)
-                            } catch {
-                              alert('Failed to download track.')
+                            if (onSelectArtist) {
+                              e.stopPropagation()
+                              onSelectArtist(topTrack.artist)
                             }
                           }}
-                          title="Download for Offline"
-                          className="p-2.5 rounded-full bg-white/5 hover:bg-white/10 text-white/80 hover:text-white transition-colors"
+                          className={`text-xs text-zinc-400 font-medium truncate ${
+                            onSelectArtist ? 'hover:text-white hover:underline cursor-pointer' : ''
+                          }`}
                         >
-                          <DownloadCloud size={16} />
-                        </button>
+                          • {topTrack.artist}
+                        </span>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="absolute right-6 bottom-6 flex items-center gap-2">
+                    <button
+                      onClick={(e) => handleQueueSong(e, topTrack)}
+                      title="Add to Priority Queue"
+                      className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer"
+                    >
+                      <Plus size={16} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleLikeSong(topTrack)
+                      }}
+                      title={isSongLiked(topTrack) ? 'Liked' : 'Like'}
+                      className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer"
+                    >
+                      <Heart size={16} fill={isSongLiked(topTrack) ? 'currentColor' : 'none'} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handlePlaySong(topTrack)
+                      }}
+                      className="w-12 h-12 rounded-full bg-white text-black flex items-center justify-center shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
+                    >
+                      {currentSong?.id === topTrack.id && isPlaying ? (
+                        <Pause size={18} fill="currentColor" />
+                      ) : (
+                        <Play size={18} fill="currentColor" className="ml-0.5" />
+                      )}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -523,7 +437,7 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
             {/* ── SONGS LIST (Right Column) ── */}
             {otherTracks.length > 0 && (
               <div className="lg:col-span-7 space-y-3">
-                <h2 className="text-[14px] font-bold uppercase tracking-widest text-zinc-400" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                <h2 className="text-xl font-bold text-white tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                   Songs
                 </h2>
 
