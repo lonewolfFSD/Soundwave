@@ -1281,8 +1281,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
-    // Only trust sequential queue order if it's an explicit user-built queue (not the raw library)
-    const hasExplicitQueue = queue.length > 1;
+    // Trust sequential queue order
+    const hasExplicitQueue = queue.length > 0;
     const currentIndex = effectiveQueue.findIndex(s => s.id === currentSong?.id || s.title === currentSong?.title);
 
     if (hasExplicitQueue && currentIndex !== -1 && currentIndex < effectiveQueue.length - 1) {
@@ -1294,21 +1294,25 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
-    // No real queue — always chase ML-similar vibe instead of falling through the library
+    // Reached the end of explicit queue or single track — try continuous ML-similar vibe queue
     if (currentSong) {
       try {
         const moodQueue = await getSongRadioQueue(currentSong, [], playedHistory, 15);
-        if (moodQueue.length > 0) {
-          setQueue(moodQueue);
-          playSong(moodQueue[0], false);
+        const freshMoodTracks = moodQueue.filter(s => s.id !== currentSong.id && s.title !== currentSong.title);
+        if (freshMoodTracks.length > 0) {
+          setQueue(freshMoodTracks);
+          playSong(freshMoodTracks[0], false);
           return;
         }
       } catch (e) {
         console.warn('Continuous mood queue resolution error:', e);
       }
     }
-    if (effectiveQueue.length > 0) {
+
+    if (repeatMode === 'all' && effectiveQueue.length > 0) {
       playSong(effectiveQueue[0], false);
+    } else {
+      pauseSong();
     }
   }
 
@@ -1356,7 +1360,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const effectiveQueue = queue.length > 0 ? queue : globalLibrary;
     if (effectiveQueue.length === 0) return;
 
-    const currentIndex = effectiveQueue.findIndex(s => s.id === currentSong?.id);
+    const currentIndex = effectiveQueue.findIndex(s => s.id === currentSong?.id || s.title === currentSong?.title);
     if (currentIndex > 0) {
       playSong(effectiveQueue[currentIndex - 1], false);
     } else if (repeatMode === 'all') {

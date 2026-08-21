@@ -18,7 +18,8 @@ import {
   Sparkles,
   Youtube,
   Radio,
-  Heart
+  Heart,
+  Shuffle
 } from 'lucide-react'
 
 interface SearchResultsViewProps {
@@ -110,46 +111,91 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
     return `${m}:${s < 10 ? '0' : ''}${s}`
   }
 
-  const handlePlaySong = async (song: Song) => {
+  const getAllSearchSongs = (): Song[] => {
+    const combined = [...searchResults.songs, ...searchResults.youtube]
+    const seen = new Set<string>()
+    const unique: Song[] = []
+    for (const s of combined) {
+      if (!s) continue
+      const key = s.id || `${s.title}_${s.artist}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        unique.push(s)
+      }
+    }
+    return unique
+  }
+
+  const handlePlaySong = (song: Song) => {
     const isActive = currentSong?.id === song.id || (currentSong?.title === song.title && currentSong?.artist === song.artist)
     if (isActive) {
       if (isPlaying) pauseSong()
       else resumeSong()
     } else {
-      // 1. Play the selected song immediately
-      playSong(song)
-
-      // 2. Concurrently create an ML similar-vibe queue based on artist, genre and mood (not search results)
-      try {
-        const radioVibeQueue = await getSongRadioQueue(song, [], playedHistory, 25)
-        if (setQueue) {
-          setQueue([song, ...radioVibeQueue])
-        }
-      } catch {
-        if (setQueue) setQueue([song])
+      const allSongs = getAllSearchSongs()
+      const effectiveQueue = allSongs.length > 0 ? allSongs : [song]
+      if (setQueue) {
+        setQueue(effectiveQueue)
       }
+      playSong(song)
     }
+  }
+
+  const handlePlayAll = () => {
+    const allSongs = getAllSearchSongs()
+    if (allSongs.length === 0) return
+    if (setQueue) setQueue(allSongs)
+    playSong(allSongs[0])
+  }
+
+  const handleShuffleAll = () => {
+    const allSongs = getAllSearchSongs()
+    if (allSongs.length === 0) return
+    const shuffled = [...allSongs].sort(() => 0.5 - Math.random())
+    if (setQueue) setQueue(shuffled)
+    playSong(shuffled[0])
   }
 
   return (
     <div className="w-full max-w-[1600px] mx-auto pb-28 space-y-8 animate-in fade-in duration-200">
       {/* Top Header */}
-      <div className="flex items-center gap-4">
-        <button
-          onClick={onBack}
-          className="p-2.5 rounded-full bg-white/5 hover:bg-white/10 text-white/80 hover:text-white transition-colors cursor-pointer"
-          title="Go back"
-        >
-          <ChevronLeft size={22} />
-        </button>
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-400" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-            Search Results
-          </p>
-          <h1 className="text-2xl md:text-3xl font-black text-white truncate max-w-xl" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-            &ldquo;{queryText}&rdquo;
-          </h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={onBack}
+            className="p-2.5 rounded-full bg-white/5 hover:bg-white/10 text-white/80 hover:text-white transition-colors cursor-pointer"
+            title="Go back"
+          >
+            <ChevronLeft size={22} />
+          </button>
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-400" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+              Search Results
+            </p>
+            <h1 className="text-2xl md:text-3xl font-black text-white truncate max-w-xl" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+              &ldquo;{queryText}&rdquo;
+            </h1>
+          </div>
         </div>
+
+        {!loading && (topTrack || searchResults.youtube.length > 0) && (
+          <div className="flex items-center gap-3 pl-12 sm:pl-0">
+            <button
+              onClick={handlePlayAll}
+              className="px-5 py-2.5 rounded-full bg-white text-black font-extrabold text-xs flex items-center gap-2 shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer"
+              style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+            >
+              <Play size={14} fill="currentColor" className="ml-0.5" /> Play All
+            </button>
+            <button
+              onClick={handleShuffleAll}
+              className="px-4 py-2.5 rounded-full bg-white/10 hover:bg-white/15 text-white font-bold text-xs flex items-center gap-2 transition-all cursor-pointer"
+              style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+            >
+              <Shuffle size={14} /> Shuffle
+            </button>
+          </div>
+        )}
       </div>
 
       {loading ? (
