@@ -211,12 +211,23 @@ const Login = () => {
     setError('');
     try {
       if (Capacitor.isNativePlatform()) {
-        const result = await FirebaseAuthentication.signInWithGoogle();
-        if (result.credential?.idToken) {
+        let result: any;
+        try {
+          result = await FirebaseAuthentication.signInWithGoogle({
+            useCredentialManager: true
+          });
+        } catch (credErr: any) {
+          console.warn("CredentialManager failed, falling back to classic Google Sign-In:", credErr);
+          result = await FirebaseAuthentication.signInWithGoogle({
+            useCredentialManager: false
+          });
+        }
+
+        if (result?.credential?.idToken) {
           const credential = GoogleAuthProvider.credential(result.credential.idToken);
           const userCredential = await signInWithCredential(auth, credential);
           await ensureUserInFirestore(userCredential.user);
-        } else if (result.user) {
+        } else if (result?.user) {
           await ensureUserInFirestore(result.user as any);
         }
         navigate('/dashboard');
@@ -227,7 +238,7 @@ const Login = () => {
       }
     } catch (err: any) {
       console.error("Auth failed:", err);
-      setError('Google Sign-In failed.');
+      setError(err?.message || 'Google Sign-In failed.');
       setGoogleLoading(false);
     }
   };
