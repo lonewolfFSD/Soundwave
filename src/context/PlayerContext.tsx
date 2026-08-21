@@ -954,17 +954,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Keep AudioContext active when browser tab visibility changes
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        if (audioCtxRef.current && audioCtxRef.current.state === 'suspended' && isPlayingRef.current) {
-          audioCtxRef.current.resume().catch(() => {});
-        }
+    const resumeIfSuspended = () => {
+      if (audioCtxRef.current && audioCtxRef.current.state === 'suspended' && isPlayingRef.current) {
+        audioCtxRef.current.resume().catch(() => {});
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('visibilitychange', resumeIfSuspended);
+    const keepAliveInterval = setInterval(resumeIfSuspended, 1000);
+
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('visibilitychange', resumeIfSuspended);
+      clearInterval(keepAliveInterval);
     };
   }, []);
 
