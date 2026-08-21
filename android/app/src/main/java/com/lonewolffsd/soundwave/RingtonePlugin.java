@@ -1,4 +1,4 @@
-﻿package com.lonewolffsd.soundwave;
+package com.lonewolffsd.soundwave;
 
 import android.content.ContentResolver;
 import android.content.ContentValues;
