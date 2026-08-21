@@ -29,6 +29,9 @@ declare global {
   }
 }
 
+// Silent 1-second WAV audio loop to hold browser audio session permanently active for remote casting & prevent background throttling
+const SILENT_AUDIO_URI = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'
+
 export interface Song {
   id: string
   title: string
@@ -102,6 +105,7 @@ const PlayerContext = createContext<PlayerContextType | null>(null)
 
 export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const audioRef = useRef<HTMLAudioElement>(null)
+  const silentAudioRef = useRef<HTMLAudioElement>(null)
   const ytPlayerRef = useRef<any>(null)
   const activeEngineRef = useRef<'html5' | 'youtube'>('html5')
   const isAdvancingRef = useRef(false)
@@ -168,6 +172,37 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => {
       window.removeEventListener('sw-settings-updated', handleSettingsUpdate)
       window.removeEventListener('storage', handleSettingsUpdate)
+    }
+  }, [])
+
+  // ── BACKGROUND AUDIO SESSION KEEPER & AUTOPLAY UNLOCK ──
+  const startSilentAudioKeeper = () => {
+    try {
+      if (silentAudioRef.current) {
+        silentAudioRef.current.volume = 0.001
+        silentAudioRef.current.play().catch(() => {})
+      }
+      if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+        audioCtxRef.current.resume().catch(() => {})
+      }
+    } catch {}
+  }
+
+  useEffect(() => {
+    const unlockAudio = () => {
+      startSilentAudioKeeper()
+    }
+
+    window.addEventListener('pointerdown', unlockAudio, { once: true })
+    window.addEventListener('touchstart', unlockAudio, { once: true })
+    window.addEventListener('click', unlockAudio, { once: true })
+    window.addEventListener('keydown', unlockAudio, { once: true })
+
+    return () => {
+      window.removeEventListener('pointerdown', unlockAudio)
+      window.removeEventListener('touchstart', unlockAudio)
+      window.removeEventListener('click', unlockAudio)
+      window.removeEventListener('keydown', unlockAudio)
     }
   }, [])
 
@@ -1774,6 +1809,15 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     >
       {children}
       <audio ref={audioRef} crossOrigin="anonymous" preload="auto" />
+      {/* 🔇 Silent Audio Session Keeper: keeps tab alive & bypasses autoplay blocks for remote casting */}
+      <audio
+        ref={silentAudioRef}
+        src={SILENT_AUDIO_URI}
+        loop
+        preload="auto"
+        playsInline
+        style={{ display: 'none' }}
+      />
       {/* 🌟 Global Official YouTube Stream Bridge for Full-Length Playback */}
       <div
         id="soundwave-global-yt-player-container"
