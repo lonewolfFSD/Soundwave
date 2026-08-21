@@ -109,6 +109,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const ytPlayerRef = useRef<any>(null)
   const activeEngineRef = useRef<'html5' | 'youtube'>('html5')
   const isAdvancingRef = useRef(false)
+  const userIntentionalPauseRef = useRef(false)
 
   const [activeJamRoom, setActiveJamRoom] = useState<any | null>(null)
   const isInJam = !!activeJamRoom
@@ -553,7 +554,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 } catch {}
               } else if (event.data === 2) {
                 // Paused
-                setIsPlaying(false)
+                if (!userIntentionalPauseRef.current && isPlayingRef.current) {
+                  // Bypass automatic background pausing from browser or OS
+                  setTimeout(() => {
+                    if (!userIntentionalPauseRef.current && isPlayingRef.current) {
+                      try {
+                        event.target.playVideo()
+                      } catch {}
+                    }
+                  }, 50)
+                } else {
+                  setIsPlaying(false)
+                }
               }
             },
             onError: (err: any) => {
@@ -565,6 +577,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         console.warn('Error initializing global YouTube player:', e)
       }
     }
+
+    // Keep YouTube and Web Audio playing during tab switch or screen lock
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        if (silentAudioRef.current && isPlayingRef.current) {
+          silentAudioRef.current.play().catch(() => {})
+        }
+        if (!userIntentionalPauseRef.current && isPlayingRef.current) {
+          if (activeEngineRef.current === 'youtube' && ytPlayerRef.current) {
+            setTimeout(() => {
+              try { ytPlayerRef.current?.playVideo() } catch {}
+            }, 50)
+          }
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
 
     if (window.YT && window.YT.Player) {
       initYt()
@@ -590,7 +619,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           clearInterval(interval)
         }
       }, 300)
-      return () => clearInterval(interval)
+      return () => {
+        clearInterval(interval)
+        document.removeEventListener('visibilitychange', handleVisibility)
+      }
     }
   }, [])
 
@@ -1099,6 +1131,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const playSong = async (song: Song, addToHistory = true, startPosition = 0, forceLocal = false) => {
     if (!song) return
+    userIntentionalPauseRef.current = false
 
     initAudioGraph()
     if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
@@ -1305,6 +1338,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }
 
   const pauseSong = () => {
+    userIntentionalPauseRef.current = true
     if (isRemotePlaybackRef.current) {
       // Remote Mode: send command to active host without touching local audio hardware
       setIsPlaying(false)
@@ -1347,6 +1381,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }
 
   const resumeSong = () => {
+    userIntentionalPauseRef.current = false
     if (isRemotePlaybackRef.current) {
       // Remote Mode: send resume to active host without local sound output
       setIsPlaying(true)
