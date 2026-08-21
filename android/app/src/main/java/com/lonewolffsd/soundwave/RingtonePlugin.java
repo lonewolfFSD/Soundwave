@@ -13,6 +13,7 @@ import android.os.Looper;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.util.Base64;
+import android.util.Log;
 import android.widget.Toast;
 
 import com.getcapacitor.JSObject;
@@ -31,6 +32,8 @@ import java.net.URL;
 
 @CapacitorPlugin(name = "Ringtone")
 public class RingtonePlugin extends Plugin {
+
+    private static final String TAG = "SoundwaveRingtone";
 
     @PluginMethod
     public void hasPermission(PluginCall call) {
@@ -78,7 +81,7 @@ public class RingtonePlugin extends Plugin {
         String artist = call.getString("artist", "Soundwave");
         String mimeType = call.getString("mimeType", "audio/mpeg");
 
-        if ((urlStr == null || urlStr.isEmpty()) && (filePath == null || filePath.isEmpty()) && (base64Data == null || base64Data.isEmpty())) {
+        if ((urlStr == null || urlStr.trim().isEmpty()) && (filePath == null || filePath.trim().isEmpty()) && (base64Data == null || base64Data.trim().isEmpty())) {
             call.reject("INVALID_DATA", "Must provide url, filePath, or base64Data");
             return;
         }
@@ -106,10 +109,19 @@ public class RingtonePlugin extends Plugin {
                 if (inputStream == null && urlStr != null && !urlStr.isEmpty()) {
                     URL url = new URL(urlStr);
                     HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn.setInstanceFollowRedirects(true);
                     conn.setConnectTimeout(15000);
                     conn.setReadTimeout(30000);
                     conn.setRequestProperty("User-Agent", "Soundwave/1.5.0");
                     conn.connect();
+                    int code = conn.getResponseCode();
+                    if (code == HttpURLConnection.HTTP_MOVED_TEMP || code == HttpURLConnection.HTTP_MOVED_PERM || code == 307 || code == 308) {
+                        String redirectUrl = conn.getHeaderField("Location");
+                        if (redirectUrl != null && !redirectUrl.isEmpty()) {
+                            conn = (HttpURLConnection) new URL(redirectUrl).openConnection();
+                            conn.connect();
+                        }
+                    }
                     if (conn.getResponseCode() == 200 || conn.getResponseCode() == 206) {
                         inputStream = conn.getInputStream();
                     }
@@ -123,7 +135,7 @@ public class RingtonePlugin extends Plugin {
                 String cleanTitle = title.replaceAll("[^a-zA-Z0-9._ -]", "").trim();
                 if (cleanTitle.isEmpty()) cleanTitle = "Soundwave_Ringtone";
                 String ext = mimeType.contains("wav") ? ".wav" : ".mp3";
-                String fileName = cleanTitle + ext;
+                String fileName = cleanTitle + "_" + (System.currentTimeMillis() % 100000) + ext;
 
                 Uri ringtoneUri = null;
                 ContentResolver resolver = context.getContentResolver();
@@ -186,13 +198,13 @@ public class RingtonePlugin extends Plugin {
                 try {
                     RingtoneManager.setActualDefaultRingtoneUri(context, RingtoneManager.TYPE_RINGTONE, ringtoneUri);
                 } catch (Exception rErr) {
-                    rErr.printStackTrace();
+                    Log.w(TAG, "RingtoneManager set failed", rErr);
                 }
 
                 try {
                     Settings.System.putString(context.getContentResolver(), Settings.System.RINGTONE, ringtoneUri.toString());
                 } catch (Exception sErr) {
-                    sErr.printStackTrace();
+                    Log.w(TAG, "Settings.System write failed", sErr);
                 }
 
                 new Handler(Looper.getMainLooper()).post(() -> {
@@ -206,6 +218,7 @@ public class RingtonePlugin extends Plugin {
                 call.resolve(ret);
 
             } catch (Exception e) {
+                Log.e(TAG, "Error setting ringtone", e);
                 new Handler(Looper.getMainLooper()).post(() -> {
                     Toast.makeText(context, "Failed to set ringtone: " + e.getMessage(), Toast.LENGTH_SHORT).show();
                 });
