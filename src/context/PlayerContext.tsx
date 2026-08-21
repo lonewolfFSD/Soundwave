@@ -180,7 +180,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const startSilentAudioKeeper = () => {
     try {
       if (silentAudioRef.current) {
-        silentAudioRef.current.volume = 0.001
+        silentAudioRef.current.volume = 0.01
         silentAudioRef.current.play().catch(() => {})
       }
       if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
@@ -562,7 +562,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                         event.target.playVideo()
                       } catch {}
                     }
-                  }, 50)
+                  }, 200)
                 } else {
                   setIsPlaying(false)
                 }
@@ -579,18 +579,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     // Keep YouTube and Web Audio playing during tab switch or screen lock
+    // Spoof visibility so the YT IFrame player never sees the tab as hidden
+    Object.defineProperty(document, 'hidden', { get: () => false, configurable: true })
+    Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true })
+
+    // Block YT's internal visibilitychange listener by capturing the event first
+    const stopVisibilityPropagation = (e: Event) => e.stopImmediatePropagation()
+    document.addEventListener('visibilitychange', stopVisibilityPropagation, true)
+
+    // Our own handler runs after — resume if YT still managed to pause
     const handleVisibility = () => {
-      if (document.visibilityState === 'hidden') {
-        if (silentAudioRef.current && isPlayingRef.current) {
-          silentAudioRef.current.play().catch(() => {})
-        }
-        if (!userIntentionalPauseRef.current && isPlayingRef.current) {
-          if (activeEngineRef.current === 'youtube' && ytPlayerRef.current) {
-            setTimeout(() => {
-              try { ytPlayerRef.current?.playVideo() } catch {}
-            }, 50)
-          }
-        }
+      if (silentAudioRef.current && isPlayingRef.current) {
+        silentAudioRef.current.play().catch(() => {})
+      }
+      if (!userIntentionalPauseRef.current && isPlayingRef.current && activeEngineRef.current === 'youtube') {
+        setTimeout(() => {
+          try { ytPlayerRef.current?.playVideo() } catch {}
+        }, 80)
       }
     }
     document.addEventListener('visibilitychange', handleVisibility)
@@ -621,7 +626,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }, 300)
       return () => {
         clearInterval(interval)
-        document.removeEventListener('visibilitychange', handleVisibility)
+        document.removeEventListener('visibilitychange', stopVisibilityPropagation, true)
       }
     }
   }, [])
