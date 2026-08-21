@@ -63,6 +63,7 @@ import AddToPlaylistModal from './AddToPlaylistModal';
 import { DevicePickerModal } from './DevicePickerModal';
 import { RingtoneModal } from './RingtoneModal';
 import { AppleLyricsLine } from './AppleLyricsLine';
+import { SyncedVideoPlayer } from './SyncedVideoPlayer';
 
 // --- HELPER: Parse LRC Lyrics ---
 const parseLyrics = (lyrics: string) => {
@@ -181,7 +182,7 @@ const Player: React.FC = () => {
   const [isDownloadingOffline, setIsDownloadingOffline] = useState(false);
   const [offlineDownloadProgress, setOfflineDownloadProgress] = useState(0);
 
-  const [desktopMainView, setDesktopMainView] = useState<'lyrics' | 'disc'>('lyrics');
+  const [desktopMainView, setDesktopMainView] = useState<'lyrics' | 'disc' | 'video'>('lyrics');
 
   useEffect(() => {
     setIsUserScrolledMobile(false);
@@ -1035,13 +1036,25 @@ useEffect(() => {
               <Music size={16} />
               Disc
             </button>
+
+            {/* VIDEO BUTTON */}
+            {youtubeId && (
+              <button 
+                onClick={() => { triggerHaptic(); setDesktopMainView('video'); }}
+                className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 text-sm font-bold ${desktopMainView === 'video' ? `${activeColor} bg-white/15 shadow-lg` : `${textMuted} hover:${textMain} hover:bg-white/5`}`}
+                style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+              >
+                <Video size={16} />
+                Video
+              </button>
+            )}
           </div>
         </div>
 
         {/* Main Content Area */}
         <div className="relative z-10 flex-1 flex flex-row w-full h-full overflow-hidden">
           
-          {/* LEFT/CENTER AREA: Main Stage (Spotify-Style Lyrics / Vinyl Disc) */}
+          {/* LEFT/CENTER AREA: Main Stage (Spotify-Style Lyrics / Vinyl Disc / Video) */}
           <div className="flex-1 flex flex-col items-center justify-center h-full pb-[100px] relative overflow-hidden">
             {desktopMainView === 'lyrics' ? (
               // ── SPOTIFY-STYLE FULL-CANVAS LYRICS ──
@@ -1107,6 +1120,18 @@ useEffect(() => {
                     <span>Re-sync Lyrics</span>
                   </button>
                 )}
+              </div>
+            ) : desktopMainView === 'video' && youtubeId ? (
+              // ── VIDEO VIEW ──
+              <div className="w-full max-w-[750px] aspect-video rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.8)] border border-white/15 bg-black flex items-center justify-center relative">
+                <SyncedVideoPlayer
+                  videoId={youtubeId}
+                  isPlaying={isPlaying}
+                  currentTime={currentTime}
+                  coverArt={currentSong.coverArtBase64}
+                  title={currentSong.title}
+                  onTogglePlay={() => (isPlaying ? pauseSong() : resumeSong())}
+                />
               </div>
             ) : (
               // ── CD / VINYL DISC VIEW ──
