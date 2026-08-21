@@ -162,7 +162,7 @@ export const searchYouTubeMusic = async (query: string): Promise<Song[]> => {
 
   // 1. Primary: Search YouTube directly via /api/yt-search
   try {
-    const res = await fetch(`/api/yt-search?q=${encodeURIComponent(cleanQ)}`, { signal: AbortSignal.timeout(6000) })
+    const res = await fetch(`/api/yt-search?q=${encodeURIComponent(cleanQ)}`, { signal: AbortSignal.timeout(15000) })
     if (res.ok) {
       const items = await res.json()
       if (Array.isArray(items) && items.length > 0) {

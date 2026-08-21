@@ -325,7 +325,7 @@ export const getSongRadioQueue = async (
                           
     if (seedYoutubeId) {
       try {
-        const res = await fetch(`/api/yt-upnext?id=${seedYoutubeId}`, { signal: AbortSignal.timeout(6000) });
+        const res = await fetch(`/api/yt-upnext?id=${seedYoutubeId}`, { signal: AbortSignal.timeout(15000) });
         if (res.ok) {
           const upnextSongs = await res.json();
           if (Array.isArray(upnextSongs) && upnextSongs.length > 0) {
@@ -418,7 +418,16 @@ export const getSongRadioQueue = async (
   }
 
   // 3. Run ML mood coherence re-ranking on the diverse candidate pool
-  return getMoodCoherentQueue(seedSong, candidatePool, history, limit)
+  const finalQueue = getMoodCoherentQueue(seedSong, candidatePool, history, limit)
+  if (finalQueue.length === 0) {
+    try {
+      const tr = await fetch('/api/yt-trending').then(r => r.json());
+      if (Array.isArray(tr)) {
+        return tr.filter((t: any) => t.id !== seedSong.id).slice(0, limit);
+      }
+    } catch(e) {}
+  }
+  return finalQueue;
 }
 
 export interface UserTasteProfile {

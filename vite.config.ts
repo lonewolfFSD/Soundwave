@@ -104,7 +104,7 @@ function youtubeMusicPlugin() {
                 videoId: videoId,
                 playlistId: 'RDAMVM' + videoId
               }),
-              signal: AbortSignal.timeout(5000)
+              signal: AbortSignal.timeout(15000)
             })
 
             if (innertubeRes.ok) {
