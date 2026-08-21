@@ -636,6 +636,7 @@ public class MainActivity extends BridgeActivity {
         super.onPause();
         if (sensorManager != null) sensorManager.unregisterListener(sensorListener);
         if (getBridge() != null && getBridge().getWebView() != null) {
+            getBridge().getWebView().onResume();
             getBridge().getWebView().resumeTimers();
         }
     }
@@ -644,6 +645,7 @@ public class MainActivity extends BridgeActivity {
     public void onStop() {
         super.onStop();
         if (getBridge() != null && getBridge().getWebView() != null) {
+            getBridge().getWebView().onResume();
             getBridge().getWebView().resumeTimers();
         }
     }
