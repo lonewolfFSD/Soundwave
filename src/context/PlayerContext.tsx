@@ -294,20 +294,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           const isSameSong = currentSongRef.current?.id === remoteState.currentSong.id
           const isLocalPlaying = isPlayingRef.current || (audioRef.current && !audioRef.current.paused)
 
-          // Latency compensation
-          const elapsed = Math.max(0, Math.min(30, (Date.now() - (remoteState.updatedAt || Date.now())) / 1000))
-          const targetPos = Math.min((remoteState.position || 0) + (remoteState.isPlaying ? elapsed : 0), remoteState.duration || 9999)
+          // Exact remote position (Latency compensation removed to fix clock drift skipping)
+          const targetPos = remoteState.position || 0
 
           // 🛑 CASE A: Remote requested PAUSE
           if (!remoteState.isPlaying) {
-            if (isLocalPlaying) {
-              if (activeEngineRef.current === 'youtube') {
-                try { ytPlayerRef.current?.pauseVideo() } catch {}
-              } else if (audioRef.current) {
-                audioRef.current.pause()
-              }
-              setIsPlaying(false)
+            if (activeEngineRef.current === 'youtube') {
+              try { ytPlayerRef.current?.pauseVideo() } catch {}
             }
+            if (audioRef.current) {
+              audioRef.current.pause()
+            }
+            setIsPlaying(false)
             if (!isSameSong) {
               setCurrentSong(remoteState.currentSong)
             }
@@ -406,6 +404,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const effectiveQueue = (queue && queue.length > 0) ? queue : globalLibrary
 
     if (isTargetThisDevice) {
+      activeDeviceIdRef.current = currentDeviceId
+      isRemotePlaybackRef.current = false
       setActiveDeviceId(currentDeviceId)
       setActiveDeviceName(localDeviceInfo.name)
       if (currentSong) {
@@ -432,6 +432,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         audioRef.current.pause()
       }
       setIsPlaying(true)
+      activeDeviceIdRef.current = targetDeviceId
+      isRemotePlaybackRef.current = true
       setActiveDeviceId(targetDeviceId)
       setActiveDeviceName(targetDeviceName)
 
@@ -1226,8 +1228,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               audioRef.current.src = streamUrl
               audioRef.current.volume = volumeRef.current
               audioRef.current.muted = false
-              if (startPosition > 0) audioRef.current.currentTime = startPosition
               await audioRef.current.play()
+              if (startPosition > 0) audioRef.current.currentTime = startPosition
               setIsPlaying(true)
             }
           } catch (streamErr) {
@@ -1267,6 +1269,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 setTimeout(() => { try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {} }, 700)
                 setTimeout(() => { try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {} }, 1200)
               }
+
+              // Verify if playback actually started (catch Autoplay blocks or stuck buffering)
+              setTimeout(() => {
+                try {
+                  const state = ytPlayerRef.current?.getPlayerState()
+                  // If not Playing (1) and not Buffering (3) after 3 seconds, assume blocked
+                  if (state !== 1 && state !== 3) {
+                    console.warn('YouTube playback stalled or blocked by autoplay. Forcing fallback stream.')
+                    fallbackToDirectStream()
+                  }
+                } catch (e) {}
+              }, 3000)
             } catch (e) {
               console.warn('YouTube Player load error, using stream fallback:', e)
               fallbackToDirectStream()
