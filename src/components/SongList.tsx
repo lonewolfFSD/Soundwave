@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import type { Song } from '../context/PlayerContext'
 import { searchYouTubeMusic, getTrendingYouTubeMusic } from '../utils/ytMusic'
+import { fetchArtistProfile } from '../utils/artistService'
 
 import SongUpload from './SongUpload'
 import { Capacitor } from '@capacitor/core';
@@ -257,32 +258,87 @@ const SongList: React.FC<SongListProps> = ({ playlistId }) => {
     setProcessing(false);
   }
 }
-  // --- FETCH SPOTIFY-STYLE PLAYLIST RECOMMENDATIONS ---
+
+  // --- STRICT SONG FILTER: Only genuine individual songs, NO playlists/mixes/compilations ---
+  const isGenuineSong = (song: Song) => {
+    if (!song || !song.title) return false;
+    const title = (song.title || '').toLowerCase().trim();
+    const artist = (song.artist || '').toLowerCase().trim();
+    const fullText = `${title} ${artist}`;
+
+    // Reject playlists, albums, mixes, compilations, long collections
+    const blacklistRegex = /\b(playlist|full playlist|compilation|greatest hits full|full album|album mix|all songs|top \d+ songs|nonstop|non stop|dj mix|mega mix|party mix|lofi mix|chill mix|mix \d+|1 hour|2 hours|3 hours|10 hours|soundtrack full|ost full|discography|anthology|best of \d{4}|songs \d{4})\b/i;
+    if (blacklistRegex.test(fullText)) return false;
+
+    // Reject non-song video content
+    const junkRegex = /\b(tutorial|how to|origami|sound effect|sfx|sleep sounds|rain sounds|white noise|guided meditation|documentary|podcast|audiobook|reaction|gameplay|walkthrough)\b/i;
+    if (junkRegex.test(fullText)) return false;
+
+    // Individual songs should be between 35 seconds and 600 seconds (10 mins)
+    if (song.duration && (song.duration > 600 || song.duration < 35)) return false;
+
+    return true;
+  };
+
+  // --- FETCH SPOTIFY-STYLE SMART PLAYLIST RECOMMENDATIONS ---
   const fetchRecommendations = async () => {
     if (!playlistId) return;
     setLoadingRecs(true);
     try {
-      let recs: Song[] = [];
+      let candidatePool: Song[] = [];
+
       if (songs.length > 0) {
         const uniqueArtists = Array.from(new Set(songs.map(s => s.artist).filter(Boolean)));
         const shuffledArtists = [...uniqueArtists].sort(() => 0.5 - Math.random());
-        const queryArtist = shuffledArtists[0] || 'Top Songs';
-        const fetched = await searchYouTubeMusic(`${queryArtist} songs`);
-        recs = fetched;
+        const selectedArtists = shuffledArtists.slice(0, 3);
+
+        // 1. Fetch official artist top songs concurrently
+        const artistPromises = selectedArtists.map(async (artist) => {
+          try {
+            const profile = await fetchArtistProfile(artist);
+            if (profile && profile.topSongs && profile.topSongs.length > 0) {
+              return profile.topSongs;
+            }
+          } catch {}
+          return searchYouTubeMusic(`${artist} official audio`);
+        });
+
+        // 2. Also search tracks related to a random song in the playlist
+        const randomSong = songs[Math.floor(Math.random() * songs.length)];
+        const songRelatedPromise = randomSong
+          ? searchYouTubeMusic(`${randomSong.title} ${randomSong.artist || ''}`)
+          : Promise.resolve([]);
+
+        const results = await Promise.all([...artistPromises, songRelatedPromise]);
+        candidatePool = results.flat();
       } else {
-        recs = await getTrendingYouTubeMusic();
+        // Empty playlist: Recommend global trending hits
+        const trending = await getTrendingYouTubeMusic();
+        candidatePool = trending;
       }
 
-      // Filter out songs already in the playlist
+      // Existing playlist song signatures for strict deduplication
       const existingIds = new Set(songs.map(s => s.id));
-      const existingTitles = new Set(songs.map(s => `${s.title.toLowerCase().trim()}_${(s.artist || '').toLowerCase().trim()}`));
-
-      const filtered = recs.filter(r => 
-        !existingIds.has(r.id) && 
-        !existingTitles.has(`${r.title.toLowerCase().trim()}_${(r.artist || '').toLowerCase().trim()}`)
+      const existingTitles = new Set(
+        songs.map(s => `${s.title.toLowerCase().replace(/[^a-z0-9]/g, '')}_${(s.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '')}`)
       );
 
-      setRecommendedSongs(filtered.slice(0, 10));
+      const seenInBatch = new Set<string>();
+      const filtered: Song[] = [];
+
+      for (const r of candidatePool) {
+        if (!isGenuineSong(r)) continue;
+        if (existingIds.has(r.id)) continue;
+
+        const normSig = `${r.title.toLowerCase().replace(/[^a-z0-9]/g, '')}_${(r.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+        if (existingTitles.has(normSig) || seenInBatch.has(normSig)) continue;
+
+        seenInBatch.add(normSig);
+        filtered.push(r);
+      }
+
+      // Shuffle candidates and provide 10 top individual songs
+      setRecommendedSongs(filtered.sort(() => 0.5 - Math.random()).slice(0, 10));
     } catch (err) {
       console.error('Failed to fetch recommendations:', err);
     } finally {
@@ -309,7 +365,8 @@ const SongList: React.FC<SongListProps> = ({ playlistId }) => {
     const timer = setTimeout(async () => {
       try {
         const results = await searchYouTubeMusic(searchQuery);
-        setSearchResults(results);
+        // Strict filter for genuine single songs only
+        setSearchResults(results.filter(isGenuineSong));
       } catch (err) {
         console.error('Search error in playlist:', err);
       } finally {
