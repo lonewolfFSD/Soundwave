@@ -78,7 +78,6 @@ public class RingtonePlugin extends Plugin {
         String filePath = call.getString("filePath");
         String base64Data = call.getString("base64Data");
         String title = call.getString("title", "Soundwave Ringtone");
-        String artist = call.getString("artist", "Soundwave");
         String mimeType = call.getString("mimeType", "audio/mpeg");
 
         if ((urlStr == null || urlStr.trim().isEmpty()) && (filePath == null || filePath.trim().isEmpty()) && (base64Data == null || base64Data.trim().isEmpty())) {
@@ -150,6 +149,7 @@ public class RingtonePlugin extends Plugin {
                     values.put(MediaStore.Audio.Media.IS_NOTIFICATION, true);
                     values.put(MediaStore.Audio.Media.IS_ALARM, true);
                     values.put(MediaStore.Audio.Media.IS_MUSIC, false);
+                    values.put(MediaStore.Audio.Media.IS_PENDING, 1);
 
                     ringtoneUri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values);
                     if (ringtoneUri != null) {
@@ -161,6 +161,10 @@ public class RingtonePlugin extends Plugin {
                             }
                             out.flush();
                         }
+                        
+                        values.clear();
+                        values.put(MediaStore.Audio.Media.IS_PENDING, 0);
+                        resolver.update(ringtoneUri, values, null, null);
                     }
                 } else {
                     File ringtonesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RINGTONES);
@@ -194,28 +198,42 @@ public class RingtonePlugin extends Plugin {
                     return;
                 }
 
-                // 2. Set as actual default system ringtone via RingtoneManager & Settings fallback
+                Log.d(TAG, "Ringtone saved at: " + ringtoneUri);
+
+                // 2. Set as actual default system ringtone
+                boolean setSuccess = false;
+                String errorMsg = "";
+                
                 try {
                     RingtoneManager.setActualDefaultRingtoneUri(context, RingtoneManager.TYPE_RINGTONE, ringtoneUri);
+                    setSuccess = true;
                 } catch (Exception rErr) {
-                    Log.w(TAG, "RingtoneManager set failed", rErr);
+                    Log.e(TAG, "RingtoneManager set failed", rErr);
+                    errorMsg += "RingtoneManager error: " + rErr.getMessage() + ". ";
                 }
 
                 try {
                     Settings.System.putString(context.getContentResolver(), Settings.System.RINGTONE, ringtoneUri.toString());
+                    setSuccess = true; // Fallback success
                 } catch (Exception sErr) {
-                    Log.w(TAG, "Settings.System write failed", sErr);
+                    Log.e(TAG, "Settings.System write failed", sErr);
+                    errorMsg += "Settings.System error: " + sErr.getMessage();
                 }
 
-                new Handler(Looper.getMainLooper()).post(() -> {
-                    Toast.makeText(context, "🔔 Phone Ringtone set to: " + title, Toast.LENGTH_LONG).show();
-                });
+                if (setSuccess) {
+                    new Handler(Looper.getMainLooper()).post(() -> {
+                        Toast.makeText(context, "🔔 Phone Ringtone set to: " + title, Toast.LENGTH_LONG).show();
+                    });
 
-                JSObject ret = new JSObject();
-                ret.put("success", true);
-                ret.put("uri", ringtoneUri.toString());
-                ret.put("title", title);
-                call.resolve(ret);
+                    JSObject ret = new JSObject();
+                    ret.put("success", true);
+                    ret.put("uri", ringtoneUri.toString());
+                    ret.put("title", title);
+                    call.resolve(ret);
+                } else {
+                    Log.e(TAG, "Failed to set ringtone: " + errorMsg);
+                    call.reject("SET_FAILED", errorMsg);
+                }
 
             } catch (Exception e) {
                 Log.e(TAG, "Error setting ringtone", e);
