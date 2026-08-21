@@ -148,6 +148,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const isPlayingRef = useRef<boolean>(false)
   const currentTimeRef = useRef<number>(0)
   const durationRef = useRef<number>(0)
+  const nextSongRef = useRef<() => void>(() => {})
+  const repeatModeRef = useRef<'off'|'all'|'one'>('off')
   const isRemotePlayback = !!(activeDeviceId && activeDeviceId !== currentDeviceId)
 
   useEffect(() => {
@@ -438,13 +440,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 if (!isAdvancingRef.current) {
                   isAdvancingRef.current = true;
                   setTimeout(() => { isAdvancingRef.current = false; }, 1500);
-                  if (repeatMode === 'one') {
+                  if (repeatModeRef.current === 'one') {
                     try {
                       event.target.seekTo(0, true);
                       event.target.playVideo();
                     } catch {}
                   } else {
-                    nextSong();
+                    nextSongRef.current();
                   }
                 }
               } else if (event.data === 1) {
@@ -511,14 +513,27 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             if (typeof cur === 'number' && !isNaN(cur)) {
               setCurrentTime(cur)
             }
-            if (typeof dur === 'number' && !isNaN(dur) && dur > 0) {
-              setDuration(dur)
-            }
-          } catch {}
-        }
-      }, 50)
-    }
-    return () => {
+              if (typeof dur === 'number' && !isNaN(dur) && dur > 0) {
+                setDuration(dur)
+              }
+              // Manual fallback for YouTube track ending in case event.data === 0 fails
+              if (dur > 2 && cur >= dur - 0.5 && !isAdvancingRef.current) {
+                isAdvancingRef.current = true;
+                setTimeout(() => { isAdvancingRef.current = false; }, 1500);
+                if (repeatModeRef.current === 'one') {
+                  try {
+                    ytPlayerRef.current.seekTo(0, true);
+                    ytPlayerRef.current.playVideo();
+                  } catch {}
+                } else {
+                  nextSongRef.current();
+                }
+              }
+            } catch {}
+          }
+        }, 250)
+      }
+      return () => {
       if (timer) clearInterval(timer)
     }
   }, [isPlaying])
@@ -1297,6 +1312,14 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }
 
+  useEffect(() => {
+    nextSongRef.current = nextSong;
+  }, [nextSong]);
+
+  useEffect(() => {
+    repeatModeRef.current = repeatMode;
+  }, [repeatMode]);
+
   const previousSong = () => {
     if (currentTime > 3) {
       setCurrentTimeHandler(0)
@@ -1444,13 +1467,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       isAdvancingRef.current = true
       setTimeout(() => { isAdvancingRef.current = false }, 1500)
 
-      if (repeatMode === 'one') {
+      if (repeatModeRef.current === 'one') {
         if (audioRef.current) {
           audioRef.current.currentTime = 0
           audioRef.current.play().catch(() => {})
         }
       } else {
-        nextSong()
+        nextSongRef.current()
       }
     }
 

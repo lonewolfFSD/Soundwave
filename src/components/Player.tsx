@@ -812,7 +812,7 @@ const Player: React.FC = () => {
 
   // --- NAVIGATION LOGIC ---
   const currentIndex = queue.findIndex(s => s.id === currentSong?.id);
-  const hasNext = isShuffle || currentIndex < queue.length - 1 || repeatMode === 'all' || (upNextQueue && upNextQueue.length > 0);
+  const hasNext = !!currentSong; // ML Radio guarantees infinite tracks
   const hasPrev = playedHistory.length > 0 || currentIndex > 0 || currentTime > 3;
 
   const handleNext = () => {
