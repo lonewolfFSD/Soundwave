@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useRef, useEffect } from 'react'
 import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@capgo/capacitor-media-session';
-import { resolveFullLengthSong, isYoutubeVideoId, findYouTubeVideoId, extractYoutubeVideoId } from '../utils/ytMusic';
+import { resolveFullLengthSong, isYoutubeVideoId, findYouTubeVideoId, extractYoutubeVideoId, getAudioStreamUrl } from '../utils/ytMusic';
 import { fetchLyrics } from '../utils/lyrics';
 import { getMoodCoherentQueue, getSongRadioQueue } from '../utils/aiRecommender';
 import { getLocalLikedSongs, saveLocalLikedSongs, fetchRemoteLikedSongs } from '../utils/likedSongs';
@@ -187,8 +187,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const currentTimeRef = useRef<number>(0)
   const durationRef = useRef<number>(0)
   const nextSongRef = useRef<() => void>(() => {})
-  const repeatModeRef = useRef<'off'|'all'|'one'>('off')
   const isRemotePlayback = !!(activeDeviceId && activeDeviceId !== currentDeviceId)
+  const isRemotePlaybackRef = useRef(false)
+
+  useEffect(() => {
+    isRemotePlaybackRef.current = isRemotePlayback
+  }, [isRemotePlayback])
 
   useEffect(() => {
     currentSongRef.current = currentSong
@@ -416,10 +420,19 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         updatedAt: Date.now()
       })
     } else {
-      pauseSong()
+      // 1. Immediately silence local hardware audio without broadcasting a pause event
+      if (activeEngineRef.current === 'youtube') {
+        try { ytPlayerRef.current?.pauseVideo() } catch {}
+      } else if (audioRef.current) {
+        audioRef.current.pause()
+      }
+      setIsPlaying(true)
       setActiveDeviceId(targetDeviceId)
       setActiveDeviceName(targetDeviceName)
+
+      // 2. Transfer full state to target device
       await transferPlaybackToTarget(user.uid, targetDeviceId, targetDeviceName, {
+        senderDeviceId: currentDeviceId,
         currentSong,
         isPlaying: true,
         position: currentSeekTime,
@@ -1071,8 +1084,26 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setCurrentTime(startPosition)
     setDuration(song.duration || 210)
 
-    // Cross-Device Playback Sync
+    // Cross-Device Playback Sync & Remote Control Mode
     const currentUser = auth.currentUser
+    if (isRemotePlaybackRef.current && currentUser && !isInJam && !isSyncingFromRemoteRef.current) {
+      setIsPlaying(true)
+      await syncPlaybackState(currentUser.uid, {
+        activeDeviceId,
+        activeDeviceName,
+        senderDeviceId: currentDeviceId,
+        currentSong: song,
+        isPlaying: true,
+        position: startPosition,
+        duration: song.duration || 210,
+        queue,
+        isShuffle,
+        repeatMode,
+        updatedAt: Date.now()
+      })
+      return
+    }
+
     if (currentUser && !isInJam && !isSyncingFromRemoteRef.current) {
       setActiveDeviceId(currentDeviceId)
       setActiveDeviceName(localDeviceInfo.name)
@@ -1160,7 +1191,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           .catch(e => console.error("Audio playback error:", e))
       }
     } else {
-      // 🌟 Official YouTube Stream Player (100% Full Song, 0 Previews, 0 Backend Dependencies)
+      // 🌟 Official YouTube Stream Player + Resilient Direct Audio Fallback
       let videoId = extractYoutubeVideoId(song.id) ||
                     extractYoutubeVideoId((song as any).youtubeId) ||
                     extractYoutubeVideoId(song.youtubeUrl) ||
@@ -1174,7 +1205,32 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         activeEngineRef.current = 'youtube'
         try { audioRef.current?.pause() } catch {}
 
+        let fallbackTriggered = false
+        const fallbackToDirectStream = async () => {
+          if (fallbackTriggered) return
+          fallbackTriggered = true
+          try {
+            const streamUrl = await getAudioStreamUrl(videoId, song.title, song.artist)
+            if (streamUrl && audioRef.current) {
+              activeEngineRef.current = 'html5'
+              try { ytPlayerRef.current?.pauseVideo() } catch {}
+              audioRef.current.loop = false
+              audioRef.current.crossOrigin = 'anonymous'
+              audioRef.current.src = streamUrl
+              audioRef.current.volume = volumeRef.current
+              audioRef.current.muted = false
+              if (startPosition > 0) audioRef.current.currentTime = startPosition
+              await audioRef.current.play()
+              setIsPlaying(true)
+            }
+          } catch (streamErr) {
+            console.error('Direct audio stream fallback failed:', streamErr)
+          }
+        }
+
+        let attempts = 0
         const playYt = () => {
+          attempts++
           if (ytPlayerRef.current && typeof ytPlayerRef.current.loadVideoById === 'function') {
             try {
               ytPlayerRef.current.loadVideoById({ videoId, startSeconds: startPosition })
@@ -1205,10 +1261,15 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 setTimeout(() => { try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {} }, 1200)
               }
             } catch (e) {
-              console.warn('YouTube Player load error:', e)
+              console.warn('YouTube Player load error, using stream fallback:', e)
+              fallbackToDirectStream()
             }
           } else {
-            setTimeout(playYt, 250)
+            if (attempts > 5) {
+              fallbackToDirectStream()
+            } else {
+              setTimeout(playYt, 250)
+            }
           }
         }
         playYt()
@@ -1231,6 +1292,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         syncPlaybackState(user.uid, {
           activeDeviceId,
           activeDeviceName,
+          senderDeviceId: currentDeviceId,
           isPlaying: false,
           position: currentTime,
           updatedAt: Date.now()
