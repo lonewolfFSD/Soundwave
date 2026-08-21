@@ -46,7 +46,7 @@ const Dashboard = () => {
   const artistQueryParam = searchParams.get('artist') || ''
   const settingsQueryParam = searchParams.get('settings') || ''
   const jamQueryParam = searchParams.get('jam') || ''
-
+  const { user } = useAuth()
   const { currentSong, isPlaying, playSong, pauseSong, resumeSong, setQueue, playedHistory, likedSongs, isSongLiked, toggleLikeSong, addToQueue, upNextQueue } = usePlayer()
   const [queueToast, setQueueToast] = useState<string | null>(null)
 
