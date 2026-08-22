@@ -26,32 +26,32 @@ public class SoundwaveMediaService extends MediaSessionService {
         void onError(String message);
     }
 
-    private final IBinder binder = new LocalBinder();
+    private static volatile SoundwaveMediaService instance;
     private ExoPlayer player;
     private MediaSession mediaSession;
     private PlayerEventListener eventListener;
 
-    public class LocalBinder extends Binder {
-        public SoundwaveMediaService getService() {
-            return SoundwaveMediaService.this;
-        }
+    public static SoundwaveMediaService getInstance() {
+        return instance;
     }
 
     @Override
     public void onCreate() {
         super.onCreate();
+        instance = this;
 
-        // 1. Initialize ExoPlayer with AudioAttributes for Music & Automatic Audio Focus
-        AudioAttributes audioAttributes = new AudioAttributes.Builder()
-                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                .setUsage(C.USAGE_MEDIA)
-                .build();
+        try {
+            // 1. Initialize ExoPlayer with AudioAttributes for Music & Automatic Audio Focus
+            AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                    .setUsage(C.USAGE_MEDIA)
+                    .build();
 
-        player = new ExoPlayer.Builder(this)
-                .setAudioAttributes(audioAttributes, true)
-                .setHandleAudioBecomingNoisy(true)
-                .setWakeMode(C.WAKE_MODE_NETWORK)
-                .build();
+            player = new ExoPlayer.Builder(this)
+                    .setAudioAttributes(audioAttributes, true)
+                    .setHandleAudioBecomingNoisy(true)
+                    .setWakeMode(C.WAKE_MODE_NETWORK)
+                    .build();
 
         // 2. Set Up MediaSession with PendingIntent back to MainActivity
         Intent intent = new Intent(this, MainActivity.class);
@@ -96,6 +96,9 @@ public class SoundwaveMediaService extends MediaSessionService {
                 }
             }
         });
+        } catch (Exception e) {
+            android.util.Log.e("SoundwaveMediaService", "Error in onCreate", e);
+        }
     }
 
     public void setEventListener(PlayerEventListener listener) {
@@ -192,12 +195,14 @@ public class SoundwaveMediaService extends MediaSessionService {
     @Nullable
     @Override
     public IBinder onBind(Intent intent) {
-        super.onBind(intent);
-        return binder;
+        return super.onBind(intent);
     }
 
     @Override
     public void onDestroy() {
+        if (instance == this) {
+            instance = null;
+        }
         if (mediaSession != null) {
             mediaSession.release();
             mediaSession = null;
