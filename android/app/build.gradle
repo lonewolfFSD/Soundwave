@@ -51,6 +51,7 @@ dependencies {
     implementation "androidx.media3:media3-session:$media3_version"
     implementation "androidx.media3:media3-common:$media3_version"
     implementation "androidx.media3:media3-datasource-okhttp:$media3_version"
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
 }
 
 apply from: 'capacitor.build.gradle'

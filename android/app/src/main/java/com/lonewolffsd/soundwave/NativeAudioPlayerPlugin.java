@@ -118,6 +118,7 @@ public class NativeAudioPlayerPlugin extends Plugin {
 
     @PluginMethod
     public void play(PluginCall call) {
+        String videoId = call.getString("videoId");
         String url = call.getString("url");
         String title = call.getString("title", "Soundwave Track");
         String artist = call.getString("artist", "Soundwave");
@@ -125,22 +126,21 @@ public class NativeAudioPlayerPlugin extends Plugin {
         Double positionSec = call.getDouble("position", 0.0);
         long startPosMs = positionSec != null ? (long) (positionSec * 1000) : 0;
 
-        if (url == null || url.isEmpty()) {
-            call.reject("URL is required");
+        if ((url == null || url.isEmpty()) && (videoId == null || videoId.isEmpty())) {
+            call.reject("Either videoId or URL is required");
             return;
         }
 
         if (mediaService != null) {
-            mediaService.playMedia(url, title, artist, coverArt, startPosMs);
+            mediaService.playTrack(videoId, url, title, artist, coverArt, startPosMs);
             JSObject ret = new JSObject();
             ret.put("success", true);
             call.resolve(ret);
         } else {
             bindMediaService();
-            // Retry after brief delay
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 if (mediaService != null) {
-                    mediaService.playMedia(url, title, artist, coverArt, startPosMs);
+                    mediaService.playTrack(videoId, url, title, artist, coverArt, startPosMs);
                     JSObject ret = new JSObject();
                     ret.put("success", true);
                     call.resolve(ret);

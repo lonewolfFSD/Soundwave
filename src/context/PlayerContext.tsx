@@ -1318,7 +1318,41 @@ useEffect(() => {
 
     const cfSec = crossfadeRef.current || 0
 
-    if (isUploadedSong) {
+    if (isNativePlatform) {
+      // 🌟 ANDROID NATIVE PLATFORM: 100% Native ExoPlayer Foreground Pipeline (Echo Music)
+      activeEngineRef.current = 'native'
+      try { audioRef.current?.pause() } catch {}
+      try { ytPlayerRef.current?.pauseVideo() } catch {}
+
+      if (isUploadedSong && song.url) {
+        NativeAudioPlayer.play({
+          url: song.url,
+          title: song.title,
+          artist: song.artist,
+          coverArt: song.coverArtBase64,
+          position: startPosition
+        }).then(() => setIsPlaying(true)).catch(() => {})
+      } else {
+        let videoId = extractYoutubeVideoId(song.id) ||
+                      extractYoutubeVideoId((song as any).youtubeId) ||
+                      extractYoutubeVideoId(song.youtubeUrl) ||
+                      extractYoutubeVideoId(song.url)
+
+        if (!videoId) {
+          videoId = await findYouTubeVideoId(song.title, song.artist)
+        }
+
+        NativeAudioPlayer.play({
+          videoId: videoId || song.id,
+          url: song.url,
+          title: song.title,
+          artist: song.artist,
+          coverArt: song.coverArtBase64,
+          position: startPosition
+        }).then(() => setIsPlaying(true)).catch(() => {})
+      }
+    } else if (isUploadedSong) {
+      // 🌟 WEB / DESKTOP PLATFORM: HTML5 Audio for Uploads & Local Tracks
       activeEngineRef.current = 'html5'
       try { ytPlayerRef.current?.pauseVideo() } catch {}
 
@@ -1352,7 +1386,7 @@ useEffect(() => {
           .catch(e => console.error("Audio playback error:", e))
       }
     } else {
-      // 🌟 Official YouTube Player Engine (Instant, zero proxy latency)
+      // 🌟 WEB / DESKTOP PLATFORM: YouTube Player Engine
       let videoId = extractYoutubeVideoId(song.id) ||
                     extractYoutubeVideoId((song as any).youtubeId) ||
                     extractYoutubeVideoId(song.youtubeUrl) ||

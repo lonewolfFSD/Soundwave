@@ -1,7 +1,8 @@
 import { registerPlugin, Capacitor, PluginListenerHandle } from '@capacitor/core'
 
 export interface NativeAudioPlayOptions {
-  url: string
+  videoId?: string
+  url?: string
   title: string
   artist: string
   coverArt?: string

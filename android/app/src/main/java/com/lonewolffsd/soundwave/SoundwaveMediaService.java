@@ -102,6 +102,30 @@ public class SoundwaveMediaService extends MediaSessionService {
         this.eventListener = listener;
     }
 
+    private final java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+
+    public void playTrack(String videoId, String url, String title, String artist, String coverArt, long startPosMs) {
+        if (url != null && !url.isEmpty()) {
+            playMedia(url, title, artist, coverArt, startPosMs);
+            return;
+        }
+
+        if (videoId != null && !videoId.isEmpty()) {
+            executor.execute(() -> {
+                String streamUrl = YouTubeStreamResolver.resolveAudioStream(videoId);
+                if (streamUrl != null && !streamUrl.isEmpty()) {
+                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                        playMedia(streamUrl, title, artist, coverArt, startPosMs);
+                    });
+                } else {
+                    if (eventListener != null) {
+                        eventListener.onError("Failed to resolve audio stream for: " + videoId);
+                    }
+                }
+            });
+        }
+    }
+
     public void playMedia(String url, String title, String artist, String coverArt, long startPosMs) {
         if (player == null || url == null || url.isEmpty()) return;
 
