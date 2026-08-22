@@ -135,7 +135,42 @@ export const getAudioStreamUrl = async (
   if (!isYoutubeVideoId(videoId) && title) {
     videoId = await findYouTubeVideoId(title, artist || '')
   }
-  return videoId ? `/api/yt-stream?id=${videoId}&quality=${quality}` : ''
+  if (!videoId) return ''
+
+  // On native Android there's no local server — hit Piped directly for a streamable audio URL
+  const isNative = !!(window as any).Capacitor?.isNativePlatform?.()
+  if (isNative) {
+    try {
+      const pipedRes = await fetch(`https://pa.il.ax/streams/${videoId}`, { signal: AbortSignal.timeout(8000) })
+      if (pipedRes.ok) {
+        const data = await pipedRes.json()
+        // Grab the best audio-only stream
+        const audioStreams: any[] = data.audioStreams || []
+        const best = audioStreams
+          .filter((s: any) => s.url && s.mimeType?.includes('audio'))
+          .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))[0]
+        if (best?.url) return best.url
+      }
+    } catch {}
+
+    // Fallback to Invidious
+    try {
+      const invRes = await fetch(`https://inv.nadeko.net/api/v1/videos/${videoId}`, { signal: AbortSignal.timeout(8000) })
+      if (invRes.ok) {
+        const data = await invRes.json()
+        const streams: any[] = data.adaptiveFormats || []
+        const best = streams
+          .filter((s: any) => s.url && s.type?.includes('audio'))
+          .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))[0]
+        if (best?.url) return best.url
+      }
+    } catch {}
+
+    return ''
+  }
+
+  // Web/Vercel: use local yt-dlp server
+  return `/api/yt-stream?id=${videoId}&quality=${quality}`
 }
 
 /**
