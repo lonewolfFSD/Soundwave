@@ -83,6 +83,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(com.capgo.mediasession.MediaSessionPlugin.class);
         registerPlugin(git.shin.plugins.pip.PiPPlugin.class);
         registerPlugin(RingtonePlugin.class);
+        registerPlugin(NativeAudioPlayerPlugin.class);
 
         setTheme(R.style.AppTheme_NoActionBar);
         super.onCreate(savedInstanceState);

@@ -44,6 +44,13 @@ dependencies {
     // Firebase
     implementation platform('com.google.firebase:firebase-bom:33.10.0')
     implementation 'com.google.firebase:firebase-auth'
+
+    // AndroidX Media3 (ExoPlayer & MediaSessionService for Uninterrupted Background Audio)
+    def media3_version = "1.5.1"
+    implementation "androidx.media3:media3-exoplayer:$media3_version"
+    implementation "androidx.media3:media3-session:$media3_version"
+    implementation "androidx.media3:media3-common:$media3_version"
+    implementation "androidx.media3:media3-datasource-okhttp:$media3_version"
 }
 
 apply from: 'capacitor.build.gradle'

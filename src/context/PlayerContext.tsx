@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useRef, useEffect } from 'r
 import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@capgo/capacitor-media-session';
 import { resolveFullLengthSong, isYoutubeVideoId, findYouTubeVideoId, extractYoutubeVideoId, getAudioStreamUrl } from '../utils/ytMusic';
+import { resolvePlayableStreamUrl } from '../utils/streamResolver';
+import { NativeAudioPlayer, isNativePlatform } from '../utils/nativeAudioPlayer';
 import { fetchLyrics } from '../utils/lyrics';
 import { getMoodCoherentQueue, getSongRadioQueue } from '../utils/aiRecommender';
 import { getLocalLikedSongs, saveLocalLikedSongs, fetchRemoteLikedSongs } from '../utils/likedSongs';
@@ -107,7 +109,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const audioRef = useRef<HTMLAudioElement>(null)
   const silentAudioRef = useRef<HTMLAudioElement>(null)
   const ytPlayerRef = useRef<any>(null)
-  const activeEngineRef = useRef<'html5' | 'youtube'>('html5')
+  const activeEngineRef = useRef<'native' | 'html5' | 'youtube'>('html5')
   const isAdvancingRef = useRef(false)
   const userIntentionalPauseRef = useRef(false)
 
@@ -248,6 +250,55 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     durationRef.current = duration
   }, [duration])
+
+  // 🌟 NATIVE ANDROID MEDIA3 EXOPLAYER EVENT LISTENERS 🌟
+  useEffect(() => {
+    if (!isNativePlatform) return
+
+    let unsubState: any
+    let unsubTime: any
+    let unsubEnd: any
+
+    const setupNativeListeners = async () => {
+      try {
+        unsubState = await NativeAudioPlayer.addListener('onPlaybackStateChange', (data) => {
+          if (activeEngineRef.current === 'native') {
+            setIsPlaying(data.isPlaying)
+            if (data.duration > 0) setDuration(data.duration)
+            if (data.currentTime >= 0) setCurrentTime(data.currentTime)
+          }
+        })
+
+        unsubTime = await NativeAudioPlayer.addListener('onTimeUpdate', (data) => {
+          if (activeEngineRef.current === 'native') {
+            setCurrentTime(data.currentTime)
+            if (data.duration > 0) setDuration(data.duration)
+          }
+        })
+
+        unsubEnd = await NativeAudioPlayer.addListener('onTrackEnded', () => {
+          if (activeEngineRef.current === 'native') {
+            if (repeatModeRef.current === 'one') {
+              NativeAudioPlayer.seekTo({ position: 0 }).catch(() => {})
+              NativeAudioPlayer.resume().catch(() => {})
+            } else {
+              nextSongRef.current()
+            }
+          }
+        })
+      } catch (e) {
+        console.warn('Native audio listeners setup error:', e)
+      }
+    }
+
+    setupNativeListeners()
+
+    return () => {
+      unsubState?.remove?.()
+      unsubTime?.remove?.()
+      unsubEnd?.remove?.()
+    }
+  }, [])
 
   // ── CROSS-DEVICE LIFECYCLE & PRESENCE ──
   useEffect(() => {
@@ -1261,96 +1312,114 @@ useEffect(() => {
 
     const cfSec = crossfadeRef.current || 0
 
-    if (isUploadedSong) {
-      activeEngineRef.current = 'html5'
-      try { ytPlayerRef.current?.pauseVideo() } catch {}
+    // 🌟 Resolve direct playable audio stream URL
+    let streamUrl = song.url
+    let videoId = ''
 
-      if (audioRef.current && song.url) {
-        audioRef.current.loop = false
-        audioRef.current.crossOrigin = 'anonymous'
-        audioRef.current.src = song.url
-        audioRef.current.volume = cfSec > 0 && startPosition === 0 ? 0.01 : volume
-        audioRef.current.muted = false
-        if (startPosition > 0) {
-          audioRef.current.currentTime = startPosition
-        }
-        audioRef.current.play()
-          .then(() => {
-            setIsPlaying(true)
-            if (startPosition > 0 && audioRef.current) {
-              audioRef.current.currentTime = startPosition
-            }
-            if (cfSec > 0 && startPosition === 0 && audioRef.current) {
-              const startFade = performance.now()
-              const fadeInterval = setInterval(() => {
-                const elapsed = (performance.now() - startFade) / 1000
-                const factor = Math.min(1, elapsed / cfSec)
-                if (audioRef.current) {
-                  audioRef.current.volume = Math.max(0.01, volumeRef.current * factor)
-                }
-                if (factor >= 1) clearInterval(fadeInterval)
-              }, 80)
-            }
-          })
-          .catch(e => console.error("Audio playback error:", e))
-      }
-    } else {
-      // 🌟 Official YouTube Player
-      let videoId = extractYoutubeVideoId(song.id) ||
-                    extractYoutubeVideoId((song as any).youtubeId) ||
-                    extractYoutubeVideoId(song.youtubeUrl) ||
-                    extractYoutubeVideoId(song.url);
+    const isDirectAudio = streamUrl && (
+      streamUrl.startsWith('data:') ||
+      streamUrl.startsWith('blob:') ||
+      streamUrl.includes('cloudinary') ||
+      streamUrl.includes('firebasestorage')
+    )
+
+    if (!isDirectAudio) {
+      videoId = extractYoutubeVideoId(song.id) ||
+                extractYoutubeVideoId((song as any).youtubeId) ||
+                extractYoutubeVideoId(song.youtubeUrl) ||
+                extractYoutubeVideoId(song.url)
 
       if (!videoId) {
-        videoId = await findYouTubeVideoId(song.title, song.artist);
+        videoId = await findYouTubeVideoId(song.title, song.artist)
       }
 
       if (videoId) {
-        activeEngineRef.current = 'youtube'
-        try { audioRef.current?.pause() } catch {}
-
-        let attempts = 0
-        const playYt = () => {
-          attempts++
-          if (ytPlayerRef.current && typeof ytPlayerRef.current.loadVideoById === 'function') {
-            try {
-              ytPlayerRef.current.loadVideoById({ videoId, startSeconds: startPosition })
-              ytPlayerRef.current.unMute()
-
-              if (cfSec > 0 && startPosition === 0) {
-                ytPlayerRef.current.setVolume(1)
-                ytPlayerRef.current.playVideo()
-                setIsPlaying(true)
-                const startFade = performance.now()
-                const fadeInterval = setInterval(() => {
-                  const elapsed = (performance.now() - startFade) / 1000
-                  const factor = Math.min(1, elapsed / cfSec)
-                  try {
-                    ytPlayerRef.current?.setVolume(Math.max(1, Math.round(volumeRef.current * 100 * factor)))
-                  } catch {}
-                  if (factor >= 1) clearInterval(fadeInterval)
-                }, 80)
-              } else {
-                ytPlayerRef.current.setVolume(volume * 100)
-                ytPlayerRef.current.playVideo()
-                setIsPlaying(true)
-              }
-
-              if (startPosition > 0) {
-                setTimeout(() => { try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {} }, 300)
-                setTimeout(() => { try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {} }, 700)
-              }
-            } catch (e) {
-              console.warn('YouTube Player load error:', e)
-            }
-          } else {
-            if (attempts <= 10) {
-              setTimeout(playYt, 200)
-            }
-          }
-        }
-        playYt()
+        streamUrl = await resolvePlayableStreamUrl(videoId, audioQualityRef.current || 'best')
       }
+    }
+
+    if (isNativePlatform && streamUrl) {
+      // 🌟 1. NATIVE ANDROID MEDIA3 EXOPLAYER PIPELINE (100% Background Audio)
+      activeEngineRef.current = 'native'
+      try { audioRef.current?.pause() } catch {}
+      try { ytPlayerRef.current?.pauseVideo() } catch {}
+
+      try {
+        await NativeAudioPlayer.play({
+          url: streamUrl,
+          title: song.title,
+          artist: song.artist,
+          coverArt: song.coverArtBase64,
+          position: startPosition
+        })
+        setIsPlaying(true)
+      } catch (nativeErr) {
+        console.warn('Native player failed, falling back to HTML5:', nativeErr)
+        activeEngineRef.current = 'html5'
+        if (audioRef.current) {
+          audioRef.current.src = streamUrl
+          if (startPosition > 0) audioRef.current.currentTime = startPosition
+          audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {})
+        }
+      }
+    } else if (streamUrl && audioRef.current) {
+      // 🌟 2. WEB / DESKTOP HTML5 AUDIO TAG ENGINE
+      activeEngineRef.current = 'html5'
+      try { ytPlayerRef.current?.pauseVideo() } catch {}
+
+      audioRef.current.loop = false
+      audioRef.current.crossOrigin = 'anonymous'
+      audioRef.current.src = streamUrl
+      audioRef.current.volume = cfSec > 0 && startPosition === 0 ? 0.01 : volume
+      audioRef.current.muted = false
+      if (startPosition > 0) {
+        audioRef.current.currentTime = startPosition
+      }
+
+      audioRef.current.play()
+        .then(() => {
+          setIsPlaying(true)
+          if (startPosition > 0 && audioRef.current) {
+            audioRef.current.currentTime = startPosition
+          }
+          if (cfSec > 0 && startPosition === 0 && audioRef.current) {
+            const startFade = performance.now()
+            const fadeInterval = setInterval(() => {
+              const elapsed = (performance.now() - startFade) / 1000
+              const factor = Math.min(1, elapsed / cfSec)
+              if (audioRef.current) {
+                audioRef.current.volume = Math.max(0.01, volumeRef.current * factor)
+              }
+              if (factor >= 1) clearInterval(fadeInterval)
+            }, 80)
+          }
+        })
+        .catch(audioErr => {
+          console.warn("Direct HTML5 audio play failed:", audioErr)
+        })
+    } else if (videoId) {
+      // 🌟 3. FALLBACK YOUTUBE IFRAME
+      activeEngineRef.current = 'youtube'
+      try { audioRef.current?.pause() } catch {}
+
+      let attempts = 0
+      const playYt = () => {
+        attempts++
+        if (ytPlayerRef.current && typeof ytPlayerRef.current.loadVideoById === 'function') {
+          try {
+            ytPlayerRef.current.loadVideoById({ videoId, startSeconds: startPosition })
+            ytPlayerRef.current.unMute()
+            ytPlayerRef.current.setVolume(volume * 100)
+            ytPlayerRef.current.playVideo()
+            setIsPlaying(true)
+          } catch (e) {
+            console.warn('YouTube fallback failed:', e)
+          }
+        } else if (attempts <= 5) {
+          setTimeout(playYt, 250)
+        }
+      }
+      playYt()
     }
 
     fetchLyrics(song.title, song.artist, song.duration, song.youtubeId).then((lyrics) => {
@@ -1379,7 +1448,9 @@ useEffect(() => {
       return
     }
 
-    if (activeEngineRef.current === 'youtube') {
+    if (activeEngineRef.current === 'native') {
+      NativeAudioPlayer.pause().catch(() => {})
+    } else if (activeEngineRef.current === 'youtube') {
       try { ytPlayerRef.current?.pauseVideo() } catch {}
     } else {
       audioRef.current?.pause()
@@ -1427,7 +1498,10 @@ useEffect(() => {
       audioCtxRef.current.resume().catch(() => {})
     }
 
-    if (activeEngineRef.current === 'youtube') {
+    if (activeEngineRef.current === 'native') {
+      NativeAudioPlayer.resume().catch(() => {})
+      setIsPlaying(true)
+    } else if (activeEngineRef.current === 'youtube') {
       try {
         ytPlayerRef.current?.unMute()
         ytPlayerRef.current?.setVolume(volume * 100)
@@ -1619,7 +1693,9 @@ useEffect(() => {
       return
     }
 
-    if (activeEngineRef.current === 'youtube') {
+    if (activeEngineRef.current === 'native') {
+      NativeAudioPlayer.seekTo({ position: time }).catch(() => {})
+    } else if (activeEngineRef.current === 'youtube') {
       try {
         ytPlayerRef.current?.seekTo(time, true)
       } catch {}
@@ -1645,13 +1721,18 @@ useEffect(() => {
     setVolumeState(newVol)
     volumeRef.current = newVol
     localStorage.setItem('player_volume', String(newVol))
-    if (audioRef.current) {
-      audioRef.current.volume = newVol
+    if (activeEngineRef.current === 'native') {
+      NativeAudioPlayer.setVolume({ volume: newVol }).catch(() => {})
+    } else if (activeEngineRef.current === 'youtube') {
+      try {
+        ytPlayerRef.current?.unMute()
+        ytPlayerRef.current?.setVolume(newVol * 100)
+      } catch {}
+    } else {
+      if (audioRef.current) {
+        audioRef.current.volume = newVol
+      }
     }
-    try {
-      ytPlayerRef.current?.unMute()
-      ytPlayerRef.current?.setVolume(newVol * 100)
-    } catch {}
   }
 
   const addToQueue = (song: Song) => {
