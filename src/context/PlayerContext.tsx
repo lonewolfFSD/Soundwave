@@ -1353,7 +1353,6 @@ useEffect(() => {
           .catch(e => console.error("Audio playback error:", e))
       }
     } else {
-      } else {
   let videoId = extractYoutubeVideoId(song.id) ||
                 extractYoutubeVideoId((song as any).youtubeId) ||
                 extractYoutubeVideoId(song.youtubeUrl) ||
