@@ -45,7 +45,19 @@ public class NativeAudioPlayerPlugin extends Plugin {
                     .setUsage(C.USAGE_MEDIA)
                     .build();
 
+            androidx.media3.datasource.DefaultHttpDataSource.Factory httpDataSourceFactory =
+                    new androidx.media3.datasource.DefaultHttpDataSource.Factory()
+                            .setUserAgent("Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
+                            .setAllowCrossProtocolRedirects(true)
+                            .setConnectTimeoutMs(15000)
+                            .setReadTimeoutMs(15000);
+
+            androidx.media3.exoplayer.source.DefaultMediaSourceFactory mediaSourceFactory =
+                    new androidx.media3.exoplayer.source.DefaultMediaSourceFactory(context)
+                            .setDataSourceFactory(httpDataSourceFactory);
+
             player = new ExoPlayer.Builder(context)
+                    .setMediaSourceFactory(mediaSourceFactory)
                     .setAudioAttributes(audioAttributes, true)
                     .setHandleAudioBecomingNoisy(true)
                     .setWakeMode(C.WAKE_MODE_NETWORK)
@@ -140,7 +152,7 @@ public class NativeAudioPlayerPlugin extends Plugin {
 
         executor.execute(() -> {
             try {
-                String streamUrl = YouTubeStreamResolver.resolveAudioStream(videoId);
+                String streamUrl = YouTubeStreamResolver.resolveAudioStream(videoId, title, artist);
                 if (streamUrl != null && !streamUrl.isEmpty()) {
                     mainHandler.post(() -> playStream(streamUrl, title, artist, coverArt, startPosMs));
                     JSObject ret = new JSObject();

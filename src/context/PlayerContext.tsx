@@ -1349,7 +1349,22 @@ useEffect(() => {
           artist: song.artist,
           coverArt: song.coverArtBase64,
           position: startPosition
-        }).then(() => setIsPlaying(true)).catch(() => {})
+        }).then(() => {
+          setIsPlaying(true)
+        }).catch((err) => {
+          console.warn('Native stream play fallback:', err)
+          activeEngineRef.current = 'youtube'
+          const resolvedVid = videoId || song.id
+          if (resolvedVid && ytPlayerRef.current?.loadVideoById) {
+            try {
+              ytPlayerRef.current.loadVideoById({ videoId: resolvedVid, startSeconds: startPosition })
+              ytPlayerRef.current.unMute()
+              ytPlayerRef.current.setVolume(volume * 100)
+              ytPlayerRef.current.playVideo()
+              setIsPlaying(true)
+            } catch {}
+          }
+        })
       }
     } else if (isUploadedSong) {
       // 🌟 WEB / DESKTOP PLATFORM: HTML5 Audio for Uploads & Local Tracks

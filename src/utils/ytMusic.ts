@@ -62,16 +62,15 @@ export const findYouTubeVideoId = async (title: string, artist: string): Promise
     }
   } catch {}
 
-  // 3. Query Fast YouTube Search API
+  // 3. Query Fast YouTube Search API (with automatic client fallback on native)
   const queries = [
     cleanQ,
-    `${cleanQ} official audio`,
-    title
+    `${cleanQ} official audio`
   ]
 
   for (const q of queries) {
     try {
-      const res = await fetch(`/api/yt-search?q=${encodeURIComponent(q)}`, { signal: AbortSignal.timeout(6000) })
+      const res = await fetch(`/api/yt-search?q=${encodeURIComponent(q)}`, { signal: AbortSignal.timeout(3000) })
       if (res.ok) {
         const items = await res.json()
         if (Array.isArray(items) && items.length > 0) {
@@ -82,6 +81,38 @@ export const findYouTubeVideoId = async (title: string, artist: string): Promise
               try { localStorage.setItem(cacheKey, id) } catch {}
               return id
             }
+          }
+        }
+      }
+    } catch {}
+
+    // 4. Native & Web Client-Side Fallback: Piped & Invidious Search
+    try {
+      const pipedRes = await fetch(`https://pa.il.ax/search?q=${encodeURIComponent(q)}&filter=music_songs`, { signal: AbortSignal.timeout(3500) })
+      if (pipedRes.ok) {
+        const data = await pipedRes.json()
+        const items = data.items || []
+        for (const item of items) {
+          const id = extractYoutubeVideoId(item?.url) || extractYoutubeVideoId(item?.id)
+          if (id && isYoutubeVideoId(id)) {
+            videoIdCache.set(cacheKey, id)
+            try { localStorage.setItem(cacheKey, id) } catch {}
+            return id
+          }
+        }
+      }
+    } catch {}
+
+    try {
+      const invRes = await fetch(`https://inv.nadeko.net/api/v1/search?q=${encodeURIComponent(q)}&type=video`, { signal: AbortSignal.timeout(3500) })
+      if (invRes.ok) {
+        const items = await invRes.json()
+        if (Array.isArray(items) && items.length > 0) {
+          const id = items[0].videoId
+          if (id && isYoutubeVideoId(id)) {
+            videoIdCache.set(cacheKey, id)
+            try { localStorage.setItem(cacheKey, id) } catch {}
+            return id
           }
         }
       }
