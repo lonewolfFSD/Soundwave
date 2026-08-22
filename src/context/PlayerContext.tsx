@@ -1318,56 +1318,8 @@ useEffect(() => {
 
     const cfSec = crossfadeRef.current || 0
 
-    if (isNativePlatform) {
-      // 🌟 ANDROID NATIVE PLATFORM: 100% Native ExoPlayer Foreground Pipeline (Echo Music)
-      activeEngineRef.current = 'native'
-      try { audioRef.current?.pause() } catch {}
-      try { ytPlayerRef.current?.pauseVideo() } catch {}
-
-      if (isUploadedSong && song.url) {
-        NativeAudioPlayer.play({
-          url: song.url,
-          title: song.title,
-          artist: song.artist,
-          coverArt: song.coverArtBase64,
-          position: startPosition
-        }).then(() => setIsPlaying(true)).catch(() => {})
-      } else {
-        let videoId = extractYoutubeVideoId(song.id) ||
-                      extractYoutubeVideoId((song as any).youtubeId) ||
-                      extractYoutubeVideoId(song.youtubeUrl) ||
-                      extractYoutubeVideoId(song.url)
-
-        if (!videoId) {
-          videoId = await findYouTubeVideoId(song.title, song.artist)
-        }
-
-        NativeAudioPlayer.play({
-          videoId: videoId || song.id,
-          url: song.url,
-          title: song.title,
-          artist: song.artist,
-          coverArt: song.coverArtBase64,
-          position: startPosition
-        }).then(() => {
-          setIsPlaying(true)
-        }).catch((err) => {
-          console.warn('Native stream play fallback:', err)
-          activeEngineRef.current = 'youtube'
-          const resolvedVid = videoId || song.id
-          if (resolvedVid && ytPlayerRef.current?.loadVideoById) {
-            try {
-              ytPlayerRef.current.loadVideoById({ videoId: resolvedVid, startSeconds: startPosition })
-              ytPlayerRef.current.unMute()
-              ytPlayerRef.current.setVolume(volume * 100)
-              ytPlayerRef.current.playVideo()
-              setIsPlaying(true)
-            } catch {}
-          }
-        })
-      }
-    } else if (isUploadedSong) {
-      // 🌟 WEB / DESKTOP PLATFORM: HTML5 Audio for Uploads & Local Tracks
+    if (isUploadedSong) {
+      // 🌟 Uploads, local tracks, & direct audio streams
       activeEngineRef.current = 'html5'
       try { ytPlayerRef.current?.pauseVideo() } catch {}
 
@@ -1401,63 +1353,59 @@ useEffect(() => {
           .catch(e => console.error("Audio playback error:", e))
       }
     } else {
-      // 🌟 WEB / DESKTOP PLATFORM: YouTube Player Engine
-      let videoId = extractYoutubeVideoId(song.id) ||
-                    extractYoutubeVideoId((song as any).youtubeId) ||
-                    extractYoutubeVideoId(song.youtubeUrl) ||
-                    extractYoutubeVideoId(song.url)
+      } else {
+  let videoId = extractYoutubeVideoId(song.id) ||
+                extractYoutubeVideoId((song as any).youtubeId) ||
+                extractYoutubeVideoId(song.youtubeUrl) ||
+                extractYoutubeVideoId(song.url)
 
-      if (!videoId) {
-        videoId = await findYouTubeVideoId(song.title, song.artist)
-      }
+  if (!videoId) {
+    videoId = await findYouTubeVideoId(song.title, song.artist)
+  }
 
-      if (videoId) {
-        activeEngineRef.current = 'youtube'
-        try { audioRef.current?.pause() } catch {}
-
-        let attempts = 0
-        const playYt = () => {
-          attempts++
-          if (ytPlayerRef.current && typeof ytPlayerRef.current.loadVideoById === 'function') {
-            try {
-              ytPlayerRef.current.loadVideoById({ videoId, startSeconds: startPosition })
-              ytPlayerRef.current.unMute()
-
-              if (cfSec > 0 && startPosition === 0) {
-                ytPlayerRef.current.setVolume(1)
-                ytPlayerRef.current.playVideo()
-                setIsPlaying(true)
-                const startFade = performance.now()
-                const fadeInterval = setInterval(() => {
-                  const elapsed = (performance.now() - startFade) / 1000
-                  const factor = Math.min(1, elapsed / cfSec)
-                  try {
-                    ytPlayerRef.current?.setVolume(Math.max(1, Math.round(volumeRef.current * 100 * factor)))
-                  } catch {}
-                  if (factor >= 1) clearInterval(fadeInterval)
-                }, 80)
-              } else {
-                ytPlayerRef.current.setVolume(volume * 100)
-                ytPlayerRef.current.playVideo()
-                setIsPlaying(true)
-              }
-
-              if (startPosition > 0) {
-                setTimeout(() => { try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {} }, 300)
-                setTimeout(() => { try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {} }, 700)
-              }
-            } catch (e) {
-              console.warn('YouTube Player load error:', e)
-            }
-          } else {
-            if (attempts <= 10) {
-              setTimeout(playYt, 200)
-            }
-          }
+  if (videoId) {
+    if (isNativePlatform) {
+      // Native Android: use ExoPlayer via NativeAudioPlayer
+      activeEngineRef.current = 'native'
+      try { ytPlayerRef.current?.pauseVideo() } catch {}
+      const streamUrl = await getAudioStreamUrl(videoId)
+      if (streamUrl) {
+        await NativeAudioPlayer.play({ url: streamUrl })
+        setIsPlaying(true)
+        if (startPosition > 0) {
+          await NativeAudioPlayer.seekTo({ position: startPosition }).catch(() => {})
         }
-        playYt()
       }
+    } else {
+      // Web/Desktop: YouTube IFrame Player
+      activeEngineRef.current = 'youtube'
+      try { audioRef.current?.pause() } catch {}
+
+      let attempts = 0
+      const playYt = () => {
+        attempts++
+        if (ytPlayerRef.current && typeof ytPlayerRef.current.loadVideoById === 'function') {
+          try {
+            ytPlayerRef.current.loadVideoById({ videoId, startSeconds: startPosition })
+            ytPlayerRef.current.unMute()
+            ytPlayerRef.current.setVolume(volume * 100)
+            ytPlayerRef.current.playVideo()
+            setIsPlaying(true)
+            if (startPosition > 0) {
+              setTimeout(() => { try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {} }, 300)
+              setTimeout(() => { try { ytPlayerRef.current?.seekTo(startPosition, true) } catch {} }, 700)
+            }
+          } catch (e) {
+            console.warn('YouTube Player load error:', e)
+          }
+        } else {
+          if (attempts <= 10) setTimeout(playYt, 200)
+        }
+      }
+      playYt()
     }
+  }
+}
 
     fetchLyrics(song.title, song.artist, song.duration, song.youtubeId).then((lyrics) => {
       if (lyrics) {
