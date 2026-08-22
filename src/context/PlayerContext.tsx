@@ -247,6 +247,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     currentTimeRef.current = currentTime
   }, [currentTime])
 
+  const audioQualityRef = useRef(audioQuality)
+
+  useEffect(() => {
+    audioQualityRef.current = audioQuality
+  }, [audioQuality])
+
   useEffect(() => {
     durationRef.current = duration
   }, [duration])
