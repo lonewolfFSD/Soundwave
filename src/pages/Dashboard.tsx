@@ -40,6 +40,168 @@ interface PlaylistPreview {
   coverArtBase64?: string | null
 }
 
+interface DashboardSongCardProps {
+  song: any
+  index: number
+  isActive: boolean
+  isPlaying: boolean
+  cardWidth: string
+  cardBg: string
+  cardActive: string
+  accentGlow: string
+  emptyIconBg: string
+  emptyIconColor: string
+  textMain: string
+  textMuted: string
+  animClass: string
+  reduceMotion: boolean
+  isLiked?: boolean
+  isInQueue?: boolean
+  onPlay: (song: any) => void
+  onPause: () => void
+  onResume: () => void
+  onQueue?: (e: React.MouseEvent, song: any) => void
+  onLike?: (e: React.MouseEvent, song: any) => void
+  onAddToPlaylist?: (song: any) => void
+  onDownload?: (song: any) => void
+  onOpenArtist: (artist: string) => void
+}
+
+const DashboardSongCard: React.FC<DashboardSongCardProps> = React.memo(({
+  song,
+  index,
+  isActive,
+  isPlaying,
+  cardWidth,
+  cardBg,
+  cardActive,
+  accentGlow,
+  emptyIconBg,
+  emptyIconColor,
+  textMain,
+  textMuted,
+  animClass,
+  reduceMotion,
+  isLiked,
+  isInQueue,
+  onPlay,
+  onPause,
+  onResume,
+  onQueue,
+  onLike,
+  onAddToPlaylist,
+  onDownload,
+  onOpenArtist,
+}) => {
+  const delay = Math.min(index * 30, 240) + 'ms'
+
+  return (
+    <div
+      className={`flex-shrink-0 ${cardWidth} snap-start cursor-pointer group sw-card-hover ${animClass}`}
+      style={{ animationDelay: reduceMotion ? '0ms' : delay, contain: 'content' }}
+      onClick={() => {
+        if (isActive) {
+          if (isPlaying) onPause()
+          else onResume()
+        } else {
+          onPlay(song)
+        }
+      }}
+    >
+      <div
+        className={`aspect-square relative rounded-2xl overflow-hidden mb-2.5 border sw-card-surface ${isActive ? `${cardActive} sw-active-sheen` : cardBg}`}
+        style={isActive ? { boxShadow: `0 0 20px ${accentGlow}, 0 4px 16px rgba(0,0,0,0.3)` } : {}}
+      >
+        {song.coverArtBase64 ? (
+          <img
+            src={song.coverArtBase64}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+        ) : (
+          <div className={`w-full h-full flex items-center justify-center ${emptyIconBg}`}>
+            <Music className={`w-9 h-9 ${emptyIconColor}`} />
+          </div>
+        )}
+        <div className="sw-play-overlay absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-2 p-2 transition-opacity">
+          <div className="w-11 h-11 rounded-xl bg-black/50 flex items-center justify-center border border-white/20 hover:scale-110 transition-transform shadow-lg">
+            {isActive && isPlaying ? (
+              <Pause className="w-6 h-6 text-white fill-white" />
+            ) : (
+              <Play className="w-6 h-6 text-white fill-white ml-0.5" />
+            )}
+          </div>
+          <div className="hidden md:flex items-center gap-1.5">
+            {onLike && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onLike(e, song)
+                }}
+                title={isLiked ? 'Liked' : 'Like'}
+                className={`p-2 rounded-lg bg-black/60 hover:bg-black/90 border border-white/20 ${isLiked ? 'text-pink-500' : 'text-white'}`}
+              >
+                <Heart size={14} fill={isLiked ? 'currentColor' : 'none'} />
+              </button>
+            )}
+            {onQueue && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onQueue(e, song)
+                }}
+                title="Add to Priority Queue (Play Next)"
+                className={`p-2 rounded-lg bg-black/60 hover:bg-black/90 border border-white/20 ${isInQueue ? 'text-indigo-400' : 'text-white'}`}
+              >
+                <Plus size={14} />
+              </button>
+            )}
+            {onAddToPlaylist && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onAddToPlaylist(song)
+                }}
+                title="Add to Playlist"
+                className="p-2 rounded-lg bg-black/60 hover:bg-black/90 text-white border border-white/20"
+              >
+                <ListPlus size={14} />
+              </button>
+            )}
+            {onDownload && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDownload(song)
+                }}
+                title="Download for Offline"
+                className="p-2 rounded-lg bg-black/60 hover:bg-black/90 text-white border border-white/20"
+              >
+                <DownloadCloud size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+      <h4 className={`font-medium truncate text-[14px] sw-font-display ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+        {song.title}
+      </h4>
+      <p
+        onClick={(e) => {
+          e.stopPropagation()
+          onOpenArtist(song.artist)
+        }}
+        className={`text-[12px] truncate sw-font-body ${textMuted} hover:text-white hover:underline cursor-pointer transition-colors`}
+        style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+      >
+        {song.artist || 'Artist'}
+      </p>
+    </div>
+  )
+})
+
 const Dashboard = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const searchQueryParam = searchParams.get('q') || ''
@@ -644,10 +806,9 @@ const Dashboard = () => {
   const checkScroll = (element: HTMLDivElement | null, setArrows: React.Dispatch<React.SetStateAction<{ left: boolean, right: boolean }>>) => {
     if (!element) return
     const { scrollLeft, scrollWidth, clientWidth } = element
-    setArrows({
-      left: scrollLeft > 0,
-      right: scrollLeft < (scrollWidth - clientWidth - 1)
-    })
+    const left = scrollLeft > 10
+    const right = scrollLeft < (scrollWidth - clientWidth - 10)
+    setArrows(prev => (prev.left === left && prev.right === right ? prev : { left, right }))
   }
 
   const scrollContainer = async (ref: React.RefObject<HTMLDivElement>, direction: 'left' | 'right') => {
@@ -816,7 +977,7 @@ const Dashboard = () => {
 
         ${!reduceMotion ? `
         @keyframes sw-fadeUp {
-          from { opacity: 0; transform: translateY(22px); }
+          from { opacity: 0; transform: translateY(16px); }
           to   { opacity: 1; transform: translateY(0); }
         }
         @keyframes sw-luckyShift {
@@ -824,47 +985,38 @@ const Dashboard = () => {
           50%  { background-position: 100% 50%; }
           100% { background-position: 0% 50%; }
         }
-        @keyframes sw-spin-slow {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
-        }
-        @keyframes sw-pulse-ring {
-          0%   { transform: scale(0.95); opacity: 0.6; }
-          50%  { transform: scale(1.05); opacity: 0.3; }
-          100% { transform: scale(0.95); opacity: 0.6; }
-        }
         @keyframes sw-orb-float {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          33%  { transform: translate(20px, -15px) scale(1.05); }
-          66%  { transform: translate(-10px, 10px) scale(0.97); }
+          0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+          33%  { transform: translate3d(15px, -10px, 0) scale(1.03); }
+          66%  { transform: translate3d(-10px, 8px, 0) scale(0.98); }
         }
         @keyframes sw-waveform {
           0%, 100% { transform: scaleY(0.3); }
           50%       { transform: scaleY(1); }
         }
         .sw-animate-enter {
-          animation: sw-fadeUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+          animation: sw-fadeUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
           opacity: 0;
         }
         .sw-lucky-anim {
           background-size: 300% 300%;
           animation: sw-luckyShift 4s ease infinite;
         }
-        .sw-orb { animation: sw-orb-float 8s ease-in-out infinite; }
-        .sw-orb-2 { animation: sw-orb-float 11s ease-in-out infinite reverse; }
+        .sw-orb { animation: sw-orb-float 10s ease-in-out infinite; will-change: transform; transform: translateZ(0); }
+        .sw-orb-2 { animation: sw-orb-float 14s ease-in-out infinite reverse; will-change: transform; transform: translateZ(0); }
         .sw-card-hover {
-          transition: transform 0.3s cubic-bezier(0.22,1,0.36,1), box-shadow 0.3s ease;
+          transition: transform 0.2s cubic-bezier(0.22,1,0.36,1);
         }
         .sw-card-hover:hover {
-          transform: translateY(-4px) scale(1.01);
+          transform: translateY(-3px);
         }
         .sw-btn-hover {
-          transition: all 0.2s cubic-bezier(0.22,1,0.36,1);
+          transition: transform 0.15s cubic-bezier(0.22,1,0.36,1);
         }
-        .sw-btn-hover:hover { transform: scale(1.04); }
+        .sw-btn-hover:hover { transform: scale(1.03); }
         .sw-btn-hover:active { transform: scale(0.97); }
         .sw-play-overlay {
-          transition: opacity 0.2s ease, backdrop-filter 0.2s ease;
+          transition: opacity 0.15s ease;
         }
         .sw-waveform-bar {
           animation: sw-waveform 1s ease-in-out infinite;
@@ -882,10 +1034,23 @@ const Dashboard = () => {
         .sw-scroll::-webkit-scrollbar { display: none; }
         .sw-scroll { -ms-overflow-style: none; scrollbar-width: none; }
 
-        /* Glass card */
+        /* Hardware accelerated, lightweight card surface */
+        .sw-card-surface {
+          background-color: rgba(255, 255, 255, 0.035);
+          transform: translateZ(0);
+        }
+
+        /* Glass container */
         .sw-glass {
-          backdrop-filter: blur(12px) saturate(160%);
-          -webkit-backdrop-filter: blur(12px) saturate(160%);
+          background-color: rgba(255, 255, 255, 0.035);
+          transform: translateZ(0);
+        }
+
+        /* Section layout containment for smooth 60fps scrolling */
+        .sw-section-contain {
+          content-visibility: auto;
+          contain-intrinsic-size: 260px;
+          contain: content;
         }
 
         /* Sheen shimmer on active card */
@@ -927,14 +1092,16 @@ const Dashboard = () => {
             {/* Album art blur blob */}
             <div
               key={bgImage}
-              className={`absolute -top-20 -left-20 w-[140%] h-[70%] ${reduceMotion ? '' : 'transition-opacity duration-[1200ms]'}`}
+              className={`absolute -top-20 -left-20 w-[140%] h-[70%] ${reduceMotion ? '' : 'transition-opacity duration-[800ms]'}`}
               style={{
                 backgroundImage: bgImage ? `url(${bgImage})` : 'none',
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
-                filter: `blur(80px) brightness(${blurBrightness}) saturate(180%)`,
-                transform: 'scale(1.3)',
-                opacity: bgImage ? 1 : 0,
+                filter: `blur(40px) brightness(${blurBrightness}) saturate(160%)`,
+                transform: 'scale(1.2) translateZ(0)',
+                opacity: bgImage ? 0.8 : 0,
+                contain: 'strict',
+                willChange: 'opacity',
               }}
             />
 
@@ -1190,7 +1357,7 @@ const Dashboard = () => {
 
                     {/* ── LISTEN AGAIN (Spotify / YouTube Music History) ── */}
                     {selectedCategory === 'all' && listenAgain.length > 0 && (
-                      <section className={`${animClass}`} style={{ animationDelay: getDelay('100ms') }}>
+                      <section className={`sw-section-contain ${animClass}`} style={{ animationDelay: getDelay('100ms') }}>
                         <div className={`flex items-center justify-between gap-3 ${compactMode ? 'mb-3' : 'mb-4 md:mb-5'}`}>
                           <div className="min-w-0 flex-1">
                             <h2 className={`text-lg sm:text-xl md:text-[22px] font-bold sw-font-display truncate ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Listen Again</h2>
@@ -1218,63 +1385,43 @@ const Dashboard = () => {
 
                         <div
                           ref={listenAgainRef}
-                          className={`flex ${gridGap} overflow-x-auto pb-4 sw-scroll snap-x ${!reduceMotion ? 'scroll-smooth' : ''}`}
+                          className={`flex ${gridGap} overflow-x-auto pb-4 sw-scroll sw-scroll-row snap-x ${!reduceMotion ? 'scroll-smooth' : ''}`}
                           onScroll={() => checkScroll(listenAgainRef.current, setShowListenArrows)}
                         >
-                          {listenAgain.map((song, index) => {
-                            const isActive = currentSong?.id === song.id || (currentSong?.title === song.title && currentSong?.artist === song.artist);
-                            const delay = 120 + (index * 30) + 'ms';
-                            return (
-                              <div
-                                key={`listen_${song.id || index}`}
-                                className={`flex-shrink-0 ${cardWidth} snap-start cursor-pointer group sw-card-hover ${animClass}`}
-                                style={{ animationDelay: getDelay(delay) }}
-                                onClick={() => {
-                                  if (isActive) {
-                                    if (isPlaying) pauseSong();
-                                    else resumeSong();
-                                  } else {
-                                    if (setQueue) setQueue(listenAgain);
-                                    playSong(song);
-                                  }
-                                }}
-                              >
-                                <div
-                                  className={`aspect-square relative rounded-2xl overflow-hidden mb-2.5 border sw-glass ${isActive ? `${cardActive} sw-active-sheen` : cardBg}`}
-                                  style={isActive ? { boxShadow: `0 0 20px ${accentGlow}, 0 4px 16px rgba(0,0,0,0.3)` } : {}}
-                                >
-                                  {song.coverArtBase64 ? (
-                                    <img src={song.coverArtBase64} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                                  ) : (
-                                    <div className={`w-full h-full flex items-center justify-center ${emptyIconBg}`}>
-                                      <Music className={`w-9 h-9 ${emptyIconColor}`} />
-                                    </div>
-                                  )}
-                                  <div className="sw-play-overlay absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-2 p-2 transition-opacity">
-                                    <div className="w-11 h-11 rounded-xl bg-black/40 flex items-center justify-center backdrop-blur-sm border border-white/20 hover:scale-110 transition-transform">
-                                      {isActive && isPlaying ? <Pause className="w-6 h-6 text-white fill-white" /> : <Play className="w-6 h-6 text-white fill-white ml-0.5" />}
-                                    </div>
-                                    <button
-                                      onClick={(e) => handleQueueSong(e, song)}
-                                      title="Add to Priority Queue (Play Next)"
-                                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 backdrop-blur-sm border border-white/20 text-white/90 hover:text-white hover:scale-110 active:scale-95 transition-all shadow-md"
-                                    >
-                                      <Plus size={14} />
-                                    </button>
-                                  </div>
-                                </div>
-                                <h4 className={`font-medium truncate text-[14px] sw-font-display ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.title}</h4>
-                                <p onClick={(e) => { e.stopPropagation(); openArtistProfile(song.artist); }} className={`text-[12px] truncate sw-font-body ${textMuted} hover:text-white hover:underline cursor-pointer transition-colors`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.artist || 'Artist'}</p>
-                              </div>
-                            );
-                          })}
+                          {listenAgain.map((song, index) => (
+                            <DashboardSongCard
+                              key={`listen_${song.id || index}`}
+                              song={song}
+                              index={index}
+                              isActive={currentSong?.id === song.id || (currentSong?.title === song.title && currentSong?.artist === song.artist)}
+                              isPlaying={isPlaying}
+                              cardWidth={cardWidth}
+                              cardBg={cardBg}
+                              cardActive={cardActive}
+                              accentGlow={accentGlow}
+                              emptyIconBg={emptyIconBg}
+                              emptyIconColor={emptyIconColor}
+                              textMain={textMain}
+                              textMuted={textMuted}
+                              animClass={animClass}
+                              reduceMotion={reduceMotion}
+                              onPlay={(s) => {
+                                if (setQueue) setQueue(listenAgain)
+                                playSong(s)
+                              }}
+                              onPause={pauseSong}
+                              onResume={resumeSong}
+                              onQueue={handleQueueSong}
+                              onOpenArtist={openArtistProfile}
+                            />
+                          ))}
                         </div>
                       </section>
                     )}
 
                     {/* ── QUICK PICKS ── */}
                     {selectedCategory === 'all' && quickPicks.length > 0 && (
-                      <section className={`${animClass}`} style={{ animationDelay: getDelay('140ms') }}>
+                      <section className={`sw-section-contain ${animClass}`} style={{ animationDelay: getDelay('140ms') }}>
                         <div className={`flex items-center justify-between gap-3 ${compactMode ? 'mb-3' : 'mb-4 md:mb-5'}`}>
                           <div className="min-w-0 flex-1">
                             <h2 className={`text-lg sm:text-xl md:text-[22px] font-bold sw-font-display truncate ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Quick Picks</h2>
@@ -1302,13 +1449,13 @@ const Dashboard = () => {
 
                         <div
                           ref={quickPicksRef}
-                          className={`flex ${gridGap} overflow-x-auto pb-4 sw-scroll snap-x ${!reduceMotion ? 'scroll-smooth' : ''}`}
+                          className={`flex ${gridGap} overflow-x-auto pb-4 sw-scroll sw-scroll-row snap-x ${!reduceMotion ? 'scroll-smooth' : ''}`}
                           onScroll={() => checkScroll(quickPicksRef.current, setShowQPArrows)}
                         >
                           {/* Try Your Luck */}
                           <div
                             className={`flex-shrink-0 ${cardWidth} snap-start cursor-pointer group sw-card-hover ${animClass}`}
-                            style={{ animationDelay: getDelay('160ms') }}
+                            style={{ animationDelay: getDelay('160ms'), contain: 'content' }}
                             onClick={handleTryYourLuck}
                           >
                             <div
@@ -1327,86 +1474,49 @@ const Dashboard = () => {
                           </div>
 
                           {/* Quick Pick Songs */}
-                          {quickPicks.map((song, index) => {
-                            const isActive = currentSong?.id === song.id || (currentSong?.title === song.title && currentSong?.artist === song.artist);
-                            const delay = 180 + (index * 30) + 'ms';
-                            return (
-                              <div
-                                key={song.id}
-                                className={`flex-shrink-0 ${cardWidth} snap-start cursor-pointer group sw-card-hover ${animClass}`}
-                                style={{ animationDelay: getDelay(delay) }}
-                                onClick={() => handleQuickPickClick(song)}
-                              >
-                                <div
-                                  className={`aspect-square relative rounded-2xl overflow-hidden mb-2.5 border sw-glass ${isActive ? `${cardActive} sw-active-sheen` : cardBg}`}
-                                  style={isActive ? { boxShadow: `0 0 20px ${accentGlow}, 0 4px 16px rgba(0,0,0,0.3)` } : {}}
-                                >
-                                  {song.coverArtBase64 ? (
-                                    <img src={song.coverArtBase64} alt="" className="w-full h-full object-cover" />
-                                  ) : (
-                                    <div className={`w-full h-full flex items-center justify-center ${emptyIconBg}`}>
-                                      <Music className={`w-9 h-9 ${emptyIconColor}`} />
-                                    </div>
-                                  )}
-                                  <div className="sw-play-overlay absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-2 p-2 transition-opacity">
-                                    <div className="w-11 h-11 rounded-xl bg-black/40 flex items-center justify-center backdrop-blur-sm border border-white/20 hover:scale-110 transition-transform">
-                                      {isActive && isPlaying ? <Pause className="w-6 h-6 text-white fill-white" /> : <Play className="w-6 h-6 text-white fill-white ml-0.5" />}
-                                    </div>
-                                    <div className="hidden md:flex items-center gap-1.5">
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          toggleLikeSong(song);
-                                        }}
-                                        title={isSongLiked(song) ? 'Liked' : 'Like'}
-                                        className={`p-2 rounded-lg bg-black/60 hover:bg-black/90 border border-white/20 ${isSongLiked(song) ? 'text-pink-500' : 'text-white'}`}
-                                      >
-                                        <Heart size={14} fill={isSongLiked(song) ? 'currentColor' : 'none'} />
-                                      </button>
-                                      <button
-                                        onClick={(e) => handleQueueSong(e, song)}
-                                        title="Add to Priority Queue (Play Next)"
-                                        className={`p-2 rounded-lg bg-black/60 hover:bg-black/90 border border-white/20 ${upNextQueue?.some(s => s.id === song.id) ? 'text-indigo-400' : 'text-white'}`}
-                                      >
-                                        <Plus size={14} />
-                                      </button>
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); setSelectedSongForPlaylist(song); }}
-                                        title="Add to Playlist"
-                                        className="p-2 rounded-lg bg-black/60 hover:bg-black/90 text-white border border-white/20"
-                                      >
-                                        <ListPlus size={14} />
-                                      </button>
-                                      <button
-                                        onClick={async (e) => {
-                                          e.stopPropagation();
-                                          try {
-                                            await downloadSongForOffline(song);
-                                            alert(`Downloaded "${song.title}" for offline playback!`);
-                                          } catch (err) {
-                                            alert('Failed to download track.');
-                                          }
-                                        }}
-                                        title="Download for Offline"
-                                        className="p-2 rounded-lg bg-black/60 hover:bg-black/90 text-white border border-white/20"
-                                      >
-                                        <DownloadCloud size={14} />
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                                <h4 className={`font-medium truncate text-[14px] sw-font-display ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.title}</h4>
-                                <p onClick={(e) => { e.stopPropagation(); openArtistProfile(song.artist); }} className={`text-[12px] truncate sw-font-body ${textMuted} hover:text-white hover:underline cursor-pointer transition-colors`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.artist || 'Unknown'}</p>
-                              </div>
-                            );
-                          })}
+                          {quickPicks.map((song, index) => (
+                            <DashboardSongCard
+                              key={song.id}
+                              song={song}
+                              index={index}
+                              isActive={currentSong?.id === song.id || (currentSong?.title === song.title && currentSong?.artist === song.artist)}
+                              isPlaying={isPlaying}
+                              cardWidth={cardWidth}
+                              cardBg={cardBg}
+                              cardActive={cardActive}
+                              accentGlow={accentGlow}
+                              emptyIconBg={emptyIconBg}
+                              emptyIconColor={emptyIconColor}
+                              textMain={textMain}
+                              textMuted={textMuted}
+                              animClass={animClass}
+                              reduceMotion={reduceMotion}
+                              isLiked={isSongLiked(song)}
+                              isInQueue={upNextQueue?.some(s => s.id === song.id)}
+                              onPlay={handleQuickPickClick}
+                              onPause={pauseSong}
+                              onResume={resumeSong}
+                              onLike={(_e, s) => toggleLikeSong(s)}
+                              onQueue={handleQueueSong}
+                              onAddToPlaylist={setSelectedSongForPlaylist}
+                              onDownload={async (s) => {
+                                try {
+                                  await downloadSongForOffline(s)
+                                  alert(`Downloaded "${s.title}" for offline playback!`)
+                                } catch {
+                                  alert('Failed to download track.')
+                                }
+                              }}
+                              onOpenArtist={openArtistProfile}
+                            />
+                          ))}
                         </div>
                       </section>
                     )}
 
                     {/* ── SONGS YOU LOVE (Liked Songs Carousel) ── */}
                     {selectedCategory === 'all' && likedSongs.length > 0 && (
-                      <section className={`${animClass}`} style={{ animationDelay: getDelay('170ms') }}>
+                      <section className={`sw-section-contain ${animClass}`} style={{ animationDelay: getDelay('170ms') }}>
                         <div className={`flex items-center justify-between gap-3 ${compactMode ? 'mb-3' : 'mb-4 md:mb-5'}`}>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center flex-wrap gap-x-2 gap-y-1">
@@ -1440,88 +1550,47 @@ const Dashboard = () => {
 
                         <div
                           ref={likedSongsScrollRef}
-                          className={`flex ${gridGap} overflow-x-auto pb-4 sw-scroll snap-x ${!reduceMotion ? 'scroll-smooth' : ''}`}
+                          className={`flex ${gridGap} overflow-x-auto pb-4 sw-scroll sw-scroll-row snap-x ${!reduceMotion ? 'scroll-smooth' : ''}`}
                         >
-                          {likedSongs.map((song, index) => {
-                            const isActive = currentSong?.id === song.id || (currentSong?.title === song.title && currentSong?.artist === song.artist);
-                            const delay = 180 + (index * 30) + 'ms';
-                            return (
-                              <div
-                                key={`liked-${song.id}-${index}`}
-                                className={`flex-shrink-0 ${cardWidth} snap-start cursor-pointer group sw-card-hover ${animClass}`}
-                                style={{ animationDelay: getDelay(delay) }}
-                                onClick={() => {
-                                  setQueue(likedSongs);
-                                  playSong(song);
-                                }}
-                              >
-                                <div
-                                  className={`aspect-square relative rounded-2xl overflow-hidden mb-2.5 border sw-glass ${isActive ? `${cardActive} sw-active-sheen` : cardBg}`}
-                                  style={isActive ? { boxShadow: `0 0 20px ${accentGlow}, 0 4px 16px rgba(0,0,0,0.3)` } : {}}
-                                >
-                                  {song.coverArtBase64 ? (
-                                    <img src={song.coverArtBase64} alt="" className="w-full h-full object-cover" />
-                                  ) : (
-                                    <div className={`w-full h-full flex items-center justify-center ${emptyIconBg}`}>
-                                      <Music className={`w-9 h-9 ${emptyIconColor}`} />
-                                    </div>
-                                  )}
-
-                                  <div className="sw-play-overlay absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-2 p-2 transition-opacity">
-                                    <div className="w-11 h-11 rounded-xl bg-black/40 flex items-center justify-center backdrop-blur-sm border border-white/20 hover:scale-110 transition-transform">
-                                      {isActive && isPlaying ? <Pause className="w-6 h-6 text-white fill-white" /> : <Play className="w-6 h-6 text-white fill-white ml-0.5" />}
-                                    </div>
-                                    <div className="hidden md:flex items-center gap-1.5">
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          toggleLikeSong(song);
-                                        }}
-                                        title="Remove from Liked"
-                                        className={`p-2 rounded-lg bg-black/60 hover:bg-black/90 ${accentColor} border border-white/20`}
-                                      >
-                                        <Heart size={14} fill="currentColor" />
-                                      </button>
-                                      <button
-                                        onClick={(e) => handleQueueSong(e, song)}
-                                        title="Add to Priority Queue (Play Next)"
-                                        className={`p-2 rounded-lg bg-black/60 hover:bg-black/90 border border-white/20 ${upNextQueue?.some(s => s.id === song.id) ? 'text-indigo-400' : 'text-white'}`}
-                                      >
-                                        <Plus size={14} />
-                                      </button>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setSelectedSongForPlaylist(song);
-                                        }}
-                                        title="Add to Playlist"
-                                        className="p-2 rounded-lg bg-black/60 hover:bg-black/90 text-white border border-white/20"
-                                      >
-                                        <ListPlus size={14} />
-                                      </button>
-                                      <button
-                                        onClick={async (e) => {
-                                          e.stopPropagation();
-                                          try {
-                                            await downloadSongForOffline(song);
-                                            alert(`Downloaded "${song.title}" for offline playback!`);
-                                          } catch (err) {
-                                            alert('Failed to download track.');
-                                          }
-                                        }}
-                                        title="Download for Offline"
-                                        className="p-2 rounded-lg bg-black/60 hover:bg-black/90 text-white border border-white/20"
-                                      >
-                                        <DownloadCloud size={14} />
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                                <h4 className={`font-medium truncate text-[14px] sw-font-display ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.title}</h4>
-                                <p onClick={(e) => { e.stopPropagation(); openArtistProfile(song.artist); }} className={`text-[12px] truncate sw-font-body ${textMuted} hover:text-white hover:underline cursor-pointer transition-colors`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.artist || 'Unknown'}</p>
-                              </div>
-                            );
-                          })}
+                          {likedSongs.map((song, index) => (
+                            <DashboardSongCard
+                              key={`liked-${song.id}-${index}`}
+                              song={song}
+                              index={index}
+                              isActive={currentSong?.id === song.id || (currentSong?.title === song.title && currentSong?.artist === song.artist)}
+                              isPlaying={isPlaying}
+                              cardWidth={cardWidth}
+                              cardBg={cardBg}
+                              cardActive={cardActive}
+                              accentGlow={accentGlow}
+                              emptyIconBg={emptyIconBg}
+                              emptyIconColor={emptyIconColor}
+                              textMain={textMain}
+                              textMuted={textMuted}
+                              animClass={animClass}
+                              reduceMotion={reduceMotion}
+                              isLiked={true}
+                              isInQueue={upNextQueue?.some(s => s.id === song.id)}
+                              onPlay={(s) => {
+                                if (setQueue) setQueue(likedSongs)
+                                playSong(s)
+                              }}
+                              onPause={pauseSong}
+                              onResume={resumeSong}
+                              onLike={(_e, s) => toggleLikeSong(s)}
+                              onQueue={handleQueueSong}
+                              onAddToPlaylist={setSelectedSongForPlaylist}
+                              onDownload={async (s) => {
+                                try {
+                                  await downloadSongForOffline(s)
+                                  alert(`Downloaded "${s.title}" for offline playback!`)
+                                } catch {
+                                  alert('Failed to download track.')
+                                }
+                              }}
+                              onOpenArtist={openArtistProfile}
+                            />
+                          ))}
                         </div>
                       </section>
                     )}
@@ -1623,7 +1692,7 @@ const Dashboard = () => {
 
                     {/* ── SIMILAR TO TOP ARTIST ── */}
                     {selectedCategory === 'all' && tasteProfile.topArtist && similarArtistTracks.length > 0 && (
-                      <section className={`${animClass}`} style={{ animationDelay: getDelay('220ms') }}>
+                      <section className={`sw-section-contain ${animClass}`} style={{ animationDelay: getDelay('220ms') }}>
                         <div className={`flex items-center justify-between gap-3 ${compactMode ? 'mb-3' : 'mb-4 md:mb-5'}`}>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center flex-wrap gap-x-2 gap-y-1">
@@ -1663,84 +1732,54 @@ const Dashboard = () => {
 
                         <div
                           ref={similarArtistRef}
-                          className={`flex ${gridGap} overflow-x-auto pb-4 sw-scroll snap-x ${!reduceMotion ? 'scroll-smooth' : ''}`}
+                          className={`flex ${gridGap} overflow-x-auto pb-4 sw-scroll sw-scroll-row snap-x ${!reduceMotion ? 'scroll-smooth' : ''}`}
                         >
-                          {similarArtistTracks.map((song, index) => {
-                            const isActive = currentSong?.id === song.id || (currentSong?.title === song.title && currentSong?.artist === song.artist);
-                            return (
-                              <div
-                                key={`sim_art_${song.id || index}`}
-                                className={`flex-shrink-0 ${cardWidth} snap-start cursor-pointer group sw-card-hover ${animClass}`}
-                                onClick={() => {
-                                  if (isActive) {
-                                    if (isPlaying) pauseSong();
-                                    else resumeSong();
-                                  } else {
-                                    if (setQueue) setQueue(similarArtistTracks);
-                                    playSong(song);
-                                  }
-                                }}
-                              >
-                                <div
-                                  className={`aspect-square relative rounded-2xl overflow-hidden mb-2.5 border sw-glass ${isActive ? `${cardActive} sw-active-sheen` : cardBg}`}
-                                  style={isActive ? { boxShadow: `0 0 20px ${accentGlow}, 0 4px 16px rgba(0,0,0,0.3)` } : {}}
-                                >
-                                  {song.coverArtBase64 ? (
-                                    <img src={song.coverArtBase64} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                                  ) : (
-                                    <div className={`w-full h-full flex items-center justify-center ${emptyIconBg}`}>
-                                      <Music className={`w-9 h-9 ${emptyIconColor}`} />
-                                    </div>
-                                  )}
-                                  <div className="sw-play-overlay absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-2 p-2 transition-opacity">
-                                    <div className="w-11 h-11 rounded-xl bg-black/40 flex items-center justify-center backdrop-blur-sm border border-white/20 hover:scale-110 transition-transform">
-                                      {isActive && isPlaying ? <Pause className="w-6 h-6 text-white fill-white" /> : <Play className="w-6 h-6 text-white fill-white ml-0.5" />}
-                                    </div>
-                                    <div className="hidden md:flex items-center gap-2">
-                                      <button
-                                        onClick={(e) => handleQueueSong(e, song)}
-                                        title="Add to Priority Queue (Play Next)"
-                                        className={`p-2 rounded-lg bg-black/60 hover:bg-black/90 border border-white/20 ${upNextQueue?.some(s => s.id === song.id) ? 'text-indigo-400' : 'text-white'}`}
-                                      >
-                                        <Plus size={14} />
-                                      </button>
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); setSelectedSongForPlaylist(song); }}
-                                        title="Add to Playlist"
-                                        className="p-2 rounded-lg bg-black/60 hover:bg-black/90 text-white border border-white/20"
-                                      >
-                                        <ListPlus size={14} />
-                                      </button>
-                                      <button
-                                        onClick={async (e) => {
-                                          e.stopPropagation();
-                                          try {
-                                            await downloadSongForOffline(song);
-                                            alert(`Downloaded "${song.title}" for offline playback!`);
-                                          } catch (err) {
-                                            alert('Failed to download track.');
-                                          }
-                                        }}
-                                        title="Download for Offline"
-                                        className="p-2 rounded-lg bg-black/60 hover:bg-black/90 text-white border border-white/20"
-                                      >
-                                        <DownloadCloud size={14} />
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                                <h4 className={`font-medium truncate text-[14px] sw-font-display ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.title}</h4>
-                                <p onClick={(e) => { e.stopPropagation(); openArtistProfile(song.artist); }} className={`text-[12px] truncate sw-font-body ${textMuted} hover:text-white hover:underline cursor-pointer transition-colors`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.artist || 'Artist'}</p>
-                              </div>
-                            );
-                          })}
+                          {similarArtistTracks.map((song, index) => (
+                            <DashboardSongCard
+                              key={`sim_art_${song.id || index}`}
+                              song={song}
+                              index={index}
+                              isActive={currentSong?.id === song.id || (currentSong?.title === song.title && currentSong?.artist === song.artist)}
+                              isPlaying={isPlaying}
+                              cardWidth={cardWidth}
+                              cardBg={cardBg}
+                              cardActive={cardActive}
+                              accentGlow={accentGlow}
+                              emptyIconBg={emptyIconBg}
+                              emptyIconColor={emptyIconColor}
+                              textMain={textMain}
+                              textMuted={textMuted}
+                              animClass={animClass}
+                              reduceMotion={reduceMotion}
+                              isLiked={isSongLiked(song)}
+                              isInQueue={upNextQueue?.some(s => s.id === song.id)}
+                              onPlay={(s) => {
+                                if (setQueue) setQueue(similarArtistTracks)
+                                playSong(s)
+                              }}
+                              onPause={pauseSong}
+                              onResume={resumeSong}
+                              onLike={(_e, s) => toggleLikeSong(s)}
+                              onQueue={handleQueueSong}
+                              onAddToPlaylist={setSelectedSongForPlaylist}
+                              onDownload={async (s) => {
+                                try {
+                                  await downloadSongForOffline(s)
+                                  alert(`Downloaded "${s.title}" for offline playback!`)
+                                } catch {
+                                  alert('Failed to download track.')
+                                }
+                              }}
+                              onOpenArtist={openArtistProfile}
+                            />
+                          ))}
                         </div>
                       </section>
                     )}
 
                     {/* ── SIMILAR TO TOP TRACK ── */}
                     {selectedCategory === 'all' && tasteProfile.topTrack && similarTrackSongs.length > 0 && (
-                      <section className={`${animClass}`} style={{ animationDelay: getDelay('240ms') }}>
+                      <section className={`sw-section-contain ${animClass}`} style={{ animationDelay: getDelay('240ms') }}>
                         <div className={`flex items-center justify-between gap-3 ${compactMode ? 'mb-3' : 'mb-4 md:mb-5'}`}>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center flex-wrap gap-x-2 gap-y-1">
@@ -1774,84 +1813,54 @@ const Dashboard = () => {
 
                         <div
                           ref={similarTrackRef}
-                          className={`flex ${gridGap} overflow-x-auto pb-4 sw-scroll snap-x ${!reduceMotion ? 'scroll-smooth' : ''}`}
+                          className={`flex ${gridGap} overflow-x-auto pb-4 sw-scroll sw-scroll-row snap-x ${!reduceMotion ? 'scroll-smooth' : ''}`}
                         >
-                          {similarTrackSongs.map((song, index) => {
-                            const isActive = currentSong?.id === song.id || (currentSong?.title === song.title && currentSong?.artist === song.artist);
-                            return (
-                              <div
-                                key={`sim_trk_${song.id || index}`}
-                                className={`flex-shrink-0 ${cardWidth} snap-start cursor-pointer group sw-card-hover ${animClass}`}
-                                onClick={() => {
-                                  if (isActive) {
-                                    if (isPlaying) pauseSong();
-                                    else resumeSong();
-                                  } else {
-                                    if (setQueue) setQueue(similarTrackSongs);
-                                    playSong(song);
-                                  }
-                                }}
-                              >
-                                <div
-                                  className={`aspect-square relative rounded-2xl overflow-hidden mb-2.5 border sw-glass ${isActive ? `${cardActive} sw-active-sheen` : cardBg}`}
-                                  style={isActive ? { boxShadow: `0 0 20px ${accentGlow}, 0 4px 16px rgba(0,0,0,0.3)` } : {}}
-                                >
-                                  {song.coverArtBase64 ? (
-                                    <img src={song.coverArtBase64} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                                  ) : (
-                                    <div className={`w-full h-full flex items-center justify-center ${emptyIconBg}`}>
-                                      <Music className={`w-9 h-9 ${emptyIconColor}`} />
-                                    </div>
-                                  )}
-                                  <div className="sw-play-overlay absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-2 p-2 transition-opacity">
-                                    <div className="w-11 h-11 rounded-xl bg-black/40 flex items-center justify-center backdrop-blur-sm border border-white/20 hover:scale-110 transition-transform">
-                                      {isActive && isPlaying ? <Pause className="w-6 h-6 text-white fill-white" /> : <Play className="w-6 h-6 text-white fill-white ml-0.5" />}
-                                    </div>
-                                    <div className="hidden md:flex items-center gap-2">
-                                      <button
-                                        onClick={(e) => handleQueueSong(e, song)}
-                                        title="Add to Priority Queue (Play Next)"
-                                        className={`p-2 rounded-lg bg-black/60 hover:bg-black/90 border border-white/20 ${upNextQueue?.some(s => s.id === song.id) ? 'text-indigo-400' : 'text-white'}`}
-                                      >
-                                        <Plus size={14} />
-                                      </button>
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); setSelectedSongForPlaylist(song); }}
-                                        title="Add to Playlist"
-                                        className="p-2 rounded-lg bg-black/60 hover:bg-black/90 text-white border border-white/20"
-                                      >
-                                        <ListPlus size={14} />
-                                      </button>
-                                      <button
-                                        onClick={async (e) => {
-                                          e.stopPropagation();
-                                          try {
-                                            await downloadSongForOffline(song);
-                                            alert(`Downloaded "${song.title}" for offline playback!`);
-                                          } catch (err) {
-                                            alert('Failed to download track.');
-                                          }
-                                        }}
-                                        title="Download for Offline"
-                                        className="p-2 rounded-lg bg-black/60 hover:bg-black/90 text-white border border-white/20"
-                                      >
-                                        <DownloadCloud size={14} />
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                                <h4 className={`font-medium truncate text-[14px] sw-font-display ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.title}</h4>
-                                <p className={`text-[12px] truncate sw-font-body ${textMuted}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.artist || 'Artist'}</p>
-                              </div>
-                            );
-                          })}
+                          {similarTrackSongs.map((song, index) => (
+                            <DashboardSongCard
+                              key={`sim_trk_${song.id || index}`}
+                              song={song}
+                              index={index}
+                              isActive={currentSong?.id === song.id || (currentSong?.title === song.title && currentSong?.artist === song.artist)}
+                              isPlaying={isPlaying}
+                              cardWidth={cardWidth}
+                              cardBg={cardBg}
+                              cardActive={cardActive}
+                              accentGlow={accentGlow}
+                              emptyIconBg={emptyIconBg}
+                              emptyIconColor={emptyIconColor}
+                              textMain={textMain}
+                              textMuted={textMuted}
+                              animClass={animClass}
+                              reduceMotion={reduceMotion}
+                              isLiked={isSongLiked(song)}
+                              isInQueue={upNextQueue?.some(s => s.id === song.id)}
+                              onPlay={(s) => {
+                                if (setQueue) setQueue(similarTrackSongs)
+                                playSong(s)
+                              }}
+                              onPause={pauseSong}
+                              onResume={resumeSong}
+                              onLike={(_e, s) => toggleLikeSong(s)}
+                              onQueue={handleQueueSong}
+                              onAddToPlaylist={setSelectedSongForPlaylist}
+                              onDownload={async (s) => {
+                                try {
+                                  await downloadSongForOffline(s)
+                                  alert(`Downloaded "${s.title}" for offline playback!`)
+                                } catch {
+                                  alert('Failed to download track.')
+                                }
+                              }}
+                              onOpenArtist={openArtistProfile}
+                            />
+                          ))}
                         </div>
                       </section>
                     )}
 
                     {/* ── PLAYLISTS ── */}
                     {selectedCategory === 'all' && (
-                      <section className={`${animClass}`} style={{ animationDelay: getDelay('200ms') }}>
+                      <section className={`sw-section-contain ${animClass}`} style={{ animationDelay: getDelay('200ms') }}>
                         <div className={`flex items-center justify-between gap-3 ${compactMode ? 'mb-3' : 'mb-4 md:mb-5'}`}>
                           <div className="min-w-0 flex-1">
                             <h2 className={`text-lg sm:text-xl md:text-[22px] font-bold sw-font-display truncate ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>Your Playlists</h2>
@@ -1879,7 +1888,7 @@ const Dashboard = () => {
 
                         <div
                           ref={playlistsRef}
-                          className={`flex ${gridGap} overflow-x-auto pb-4 sw-scroll snap-x ${!reduceMotion ? 'scroll-smooth' : ''}`}
+                          className={`flex ${gridGap} overflow-x-auto pb-4 sw-scroll sw-scroll-row snap-x ${!reduceMotion ? 'scroll-smooth' : ''}`}
                           onScroll={() => checkScroll(playlistsRef.current, setShowPLArrows)}
                         >
                           {playlistsPreview.map((playlist, index) => {
@@ -1889,21 +1898,21 @@ const Dashboard = () => {
                               <div
                                 key={playlist.id}
                                 className={`flex-shrink-0 ${cardWidth} snap-start cursor-pointer group sw-card-hover ${animClass}`}
-                                style={{ animationDelay: getDelay(delay) }}
+                                style={{ animationDelay: getDelay(delay), contain: 'content' }}
                                 onClick={() => handleSelectPlaylist(playlist.id)}
                               >
                                 <div
-                                  className={`aspect-square relative rounded-2xl overflow-hidden mb-2.5 border sw-glass ${isActive ? `${cardActive} sw-active-sheen` : cardBg}`}
+                                  className={`aspect-square relative rounded-2xl overflow-hidden mb-2.5 border sw-card-surface ${isActive ? `${cardActive} sw-active-sheen` : cardBg}`}
                                   style={isActive ? { boxShadow: `0 0 20px ${accentGlow}, 0 4px 16px rgba(0,0,0,0.3)` } : {}}
                                 >
                                   {playlist.coverArtBase64 ? (
-                                    <img src={playlist.coverArtBase64} alt="" className="w-full h-full object-cover" />
+                                    <img src={playlist.coverArtBase64} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                                   ) : (
                                     <div className={`w-full h-full flex items-center justify-center ${emptyIconBg}`}>
                                       <Music className={`w-10 h-10 ${emptyIconColor}`} />
                                     </div>
                                   )}
-                                  <div className="sw-play-overlay absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center">
+                                  <div className="sw-play-overlay absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                                     <div className="w-11 h-11 rounded-xl bg-black/30 flex items-center justify-center backdrop-blur-sm border border-white/20">
                                       <Play className="w-6 h-6 text-white fill-white ml-0.5" />
                                     </div>
@@ -1918,8 +1927,8 @@ const Dashboard = () => {
                           {/* Create Playlist */}
                           <button
                             onClick={handleOpenPlaylistManager}
-                            className={`flex-shrink-0 ${cardWidth} rounded-2xl snap-start aspect-square border border-dashed flex flex-col items-center justify-center group sw-card-hover sw-glass ${createBtn} ${animClass}`}
-                            style={{ animationDelay: getDelay(`${220 + (playlistsPreview.length * 40)}ms`) }}
+                            className={`flex-shrink-0 ${cardWidth} rounded-2xl snap-start aspect-square border border-dashed flex flex-col items-center justify-center group sw-card-hover sw-card-surface ${createBtn} ${animClass}`}
+                            style={{ animationDelay: getDelay(`${220 + (playlistsPreview.length * 40)}ms`), contain: 'content' }}
                           >
                             <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-2 border border-dashed border-current opacity-40 group-hover:opacity-70 transition-opacity">
                               <Plus className="w-5 h-5" />
@@ -1932,13 +1941,13 @@ const Dashboard = () => {
 
                     {/* ── DYNAMIC CATEGORY VIEW (When a single category is active) ── */}
                     {selectedCategory !== 'all' && (
-                      <section className={`${animClass}`} style={{ animationDelay: getDelay('100ms') }}>
+                      <section className={`sw-section-contain ${animClass}`} style={{ animationDelay: getDelay('100ms') }}>
                         {(() => {
                           const currentCat = MUSIC_CATEGORIES.find(c => c.id === selectedCategory);
                           const tracks = categoryTracksMap[selectedCategory] || [];
                           return (
                             <div className="space-y-6">
-                              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-3xl bg-gradient-to-r from-white/[0.06] to-white/[0.01] border border-white/10">
+                              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-3xl bg-white/[0.03] border border-white/10">
                                 <div className="space-y-1">
                                   <div className="flex items-center gap-2.5">
                                     <div className="p-2 rounded-xl bg-white/10 text-white flex items-center justify-center">
@@ -1958,7 +1967,7 @@ const Dashboard = () => {
                                       if (setQueue) setQueue(tracks);
                                       playSong(tracks[0]);
                                     }}
-                                    className="px-6 py-3 rounded-2xl bg-white text-black font-extrabold text-sm flex items-center gap-2 shadow-lg hover:scale-105 transition-transform"
+                                    className="px-6 py-3 rounded-2xl bg-white text-black font-extrabold text-sm flex items-center gap-2 shadow-lg hover:scale-105 transition-transform cursor-pointer"
                                   >
                                     <Play size={16} fill="currentColor" /> Play Category Station
                                   </button>
@@ -1971,48 +1980,45 @@ const Dashboard = () => {
                                 </div>
                               ) : tracks.length > 0 ? (
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                                  {tracks.map((song, index) => {
-                                    const isActive = currentSong?.id === song.id || (currentSong?.title === song.title && currentSong?.artist === song.artist);
-                                    return (
-                                      <div
-                                        key={song.id}
-                                        onClick={() => {
-                                          if (isActive) {
-                                            if (isPlaying) pauseSong();
-                                            else resumeSong();
-                                          } else {
-                                            if (setQueue) setQueue(tracks);
-                                            playSong(song);
-                                          }
-                                        }}
-                                        className="p-3 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-white/20 transition-all cursor-pointer group hover:bg-white/[0.06]"
-                                      >
-                                        <div className="aspect-square relative rounded-xl overflow-hidden mb-2.5 border border-white/10 shadow-md">
-                                          {song.coverArtBase64 ? (
-                                            <img src={song.coverArtBase64} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                                          ) : (
-                                            <div className="w-full h-full bg-zinc-900 flex items-center justify-center">
-                                              <Music size={20} className="text-zinc-600" />
-                                            </div>
-                                          )}
-                                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                            <div className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-lg">
-                                              {isActive && isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-0.5" />}
-                                            </div>
-                                            <button
-                                              onClick={(e) => handleQueueSong(e, song)}
-                                              title="Add to Priority Queue (Play Next)"
-                                              className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 backdrop-blur-sm border border-white/20 text-white/90 hover:text-white hover:scale-110 active:scale-95 transition-all shadow-md"
-                                            >
-                                              <Plus size={14} />
-                                            </button>
-                                          </div>
-                                        </div>
-                                        <h4 className="font-bold truncate text-sm text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.title}</h4>
-                                        <p className="text-xs text-zinc-400 truncate mt-0.5 font-medium" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.artist}</p>
-                                      </div>
-                                    );
-                                  })}
+                                  {tracks.map((song, index) => (
+                                    <DashboardSongCard
+                                      key={song.id || index}
+                                      song={song}
+                                      index={index}
+                                      isActive={currentSong?.id === song.id || (currentSong?.title === song.title && currentSong?.artist === song.artist)}
+                                      isPlaying={isPlaying}
+                                      cardWidth="w-full"
+                                      cardBg={cardBg}
+                                      cardActive={cardActive}
+                                      accentGlow={accentGlow}
+                                      emptyIconBg={emptyIconBg}
+                                      emptyIconColor={emptyIconColor}
+                                      textMain={textMain}
+                                      textMuted={textMuted}
+                                      animClass={animClass}
+                                      reduceMotion={reduceMotion}
+                                      isLiked={isSongLiked(song)}
+                                      isInQueue={upNextQueue?.some(s => s.id === song.id)}
+                                      onPlay={(s) => {
+                                        if (setQueue) setQueue(tracks)
+                                        playSong(s)
+                                      }}
+                                      onPause={pauseSong}
+                                      onResume={resumeSong}
+                                      onLike={(_e, s) => toggleLikeSong(s)}
+                                      onQueue={handleQueueSong}
+                                      onAddToPlaylist={setSelectedSongForPlaylist}
+                                      onDownload={async (s) => {
+                                        try {
+                                          await downloadSongForOffline(s)
+                                          alert(`Downloaded "${s.title}" for offline playback!`)
+                                        } catch {
+                                          alert('Failed to download track.')
+                                        }
+                                      }}
+                                      onOpenArtist={openArtistProfile}
+                                    />
+                                  ))}
                                 </div>
                               ) : (
                                 <div className="p-12 text-center text-zinc-500 text-sm">No tracks found for this category.</div>
@@ -2031,7 +2037,7 @@ const Dashboard = () => {
                           const tracks = categoryTracksMap[catId] || [];
                           if (!cat || tracks.length === 0) return null;
                           return (
-                            <section key={catId} className={`${animClass}`} style={{ animationDelay: getDelay(`${260 + catIdx * 40}ms`) }}>
+                            <section key={catId} className={`sw-section-contain ${animClass}`} style={{ animationDelay: getDelay(`${260 + catIdx * 40}ms`) }}>
                               <div className={`flex items-center justify-between gap-3 ${compactMode ? 'mb-3' : 'mb-4 md:mb-5'}`}>
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center flex-wrap gap-x-2 gap-y-1">
@@ -2064,77 +2070,47 @@ const Dashboard = () => {
 
                               <div
                                 ref={(el) => { categoryRefs.current[catId] = el; }}
-                                className={`flex ${gridGap} overflow-x-auto pb-4 sw-scroll snap-x ${!reduceMotion ? 'scroll-smooth' : ''}`}
+                                className={`flex ${gridGap} overflow-x-auto pb-4 sw-scroll sw-scroll-row snap-x ${!reduceMotion ? 'scroll-smooth' : ''}`}
                               >
-                                {tracks.map(song => {
-                                  const isActive = currentSong?.id === song.id || (currentSong?.title === song.title && currentSong?.artist === song.artist);
-                                  return (
-                                    <div
-                                      key={song.id}
-                                      className={`flex-shrink-0 ${cardWidth} snap-start cursor-pointer group sw-card-hover ${animClass}`}
-                                      onClick={() => {
-                                        if (isActive) {
-                                          if (isPlaying) pauseSong();
-                                          else resumeSong();
-                                        } else {
-                                          if (setQueue) setQueue(tracks);
-                                          playSong(song);
-                                        }
-                                      }}
-                                    >
-                                      <div
-                                        className={`aspect-square relative rounded-2xl overflow-hidden mb-2.5 border sw-glass ${isActive ? `${cardActive} sw-active-sheen` : cardBg}`}
-                                        style={isActive ? { boxShadow: `0 0 20px ${accentGlow}, 0 4px 16px rgba(0,0,0,0.3)` } : {}}
-                                      >
-                                        {song.coverArtBase64 ? (
-                                          <img src={song.coverArtBase64} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                                        ) : (
-                                          <div className={`w-full h-full flex items-center justify-center ${emptyIconBg}`}>
-                                            <Music className={`w-9 h-9 ${emptyIconColor}`} />
-                                          </div>
-                                        )}
-                                        <div className="sw-play-overlay absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-2 p-2 transition-opacity">
-                                          <div className="w-11 h-11 rounded-xl bg-black/40 flex items-center justify-center backdrop-blur-sm border border-white/20 hover:scale-110 transition-transform">
-                                            {isActive && isPlaying ? <Pause className="w-6 h-6 text-white fill-white" /> : <Play className="w-6 h-6 text-white fill-white ml-0.5" />}
-                                          </div>
-                                          <div className="hidden md:flex items-center gap-2">
-                                            <button
-                                              onClick={(e) => handleQueueSong(e, song)}
-                                              title="Add to Priority Queue (Play Next)"
-                                              className={`p-2 rounded-lg bg-black/60 hover:bg-black/90 border border-white/20 ${upNextQueue?.some(s => s.id === song.id) ? 'text-indigo-400' : 'text-white'}`}
-                                            >
-                                              <Plus size={14} />
-                                            </button>
-                                            <button
-                                              onClick={(e) => { e.stopPropagation(); setSelectedSongForPlaylist(song); }}
-                                              title="Add to Playlist"
-                                              className="p-2 rounded-lg bg-black/60 hover:bg-black/90 text-white border border-white/20"
-                                            >
-                                              <ListPlus size={14} />
-                                            </button>
-                                            <button
-                                              onClick={async (e) => {
-                                                e.stopPropagation();
-                                                try {
-                                                  await downloadSongForOffline(song);
-                                                  alert(`Downloaded "${song.title}" for offline playback!`);
-                                                } catch (err) {
-                                                  alert('Failed to download track.');
-                                                }
-                                              }}
-                                              title="Download for Offline"
-                                              className="p-2 rounded-lg bg-black/60 hover:bg-black/90 text-white border border-white/20"
-                                            >
-                                              <DownloadCloud size={14} />
-                                            </button>
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <h4 className={`font-medium truncate text-[14px] sw-font-display ${textMain}`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.title}</h4>
-                                      <p onClick={(e) => { e.stopPropagation(); openArtistProfile(song.artist); }} className={`text-[12px] truncate sw-font-body ${textMuted} hover:text-white hover:underline cursor-pointer transition-colors`} style={{ fontFamily: 'Space Grotesk, sans-serif' }}>{song.artist}</p>
-                                    </div>
-                                  );
-                                })}
+                                {tracks.map((song, index) => (
+                                  <DashboardSongCard
+                                    key={song.id || index}
+                                    song={song}
+                                    index={index}
+                                    isActive={currentSong?.id === song.id || (currentSong?.title === song.title && currentSong?.artist === song.artist)}
+                                    isPlaying={isPlaying}
+                                    cardWidth={cardWidth}
+                                    cardBg={cardBg}
+                                    cardActive={cardActive}
+                                    accentGlow={accentGlow}
+                                    emptyIconBg={emptyIconBg}
+                                    emptyIconColor={emptyIconColor}
+                                    textMain={textMain}
+                                    textMuted={textMuted}
+                                    animClass={animClass}
+                                    reduceMotion={reduceMotion}
+                                    isLiked={isSongLiked(song)}
+                                    isInQueue={upNextQueue?.some(s => s.id === song.id)}
+                                    onPlay={(s) => {
+                                      if (setQueue) setQueue(tracks)
+                                      playSong(s)
+                                    }}
+                                    onPause={pauseSong}
+                                    onResume={resumeSong}
+                                    onLike={(_e, s) => toggleLikeSong(s)}
+                                    onQueue={handleQueueSong}
+                                    onAddToPlaylist={setSelectedSongForPlaylist}
+                                    onDownload={async (s) => {
+                                      try {
+                                        await downloadSongForOffline(s)
+                                        alert(`Downloaded "${s.title}" for offline playback!`)
+                                      } catch {
+                                        alert('Failed to download track.')
+                                      }
+                                    }}
+                                    onOpenArtist={openArtistProfile}
+                                  />
+                                ))}
                               </div>
                             </section>
                           );
