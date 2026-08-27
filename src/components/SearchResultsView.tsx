@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { usePlayer, Song } from '../context/PlayerContext'
 import { searchYouTubeMusic } from '../utils/ytMusic'
-import { fetchArtistProfile, type ArtistProfile } from '../utils/artistService'
+import { findMatchingArtist, type ArtistProfile } from '../utils/artistService'
 import { getSongRadioQueue } from '../utils/aiRecommender'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../utils/firebase'
@@ -95,37 +95,30 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
             )
         }
 
-        // 3. Search millions of online YouTube Music tracks & Artist Profile concurrently
-        const [ytTracks, artistProfile] = await Promise.all([
+        // 3. Search millions of online YouTube Music tracks & check if query is a verified artist
+        const [ytTracks, verifiedArtistProfile] = await Promise.all([
           searchYouTubeMusic(queryText),
-          fetchArtistProfile(queryText.trim()).catch(() => null)
+          findMatchingArtist(queryText.trim()).catch(() => null)
         ])
 
-        let foundArtist: ArtistProfile | null = null
         let finalYtTracks = ytTracks || []
 
-        if (artistProfile && artistProfile.name) {
-          const normQ = queryText.toLowerCase().replace(/[^a-z0-9]/g, '')
-          const normName = artistProfile.name.toLowerCase().replace(/[^a-z0-9]/g, '')
-          if (normName.includes(normQ) || normQ.includes(normName) || normName.split(' ').some(w => w === normQ)) {
-            foundArtist = artistProfile
-            if (artistProfile.topSongs && artistProfile.topSongs.length > 0) {
-              const seen = new Set<string>()
-              const merged: Song[] = []
-              for (const s of [...artistProfile.topSongs, ...finalYtTracks]) {
-                const key = (s.title + ' ' + s.artist).toLowerCase().replace(/[^a-z0-9]/g, '')
-                if (!seen.has(key)) {
-                  seen.add(key)
-                  merged.push(s)
-                }
-              }
-              finalYtTracks = merged
+        // If a real artist is matched (e.g. "Charlie Puth"), ensure their top hits are available in results
+        if (verifiedArtistProfile && verifiedArtistProfile.topSongs && verifiedArtistProfile.topSongs.length > 0) {
+          const seen = new Set<string>()
+          const merged: Song[] = []
+          for (const s of [...verifiedArtistProfile.topSongs, ...finalYtTracks]) {
+            const key = (s.title + ' ' + s.artist).toLowerCase().replace(/[^a-z0-9]/g, '')
+            if (!seen.has(key)) {
+              seen.add(key)
+              merged.push(s)
             }
           }
+          finalYtTracks = merged
         }
 
         if (isMounted) {
-          setMatchedArtist(foundArtist)
+          setMatchedArtist(verifiedArtistProfile)
           setSearchResults({
             songs: userSongs,
             playlists: userPlaylists,
@@ -663,7 +656,18 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
                       <h4 className="font-bold truncate text-sm text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
                         {song.title}
                       </h4>
-                      <p className="text-xs text-zinc-400 truncate mt-0.5 font-medium" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                      <p
+                        onClick={(e) => {
+                          if (onSelectArtist) {
+                            e.stopPropagation()
+                            onSelectArtist(song.artist)
+                          }
+                        }}
+                        className={`text-xs text-zinc-400 truncate mt-0.5 font-medium ${
+                          onSelectArtist ? 'hover:text-white hover:underline cursor-pointer' : ''
+                        }`}
+                        style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+                      >
                         {song.artist}
                       </p>
                     </div>

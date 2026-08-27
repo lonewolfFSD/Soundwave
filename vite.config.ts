@@ -186,6 +186,50 @@ function youtubeMusicPlugin() {
             return false
           }
 
+          const cleanSongMetadata = (rawTitle: string, rawArtist: string): { title: string; artist: string } => {
+            let title = (rawTitle || '').trim()
+              .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+            let artist = (rawArtist || '').trim()
+              .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+
+            title = title
+              .replace(/\s*[\(\[]\s*(official\s*(music\s*)?video|official\s*audio|official\s*hd\s*video|official\s*lyric\s*video|lyric\s*video|lyrics\s*video|lyrics|audio\s*track|audio|visualizer|music\s*video|video\s*clip|4k|hd|hq|remastered|explicit|full\s*song)\s*[\)\]]/gi, '')
+              .replace(/\s*\|\s*Official\s*(Music\s*)?Video/gi, '')
+              .replace(/\s*\/\/\s*Official\s*(Music\s*)?Video/gi, '')
+              .replace(/\s*\|\s*Official\s*Audio/gi, '')
+              .replace(/\s*\|\s*Lyrics/gi, '')
+              .replace(/\s*\|\s*Visualizer/gi, '')
+              .trim()
+
+            artist = artist
+              .replace(/\s*-\s*topic$/i, '')
+              .replace(/\s*vevo$/i, '')
+              .replace(/official\s*channel/i, '')
+              .trim()
+
+            const hyphenMatches = title.match(/^(.+?)\s*(?:-|_|–|—|:)\s*(.+)$/)
+            if (hyphenMatches && hyphenMatches[1] && hyphenMatches[2]) {
+              const candidateArtist = hyphenMatches[1].trim()
+              const candidateTitle = hyphenMatches[2].trim()
+
+              const isGenericArtist = !artist || /^(youtube\s*music|various\s*artists|auto-generated|topic|music|soundtrack)$/i.test(artist)
+              const artistMatchesChannel = artist.toLowerCase().includes(candidateArtist.toLowerCase()) ||
+                                           candidateArtist.toLowerCase().includes(artist.toLowerCase())
+
+              if (isGenericArtist || artistMatchesChannel) {
+                artist = candidateArtist
+                title = candidateTitle
+              }
+            }
+
+            title = title.replace(/^["'“”](.*)["'“”]$/, '$1').trim()
+            if (!artist || artist.toLowerCase() === 'youtube music') {
+              artist = 'Unknown Artist'
+            }
+
+            return { title, artist }
+          }
+
           let songs: any[] = []
           const seenIds = new Set<string>()
 
@@ -229,11 +273,13 @@ function youtubeMusicPlugin() {
                   const flex0 = r.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.title?.runs
                   const flex1 = r.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.title?.runs
 
-                  const title = flex0?.[0]?.text || ''
-                  let artist = flex1?.[0]?.text || 'YouTube Music'
-                  if (artist.toLowerCase() === 'song' || artist.toLowerCase() === 'video') {
-                    artist = flex1?.[2]?.text || flex1?.[1]?.text || 'YouTube Music'
+                  const rawTitle = flex0?.[0]?.text || ''
+                  let rawArtist = flex1?.[0]?.text || 'YouTube Music'
+                  if (rawArtist.toLowerCase() === 'song' || rawArtist.toLowerCase() === 'video') {
+                    rawArtist = flex1?.[2]?.text || flex1?.[1]?.text || 'YouTube Music'
                   }
+
+                  const { title, artist } = cleanSongMetadata(rawTitle, rawArtist)
 
                   let durationSecs = 210
                   if (Array.isArray(flex1)) {
@@ -313,8 +359,10 @@ function youtubeMusicPlugin() {
                       const videoId = v.videoId
                       if (seenIds.has(videoId)) continue
 
-                      const title = v.title.runs[0].text
-                      const artist = v.ownerText?.runs?.[0]?.text || v.shortBylineText?.runs?.[0]?.text || 'YouTube Music'
+                      const rawTitle = v.title.runs[0].text
+                      const rawArtist = v.ownerText?.runs?.[0]?.text || v.shortBylineText?.runs?.[0]?.text || 'YouTube Music'
+                      const { title, artist } = cleanSongMetadata(rawTitle, rawArtist)
+
                       const durationText = v.lengthText?.simpleText || '3:30'
                       const parts = durationText.split(':').map((p: string) => parseInt(p, 10))
                       const durationSecs = parts.length === 3 ? parts[0]*3600 + parts[1]*60 + parts[2] : (parts.length === 2 ? parts[0]*60 + parts[1] : 210)

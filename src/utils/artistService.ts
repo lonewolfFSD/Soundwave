@@ -1,4 +1,5 @@
 import type { Song } from '../context/PlayerContext'
+import { parseCleanSongMeta } from './ytMusic'
 
 export interface ArtistRelease {
   id: string
@@ -40,6 +41,47 @@ export interface ArtistProfile {
 }
 
 const artistCache = new Map<string, ArtistProfile>()
+
+/**
+ * Accurately check if a search query represents a real artist (e.g. "Charlie Puth", "Taylor Swift", "The Walters", "Arijit Singh")
+ * and return their full profile only if there is a genuine artist match.
+ * Returns null if the query is a song title (e.g. "I love you so", "Attention", "Starboy") or non-artist search.
+ */
+export const findMatchingArtist = async (queryText: string): Promise<ArtistProfile | null> => {
+  if (!queryText || queryText.trim().length < 2) return null
+  const cleanQ = queryText.trim()
+  const normQ = cleanQ.toLowerCase().replace(/[^a-z0-9]/g, '')
+  if (normQ.length < 2) return null
+
+  try {
+    // 1. Search specifically for musicArtist entities on iTunes
+    const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(cleanQ)}&entity=musicArtist&limit=5`)
+    if (res.ok) {
+      const data = await res.json()
+      const artists = data.results || []
+
+      for (const item of artists) {
+        const aName = (item.artistName || '').trim()
+        const normName = aName.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+        // Exact match (e.g. "charlie puth" === "charlie puth", "the walters" === "the walters")
+        const isExactMatch = normName === normQ
+        // Or strong alias match (e.g. "weeknd" matches "the weeknd" where normName contains normQ and covers >= 75% of length)
+        const isStrongAlias = (normName.includes(normQ) || normQ.includes(normName)) && 
+                              (normQ.length >= 3 && Math.min(normQ.length, normName.length) / Math.max(normQ.length, normName.length) >= 0.7)
+
+        if (isExactMatch || isStrongAlias) {
+          // Fetch full verified profile for this artist
+          return await fetchArtistProfile(aName)
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Artist entity lookup error:', err)
+  }
+
+  return null
+}
 
 /**
  * Fetch rich YouTube Music style artist profile data
@@ -106,26 +148,28 @@ export const fetchArtistProfile = async (artistName: string): Promise<ArtistProf
             return aNorm.includes(targetNorm) || targetNorm.includes(aNorm)
           })
           .filter((item: any) => {
-            const tNorm = normalizeStr(item.trackName || '')
+            const cleanMeta = parseCleanSongMeta(item.trackName || '', item.artistName || cleanName)
+            const tNorm = normalizeStr(cleanMeta.title)
             if (!tNorm || seenTitles.has(tNorm)) return false
             seenTitles.add(tNorm)
             return true
           })
           .map((item: any) => {
+            const cleanMeta = parseCleanSongMeta(item.trackName || '', item.artistName || cleanName)
             const highCover = item.artworkUrl100
               ? item.artworkUrl100.replace('100x100bb.jpg', '600x600bb.jpg').replace('100x100bb', '600x600bb')
               : item.artworkUrl60
             if (item.primaryGenreName) primaryGenre = item.primaryGenreName
             return {
               id: `track_${item.trackId}`,
-              title: item.trackName,
-              artist: item.artistName || cleanName,
+              title: cleanMeta.title,
+              artist: cleanMeta.artist,
               duration: item.trackTimeMillis ? Math.round(item.trackTimeMillis / 1000) : 210,
               url: item.previewUrl || `yt_online://${item.trackId}`,
               previewUrl: item.previewUrl || '',
               playlistId: 'artist_top',
               coverArtBase64: highCover,
-              youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent((item.trackName || '') + ' ' + (item.artistName || cleanName))}`
+              youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent(cleanMeta.title + ' ' + cleanMeta.artist)}`
             }
           })
       }
@@ -226,7 +270,7 @@ export const fetchArtistProfile = async (artistName: string): Promise<ArtistProf
     pictureUrl: picture,
     bannerUrl: picture,
     description: bio,
-    monthlyListeners: '14.2M monthly listeners • Verified Artist',
+    monthlyListeners: 'Verified Artist',
     verified: true,
     genres: primaryGenre ? [primaryGenre, 'Top Hits', 'Featured'] : ['Music', 'Hits'],
     topSongs: topSongs.slice(0, 30),

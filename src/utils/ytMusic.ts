@@ -18,6 +18,56 @@ export const sanitizeTitle = (title: string): string => {
 }
 
 /**
+ * Accurately extract real Song Name and real Artist Name from search results and video titles
+ */
+export const parseCleanSongMeta = (rawTitle: string, rawArtist: string): { title: string; artist: string } => {
+  let title = sanitizeTitle(rawTitle || '').trim()
+  let artist = sanitizeTitle(rawArtist || '').trim()
+
+  // 1. Remove common video metadata tags from title
+  title = title
+    .replace(/\s*[\(\[]\s*(official\s*(music\s*)?video|official\s*audio|official\s*hd\s*video|official\s*lyric\s*video|lyric\s*video|lyrics\s*video|lyrics|audio\s*track|audio|visualizer|music\s*video|video\s*clip|4k|hd|hq|remastered|explicit|full\s*song)\s*[\)\]]/gi, '')
+    .replace(/\s*\|\s*Official\s*(Music\s*)?Video/gi, '')
+    .replace(/\s*\/\/\s*Official\s*(Music\s*)?Video/gi, '')
+    .replace(/\s*\|\s*Official\s*Audio/gi, '')
+    .replace(/\s*\|\s*Lyrics/gi, '')
+    .replace(/\s*\|\s*Visualizer/gi, '')
+    .trim()
+
+  // 2. Clean channel tags from artist
+  artist = artist
+    .replace(/\s*-\s*topic$/i, '')
+    .replace(/\s*vevo$/i, '')
+    .replace(/official\s*channel/i, '')
+    .trim()
+
+  // 3. Check if title is structured as "Artist - Song Title" or "Artist: Song Title"
+  const hyphenMatches = title.match(/^(.+?)\s*(?:-|_|–|—|:)\s*(.+)$/)
+  if (hyphenMatches && hyphenMatches[1] && hyphenMatches[2]) {
+    const candidateArtist = hyphenMatches[1].trim()
+    const candidateTitle = hyphenMatches[2].trim()
+
+    const isGenericArtist = !artist || /^(youtube\s*music|various\s*artists|auto-generated|topic|music|soundtrack)$/i.test(artist)
+    const artistMatchesChannel = artist.toLowerCase().includes(candidateArtist.toLowerCase()) ||
+                                 candidateArtist.toLowerCase().includes(artist.toLowerCase())
+
+    if (isGenericArtist || artistMatchesChannel) {
+      artist = candidateArtist
+      title = candidateTitle
+    }
+  }
+
+  // 4. Remove leading/trailing quotes
+  title = title.replace(/^["'“”](.*)["'“”]$/, '$1').trim()
+
+  if (!artist || artist.toLowerCase() === 'youtube music') {
+    artist = 'Unknown Artist'
+  }
+
+  return { title, artist }
+}
+
+/**
  * Comprehensive YouTube Video ID extractor from any string, URL, or ID
  */
 export const extractYoutubeVideoId = (input?: string | null): string => {
@@ -248,50 +298,65 @@ export const searchYouTubeMusic = async (query: string): Promise<Song[]> => {
     return false
   }
 
-  // 1. Primary: Search YouTube directly via /api/yt-search
-  try {
-    const res = await fetch(`/api/yt-search?q=${encodeURIComponent(cleanQ)}`, { signal: AbortSignal.timeout(15000) })
-    if (res.ok) {
-      const items = await res.json()
-      if (Array.isArray(items) && items.length > 0) {
-        return items.filter((song: any) => !isNonMusicJunk(song.title || '', song.artist || '', song.duration || 210))
-      }
-    }
-  } catch (err) {
-    console.warn('API yt-search error, attempting iTunes catalog fallback:', err)
-  }
+  const songs: Song[] = []
+  const seenKeys = new Set<string>()
 
-  // 2. Fallback: Search iTunes catalog (metadata only, full track resolved on play)
-  try {
-    const res = await fetch(
-      `https://itunes.apple.com/search?term=${encodeURIComponent(cleanQ)}&media=music&entity=song&limit=25`
-    )
-    if (res.ok) {
-      const data = await res.json()
-      if (data.results && data.results.length > 0) {
-        return data.results.map((item: any) => {
+  // 1. Concurrently query verified track catalog and YouTube Search
+  const [ytResult, itunesResult] = await Promise.all([
+    fetch(`/api/yt-search?q=${encodeURIComponent(cleanQ)}`, { signal: AbortSignal.timeout(8000) })
+      .then(async res => (res.ok ? await res.json() : []))
+      .catch(() => []),
+    fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(cleanQ)}&media=music&entity=song&limit=30`)
+      .then(async res => (res.ok ? await res.json() : { results: [] }))
+      .catch(() => ({ results: [] }))
+  ])
+
+  // 2. Process verified song catalog
+  if (Array.isArray(itunesResult?.results)) {
+    for (const item of itunesResult.results) {
+      const clean = parseCleanSongMeta(item.trackName || '', item.artistName || '')
+      if (clean.title && clean.artist) {
+        const key = `${clean.title} ${clean.artist}`.toLowerCase().replace(/[^a-z0-9]/g, '')
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key)
           const highResCover = item.artworkUrl100
             ? item.artworkUrl100.replace('100x100bb.jpg', '600x600bb.jpg').replace('100x100bb', '600x600bb')
             : item.artworkUrl60
-          return {
+          songs.push({
             id: `track_${item.trackId}`,
-            title: sanitizeTitle(item.trackName || 'Unknown Title'),
-            artist: sanitizeTitle(item.artistName || 'Unknown Artist'),
+            title: clean.title,
+            artist: clean.artist,
             duration: Math.floor((item.trackTimeMillis || 0) / 1000) || 210,
             url: '',
             previewUrl: '',
             playlistId: 'online_search',
             coverArtBase64: highResCover,
-            youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent((item.trackName || '') + ' ' + (item.artistName || ''))}`
-          }
-        })
+            youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent(clean.title + ' ' + clean.artist)}`
+          })
+        }
       }
     }
-  } catch (err) {
-    console.error('Search error:', err)
   }
 
-  return []
+  // 3. Process YouTube Search songs
+  if (Array.isArray(ytResult)) {
+    for (const item of ytResult) {
+      const clean = parseCleanSongMeta(item.title || '', item.artist || '')
+      if (clean.title && !isNonMusicJunk(clean.title, clean.artist, item.duration || 210)) {
+        const key = `${clean.title} ${clean.artist}`.toLowerCase().replace(/[^a-z0-9]/g, '')
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key)
+          songs.push({
+            ...item,
+            title: clean.title,
+            artist: clean.artist
+          })
+        }
+      }
+    }
+  }
+
+  return songs
 }
 
 /**
