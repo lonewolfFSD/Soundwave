@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { usePlayer, Song } from '../context/PlayerContext'
 import { searchYouTubeMusic } from '../utils/ytMusic'
+import { searchSongsByLyrics } from '../utils/lyrics'
 import { findMatchingArtist, type ArtistProfile } from '../utils/artistService'
 import { getSongRadioQueue } from '../utils/aiRecommender'
 import { collection, getDocs, query, where } from 'firebase/firestore'
@@ -95,26 +96,57 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
             )
         }
 
-        // 3. Search millions of online YouTube Music tracks & check if query is a verified artist
-        const [ytTracks, verifiedArtistProfile] = await Promise.all([
+        // 3. Search millions of online YouTube Music tracks, LRCLIB Lyrics matches & verified artists concurrently
+        const [ytTracks, lyricsMatches, verifiedArtistProfile] = await Promise.all([
           searchYouTubeMusic(queryText),
+          searchSongsByLyrics(queryText).catch(() => []),
           findMatchingArtist(queryText.trim()).catch(() => null)
         ])
 
-        let finalYtTracks = ytTracks || []
+        const seenKeys = new Set<string>()
+        const mergedTracks: Song[] = []
 
-        // If a real artist is matched (e.g. "Charlie Puth"), ensure their top hits are available in results
+        // If a real artist is matched (e.g. "Charlie Puth"), include their top hits
         if (verifiedArtistProfile && verifiedArtistProfile.topSongs && verifiedArtistProfile.topSongs.length > 0) {
-          const seen = new Set<string>()
-          const merged: Song[] = []
-          for (const s of [...verifiedArtistProfile.topSongs, ...finalYtTracks]) {
+          for (const s of verifiedArtistProfile.topSongs) {
             const key = (s.title + ' ' + s.artist).toLowerCase().replace(/[^a-z0-9]/g, '')
-            if (!seen.has(key)) {
-              seen.add(key)
-              merged.push(s)
+            if (!seenKeys.has(key)) {
+              seenKeys.add(key)
+              mergedTracks.push(s)
             }
           }
-          finalYtTracks = merged
+        }
+
+        // Add standard catalog & YouTube tracks
+        for (const s of (ytTracks || [])) {
+          const key = (s.title + ' ' + s.artist).toLowerCase().replace(/[^a-z0-9]/g, '')
+          if (!seenKeys.has(key)) {
+            seenKeys.add(key)
+            mergedTracks.push(s)
+          }
+        }
+
+        // Merge any lyrics match tracks (or enrich existing tracks with matched lyrics snippets)
+        for (const ls of (lyricsMatches || [])) {
+          const key = (ls.title + ' ' + ls.artist).toLowerCase().replace(/[^a-z0-9]/g, '')
+          const existing = mergedTracks.find(t => (t.title + ' ' + t.artist).toLowerCase().replace(/[^a-z0-9]/g, '') === key)
+          if (existing) {
+            if (ls.matchedLyricsSnippet && !(existing as any).matchedLyricsSnippet) {
+              (existing as any).matchedLyricsSnippet = ls.matchedLyricsSnippet
+            }
+          } else if (!seenKeys.has(key)) {
+            seenKeys.add(key)
+            mergedTracks.push(ls as Song)
+          }
+        }
+
+        // If query was likely a lyrics phrase (3+ words or contains lyrics snippet), prioritize lyrics matches
+        if (lyricsMatches.length > 0 && queryText.trim().split(/\s+/).length >= 3) {
+          mergedTracks.sort((a: any, b: any) => {
+            if (a.matchedLyricsSnippet && !b.matchedLyricsSnippet) return -1
+            if (!a.matchedLyricsSnippet && b.matchedLyricsSnippet) return 1
+            return 0
+          })
         }
 
         if (isMounted) {
@@ -122,7 +154,7 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
           setSearchResults({
             songs: userSongs,
             playlists: userPlaylists,
-            youtube: finalYtTracks
+            youtube: mergedTracks
           })
         }
       } catch (err) {
@@ -405,6 +437,15 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
                           • {topTrack.artist}
                         </span>
                       </div>
+
+                      {(topTrack as any).matchedLyricsSnippet && (
+                        <div className="flex items-center gap-1.5 mt-2.5 px-2.5 py-1 rounded-lg bg-amber-400/10 border border-amber-400/20 w-fit max-w-full">
+                          <Sparkles size={12} className="text-amber-400 shrink-0" />
+                          <span className="text-[11px] text-amber-300/95 font-medium italic truncate">
+                            Lyrics: "{(topTrack as any).matchedLyricsSnippet}"
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -515,6 +556,12 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({ queryText,
                             >
                               {song.artist}
                             </p>
+                            {(song as any).matchedLyricsSnippet && (
+                              <p className="text-[11px] text-amber-300/90 italic truncate flex items-center gap-1 mt-0.5">
+                                <Sparkles size={11} className="shrink-0 text-amber-400" />
+                                "{(song as any).matchedLyricsSnippet}"
+                              </p>
+                            )}
                           </div>
                         </div>
 

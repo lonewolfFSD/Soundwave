@@ -93,7 +93,7 @@ export const isYoutubeVideoId = (id: string): boolean => {
 }
 
 /**
- * Search YouTube Video ID by title and artist with lightning-fast caching
+ * Search YouTube Video ID by title and artist with lightning-fast caching and CORS-safe multi-fallback
  */
 export const findYouTubeVideoId = async (title: string, artist: string): Promise<string> => {
   if (!title && !artist) return ''
@@ -112,38 +112,14 @@ export const findYouTubeVideoId = async (title: string, artist: string): Promise
     }
   } catch {}
 
-  // 3. Query Fast YouTube Search API (with automatic client fallback on native)
-  const queries = [
-    cleanQ,
-    `${cleanQ} official audio`
-  ]
-
-  for (const q of queries) {
-    try {
-      const res = await fetch(`/api/yt-search?q=${encodeURIComponent(q)}`, { signal: AbortSignal.timeout(3000) })
-      if (res.ok) {
-        const items = await res.json()
-        if (Array.isArray(items) && items.length > 0) {
-          for (const item of items) {
-            const id = extractYoutubeVideoId(item?.id) || extractYoutubeVideoId(item?.youtubeUrl) || extractYoutubeVideoId(item?.url)
-            if (id && isYoutubeVideoId(id)) {
-              videoIdCache.set(cacheKey, id)
-              try { localStorage.setItem(cacheKey, id) } catch {}
-              return id
-            }
-          }
-        }
-      }
-    } catch {}
-
-    // 4. Native & Web Client-Side Fallback: Piped & Invidious Search
-    try {
-      const pipedRes = await fetch(`https://pa.il.ax/search?q=${encodeURIComponent(q)}&filter=music_songs`, { signal: AbortSignal.timeout(3500) })
-      if (pipedRes.ok) {
-        const data = await pipedRes.json()
-        const items = data.items || []
+  // 3. Local Vite API (works in dev or full-stack environments)
+  try {
+    const res = await fetch(`/api/yt-search?q=${encodeURIComponent(cleanQ)}`, { signal: AbortSignal.timeout(3000) })
+    if (res.ok) {
+      const items = await res.json()
+      if (Array.isArray(items) && items.length > 0) {
         for (const item of items) {
-          const id = extractYoutubeVideoId(item?.url) || extractYoutubeVideoId(item?.id)
+          const id = extractYoutubeVideoId(item?.id) || extractYoutubeVideoId(item?.youtubeUrl) || extractYoutubeVideoId(item?.url)
           if (id && isYoutubeVideoId(id)) {
             videoIdCache.set(cacheKey, id)
             try { localStorage.setItem(cacheKey, id) } catch {}
@@ -151,14 +127,49 @@ export const findYouTubeVideoId = async (title: string, artist: string): Promise
           }
         }
       }
-    } catch {}
+    }
+  } catch {}
 
+  // 4. CORS-Safe YouTube HTML Scraping via Free Open CORS Proxies
+  const ytSearchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(cleanQ)}`
+  const corsProxies = [
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(ytSearchUrl)}`,
+    `https://corsproxy.io/?url=${encodeURIComponent(ytSearchUrl)}`,
+    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(ytSearchUrl)}`
+  ]
+
+  for (const proxyUrl of corsProxies) {
     try {
-      const invRes = await fetch(`https://inv.nadeko.net/api/v1/search?q=${encodeURIComponent(q)}&type=video`, { signal: AbortSignal.timeout(3500) })
-      if (invRes.ok) {
-        const items = await invRes.json()
-        if (Array.isArray(items) && items.length > 0) {
-          const id = items[0].videoId
+      const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(4000) })
+      if (res.ok) {
+        const text = await res.text()
+        const match = text.match(/"videoId":"([a-zA-Z0-9_-]{11})"/i) || text.match(/\/watch\?v=([a-zA-Z0-9_-]{11})/i)
+        if (match && match[1] && isYoutubeVideoId(match[1])) {
+          const id = match[1]
+          videoIdCache.set(cacheKey, id)
+          try { localStorage.setItem(cacheKey, id) } catch {}
+          return id
+        }
+      }
+    } catch {}
+  }
+
+  // 5. CORS-Enabled Public Endpoints (Safe error handling)
+  const publicApis = [
+    `https://invidious.nerdvpn.de/api/v1/search?q=${encodeURIComponent(cleanQ)}&type=video`,
+    `https://vid.pugarchive.org/api/v1/search?q=${encodeURIComponent(cleanQ)}&type=video`,
+    `https://invidious.lunar.icu/api/v1/search?q=${encodeURIComponent(cleanQ)}&type=video`,
+    `https://piped-api.garudalinux.org/search?q=${encodeURIComponent(cleanQ)}&filter=music_songs`
+  ]
+
+  for (const apiUrl of publicApis) {
+    try {
+      const res = await fetch(apiUrl, { signal: AbortSignal.timeout(3000) })
+      if (res.ok) {
+        const data = await res.json()
+        const items = Array.isArray(data) ? data : data.items || []
+        for (const item of items) {
+          const id = extractYoutubeVideoId(item?.videoId) || extractYoutubeVideoId(item?.url) || extractYoutubeVideoId(item?.id)
           if (id && isYoutubeVideoId(id)) {
             videoIdCache.set(cacheKey, id)
             try { localStorage.setItem(cacheKey, id) } catch {}
@@ -187,39 +198,31 @@ export const getAudioStreamUrl = async (
   }
   if (!videoId) return ''
 
-  // On native Android there's no local server — hit Piped directly for a streamable audio URL
+  // On native Android hit Piped/Invidious directly for a streamable audio URL
   const isNative = !!(window as any).Capacitor?.isNativePlatform?.()
   if (isNative) {
-    try {
-      const pipedRes = await fetch(`https://pa.il.ax/streams/${videoId}`, { signal: AbortSignal.timeout(8000) })
-      if (pipedRes.ok) {
-        const data = await pipedRes.json()
-        // Grab the best audio-only stream
-        const audioStreams: any[] = data.audioStreams || []
-        const best = audioStreams
-          .filter((s: any) => s.url && s.mimeType?.includes('audio'))
-          .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))[0]
-        if (best?.url) return best.url
-      }
-    } catch {}
+    const streamEndpoints = [
+      `https://pa.il.ax/streams/${videoId}`,
+      `https://piped-api.garudalinux.org/streams/${videoId}`,
+      `https://inv.nadeko.net/api/v1/videos/${videoId}`,
+      `https://invidious.nerdvpn.de/api/v1/videos/${videoId}`
+    ]
 
-    // Fallback to Invidious
-    try {
-      const invRes = await fetch(`https://inv.nadeko.net/api/v1/videos/${videoId}`, { signal: AbortSignal.timeout(8000) })
-      if (invRes.ok) {
-        const data = await invRes.json()
-        const streams: any[] = data.adaptiveFormats || []
-        const best = streams
-          .filter((s: any) => s.url && s.type?.includes('audio'))
-          .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))[0]
-        if (best?.url) return best.url
-      }
-    } catch {}
-
-    return ''
+    for (const ep of streamEndpoints) {
+      try {
+        const res = await fetch(ep, { signal: AbortSignal.timeout(6000) })
+        if (res.ok) {
+          const data = await res.json()
+          const audioStreams: any[] = data.audioStreams || data.adaptiveFormats || []
+          const best = audioStreams
+            .filter((s: any) => s.url && (s.mimeType?.includes('audio') || s.type?.includes('audio')))
+            .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))[0]
+          if (best?.url) return best.url
+        }
+      } catch {}
+    }
   }
 
-  // Web/Vercel: use local yt-dlp server
   return `/api/yt-stream?id=${videoId}&quality=${quality}`
 }
 

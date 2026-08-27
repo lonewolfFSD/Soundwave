@@ -208,3 +208,88 @@ export const fetchLyrics = async (
 
   return ''
 }
+
+export interface LyricsSearchResult {
+  id: string
+  title: string
+  artist: string
+  duration: number
+  url: string
+  previewUrl: string
+  playlistId: string
+  coverArtBase64: string
+  youtubeUrl: string
+  lyrics?: string
+  matchedLyricsSnippet?: string
+}
+
+/**
+ * Searches for songs matching lyrics from LRCLIB full-text database
+ */
+export const searchSongsByLyrics = async (queryText: string): Promise<LyricsSearchResult[]> => {
+  if (!queryText || queryText.trim().length < 3) return []
+  const cleanQ = queryText.trim().toLowerCase()
+
+  try {
+    const res = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(queryText.trim())}`, {
+      signal: AbortSignal.timeout(5000)
+    })
+    if (!res.ok) return []
+    const results = await res.json()
+    if (!Array.isArray(results) || results.length === 0) return []
+
+    const songs: LyricsSearchResult[] = []
+    const seen = new Set<string>()
+
+    for (const item of results) {
+      if (!item.trackName || !item.artistName) continue
+      const title = cleanTitle(item.trackName)
+      const artist = cleanArtist(item.artistName)
+      const key = `${title.toLowerCase()}_${artist.toLowerCase()}`
+      if (seen.has(key)) continue
+      seen.add(key)
+
+      // Find matching snippet in lyrics
+      let snippet = ''
+      const allLyrics = (item.plainLyrics || item.syncedLyrics || '').replace(/\[\d+:\d+(?:\.\d+)?\]/g, '')
+      if (allLyrics) {
+        const queryWords = cleanQ.split(/\s+/).filter(w => w.length > 2)
+        const lines = allLyrics.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean)
+
+        for (const line of lines) {
+          const lLower = line.toLowerCase()
+          if (lLower.includes(cleanQ)) {
+            snippet = line
+            break
+          }
+          if (queryWords.length > 1 && queryWords.filter(w => lLower.includes(w)).length >= Math.ceil(queryWords.length * 0.6)) {
+            snippet = line
+            break
+          }
+        }
+      }
+
+      songs.push({
+        id: `lyrics_${item.id || Math.random().toString(36).slice(2, 9)}`,
+        title,
+        artist,
+        duration: Math.round(item.duration || 210),
+        url: '',
+        previewUrl: '',
+        playlistId: 'lyrics_match',
+        coverArtBase64: '',
+        youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent(title + ' ' + artist)}`,
+        lyrics: item.syncedLyrics || item.plainLyrics || '',
+        matchedLyricsSnippet: snippet || undefined
+      })
+
+      if (songs.length >= 10) break
+    }
+
+    return songs
+  } catch (err) {
+    console.warn('Lyrics search error:', err)
+    return []
+  }
+}
+
